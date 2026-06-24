@@ -73,7 +73,7 @@ func ensureSessionClaudeLLMFacadeConfig(ctx context.Context, config *appconfig.C
 	tokenModel := ""
 	tokenProvider := ""
 	if err != nil {
-		if !isOptionalLLMFacadeConfigError(err) || !hasAnthropicProviderKey(ctx, config, configDB, providerEnv) {
+		if !isOptionalLLMFacadeConfigError(err) || !hasAnthropicProviderKey(ctx, config, configDB) {
 			return nil, err
 		}
 	} else {
@@ -108,7 +108,13 @@ func isOptionalLLMFacadeConfigError(err error) bool {
 		strings.Contains(message, "is not configured for provider family")
 }
 
-func hasAnthropicProviderKey(ctx context.Context, config *appconfig.Config, configDB *ConfigStore, envItems []SessionEnvVar) bool {
+// hasAnthropicProviderKey reports whether a daemon-level Anthropic credential
+// exists. It intentionally ignores per-session env items: request-time provider
+// resolution runs without session env, so a session-scoped key (without a model
+// to persist a provider) would never let a runtime request resolve. Tolerating a
+// missing model is only safe when a daemon-level key can bootstrap a provider
+// from the request's model at call time.
+func hasAnthropicProviderKey(ctx context.Context, config *appconfig.Config, configDB *ConfigStore) bool {
 	configKey := ""
 	if config != nil {
 		configKey = config.LLMAPIKey
@@ -121,9 +127,6 @@ func hasAnthropicProviderKey(ctx context.Context, config *appconfig.Config, conf
 		os.Getenv("ANTHROPIC_AUTH_TOKEN"),
 		os.Getenv("LLM_API_KEY"),
 		configKey,
-		lookupEnvItemValue(envItems, "ANTHROPIC_API_KEY"),
-		lookupEnvItemValue(envItems, "ANTHROPIC_AUTH_TOKEN"),
-		lookupEnvItemValue(envItems, "LLM_API_KEY"),
 	)) != ""
 }
 

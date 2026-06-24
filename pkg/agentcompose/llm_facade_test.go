@@ -1405,3 +1405,42 @@ func TestE2ERuntimeLLMFacadeRoundTrips(t *testing.T) {
 		}
 	})
 }
+
+// A session-only Anthropic key with no model anywhere must fail fast at config
+// time: request-time resolution runs without session env, so the key can never
+// resolve a provider. The facade must not inject an unbound token that defers
+// the failure to every runtime request.
+func TestEnsureSessionClaudeFacadeFailsFastWhenSessionKeyHasNoModel(t *testing.T) {
+	ctx := context.Background()
+	for _, k := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL", "CLAUDE_MODEL", "LLM_API_KEY", "LLM_API_ENDPOINT", "LLM_MODEL", "OPENAI_API_KEY"} {
+		t.Setenv(k, "")
+	}
+	service, _, _ := newTestServiceAPIHarness(t)
+	service.config.RuntimeBaseURL = "http://agent-compose.test"
+	service.config.LLMAPIEndpoint = ""
+	service.config.LLMAPIKey = ""
+	service.config.LLMModel = ""
+
+	session := createRunningLLMFacadeSession(t, ctx, service, "session-claude-key-no-model")
+	session.ProviderEnvItems = []SessionEnvVar{
+		{Name: "ANTHROPIC_API_KEY", Value: "session-only-key", Secret: true},
+	}
+
+	env, err := ensureSessionLLMFacadeConfig(ctx, service.config, service.configDB, session, "claude", "", "test", "run-1")
+	if err == nil {
+		t.Fatalf("expected fail-fast error, got env=%#v", env)
+	}
+	if env != nil {
+		t.Fatalf("expected no facade env on failure, got %#v", env)
+	}
+	if !strings.Contains(err.Error(), "model") {
+		t.Fatalf("error = %v, want it to mention the missing model", err)
+	}
+	providers, perr := service.configDB.ListEnabledLLMProviders(ctx)
+	if perr != nil {
+		t.Fatalf("ListEnabledLLMProviders returned error: %v", perr)
+	}
+	if len(providers) != 0 {
+		t.Fatalf("no provider should be created, got %#v", providers)
+	}
+}
