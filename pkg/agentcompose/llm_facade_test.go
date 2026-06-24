@@ -1444,3 +1444,67 @@ func TestEnsureSessionClaudeFacadeFailsFastWhenSessionKeyHasNoModel(t *testing.T
 		t.Fatalf("no provider should be created, got %#v", providers)
 	}
 }
+
+// A session whose LLM key came only from per-session env must keep working after
+// a stop/resume. The raw key env (ProviderEnvItems) is not persisted, so on
+// resume resolution sees only the key-filtered env; it must reuse the
+// session-env provider persisted at creation (with its key intact) rather than
+// skip it or overwrite its key with the now-empty env.
+func TestResolveRuntimeLLMTargetReusesSessionProviderAfterResume(t *testing.T) {
+	ctx := context.Background()
+	for _, k := range []string{"LLM_API_KEY", "OPENAI_API_KEY", "LLM_API_ENDPOINT", "LLM_MODEL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL", "CLAUDE_MODEL"} {
+		t.Setenv(k, "")
+	}
+	store := newTestConfigStore(t)
+	cfg := &appconfig.Config{}
+	sessionID := "sess-resume"
+
+	// Creation: full env with the session-scoped key (mirrors ProviderEnvItems).
+	creationEnv := []SessionEnvVar{
+		{Name: "LLM_API_ENDPOINT", Value: "https://session-llm.example.invalid"},
+		{Name: "LLM_API_KEY", Value: "session-real-key", Secret: true},
+		{Name: "LLM_MODEL", Value: "m-resume"},
+	}
+	target, err := resolveRuntimeLLMTargetWithEnv(ctx, cfg, store, sessionID, llmProviderFamilyOpenAI, "", "", creationEnv)
+	if err != nil {
+		t.Fatalf("creation resolve: %v", err)
+	}
+	wantID := sessionEnvProviderID(sessionID, llmProviderFamilyOpenAI)
+	if target.Provider.ID != wantID || target.Provider.APIKey != "session-real-key" {
+		t.Fatalf("creation target = %q/%q, want %q/session-real-key", target.Provider.ID, target.Provider.APIKey, wantID)
+	}
+
+	// Resume: key-filtered env (filterPersistedRuntimeEnv stripped LLM_API_KEY).
+	resumeEnv := []SessionEnvVar{
+		{Name: "LLM_API_ENDPOINT", Value: "https://session-llm.example.invalid"},
+		{Name: "LLM_MODEL", Value: "m-resume"},
+	}
+	resumed, err := resolveRuntimeLLMTargetWithEnv(ctx, cfg, store, sessionID, llmProviderFamilyOpenAI, "", "", resumeEnv)
+	if err != nil {
+		t.Fatalf("resume resolve: %v", err)
+	}
+	if resumed.Provider.ID != wantID {
+		t.Fatalf("resume provider = %q, want persisted session provider %q", resumed.Provider.ID, wantID)
+	}
+	if resumed.Provider.APIKey != "session-real-key" {
+		t.Fatalf("resume provider key = %q, want preserved session-real-key (not clobbered)", resumed.Provider.APIKey)
+	}
+	if resumed.Headers.Get("Authorization") != "Bearer session-real-key" {
+		t.Fatalf("resume auth header = %q, want Bearer session-real-key", resumed.Headers.Get("Authorization"))
+	}
+
+	// Rotation: a resume-time env that *does* carry a new key must update it,
+	// not get pinned to the stale persisted key.
+	rotatedEnv := []SessionEnvVar{
+		{Name: "LLM_API_ENDPOINT", Value: "https://session-llm.example.invalid"},
+		{Name: "LLM_API_KEY", Value: "rotated-key", Secret: true},
+		{Name: "LLM_MODEL", Value: "m-resume"},
+	}
+	rotated, err := resolveRuntimeLLMTargetWithEnv(ctx, cfg, store, sessionID, llmProviderFamilyOpenAI, "", "", rotatedEnv)
+	if err != nil {
+		t.Fatalf("rotation resolve: %v", err)
+	}
+	if rotated.Provider.APIKey != "rotated-key" {
+		t.Fatalf("rotation provider key = %q, want rotated-key", rotated.Provider.APIKey)
+	}
+}

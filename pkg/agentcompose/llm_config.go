@@ -528,6 +528,19 @@ func resolveRuntimeLLMTargetWithEnv(ctx context.Context, config *appconfig.Confi
 	providerID = strings.TrimSpace(providerID)
 	hasSessionEnvProvider := sessionID != "" && hasSessionEnvProviderInput(envItems)
 	sessionProviderID := ""
+	// Reuse an already-persisted session-env provider when this session can no
+	// longer supply a key from env. The raw key env (Session.ProviderEnvItems) is
+	// intentionally not persisted, so after a stop/resume the only durable home
+	// for a session-scoped credential is the llm_provider row written at creation.
+	// Pin its provider id here so resolution selects it (session-env providers are
+	// otherwise skipped without an explicit id) and does not clobber its key with
+	// the now-empty env. Only when the env still has no key for the family — an env
+	// that carries a (possibly rotated) key must keep re-bootstrapping it.
+	if providerID == "" && sessionID != "" && preferredProviderFamily != "" && !envHasProviderKeyForFamily(envItems, preferredProviderFamily) {
+		if candidate := sessionEnvProviderID(sessionID, preferredProviderFamily); hasEnabledLLMProviderID(ctx, store, candidate) {
+			providerID = candidate
+		}
+	}
 	// Skip the env/default bootstrap entirely when the request already names a
 	// provider that exists. The facade hot path always passes a concrete
 	// provider id from the token scope, so this avoids a redundant pair of
@@ -666,6 +679,29 @@ func hasEnabledLLMProviderID(ctx context.Context, store *ConfigStore, providerID
 		}
 	}
 	return false
+}
+
+// envHasProviderKeyForFamily reports whether the given env carries a usable
+// provider credential for the family. Unlike hasOpenAIEnvProviderInput it checks
+// for an actual key (not just an endpoint), so callers can distinguish "the env
+// can (re)bootstrap a provider with a fresh key" from "the env has no key and we
+// should reuse the already-persisted session-env provider".
+func envHasProviderKeyForFamily(envItems []SessionEnvVar, providerFamily string) bool {
+	switch normalizeLLMProviderType(providerFamily) {
+	case llmProviderFamilyAnthropic:
+		return strings.TrimSpace(firstNonEmpty(
+			lookupEnvItemValue(envItems, "ANTHROPIC_API_KEY"),
+			lookupEnvItemValue(envItems, "ANTHROPIC_AUTH_TOKEN"),
+			lookupEnvItemValue(envItems, "LLM_API_KEY"),
+		)) != ""
+	case llmProviderFamilyOpenAI:
+		return strings.TrimSpace(firstNonEmpty(
+			lookupEnvItemValue(envItems, "LLM_API_KEY"),
+			lookupEnvItemValue(envItems, "OPENAI_API_KEY"),
+		)) != ""
+	default:
+		return false
+	}
 }
 
 func hasConfiguredLLMProviderForFamily(ctx context.Context, store *ConfigStore, providerFamily string) bool {
