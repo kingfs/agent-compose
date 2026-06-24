@@ -88,14 +88,19 @@ func ensureSessionClaudeLLMFacadeConfig(ctx context.Context, config *appconfig.C
 		return nil, err
 	}
 	anthropicBaseURL := strings.TrimRight(baseURL, "/") + "/api/runtime/sessions/" + session.Summary.ID + "/llm/anthropic"
-	return map[string]string{
+	env := map[string]string{
 		"AGENT_COMPOSE_SESSION_TOKEN": tokenValue,
 		"LLM_API_ENDPOINT":            anthropicBaseURL,
 		"LLM_API_KEY":                 tokenValue,
 		"LLM_API_PROTOCOL":            llmAPIProtocolMessages,
 		"ANTHROPIC_API_KEY":           tokenValue,
 		"ANTHROPIC_BASE_URL":          anthropicBaseURL,
-	}, nil
+	}
+	if tokenModel != "" {
+		env["ANTHROPIC_MODEL"] = tokenModel
+		env["CLAUDE_MODEL"] = tokenModel
+	}
+	return env, nil
 }
 
 func isOptionalLLMFacadeConfigError(err error) bool {

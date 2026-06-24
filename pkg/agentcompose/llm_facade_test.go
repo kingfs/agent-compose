@@ -226,7 +226,7 @@ func TestRuntimeLLMAnthropicFacadeForwardsWithSessionToken(t *testing.T) {
 	app := echo.New()
 	registerRuntimeLLMFacadeRoutes(app, service)
 	req := httptest.NewRequest(http.MethodPost, "/api/runtime/sessions/"+session.Summary.ID+"/llm/anthropic/v1/messages", bytes.NewBufferString(`{"model":"claude-test","messages":[{"role":"user","content":"hello"}]}`))
-	req.Header.Set("Authorization", "Bearer "+tokenValue)
+	req.Header.Set("x-api-key", tokenValue)
 	req.Header.Set("anthropic-version", "2023-06-01")
 	rec := httptest.NewRecorder()
 	app.ServeHTTP(rec, req)
@@ -719,6 +719,9 @@ func TestSessionEnvGenericMessagesEndpointBootstrapsOnlyAnthropicProvider(t *tes
 	}
 	if env["ANTHROPIC_API_KEY"] != env["AGENT_COMPOSE_SESSION_TOKEN"] {
 		t.Fatalf("ANTHROPIC_API_KEY = %q, want facade token", env["ANTHROPIC_API_KEY"])
+	}
+	if env["ANTHROPIC_MODEL"] != "claude-session" || env["CLAUDE_MODEL"] != "claude-session" {
+		t.Fatalf("claude model env = ANTHROPIC_MODEL:%q CLAUDE_MODEL:%q, want claude-session", env["ANTHROPIC_MODEL"], env["CLAUDE_MODEL"])
 	}
 	providers, err := service.configDB.ListEnabledLLMProviders(ctx)
 	if err != nil {

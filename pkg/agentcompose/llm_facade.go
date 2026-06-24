@@ -61,7 +61,7 @@ func (s *Service) handleRuntimeLLMAnthropicMessages(c echo.Context) error {
 
 func (s *Service) handleRuntimeLLM(c echo.Context, inboundProtocol protocolbridge.Protocol, facadeWireAPI string) error {
 	sessionID := strings.TrimSpace(c.Param("session_id"))
-	rawToken := bearerToken(c.Request().Header.Get("Authorization"))
+	rawToken := runtimeLLMFacadeToken(c.Request().Header)
 	if sessionID == "" || rawToken == "" {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "llm facade token is required"})
 	}
@@ -341,6 +341,13 @@ func bearerToken(value string) string {
 		return strings.TrimSpace(value[7:])
 	}
 	return ""
+}
+
+func runtimeLLMFacadeToken(header http.Header) string {
+	if token := bearerToken(header.Get("Authorization")); token != "" {
+		return token
+	}
+	return strings.TrimSpace(header.Get("x-api-key"))
 }
 
 func copyRuntimeLLMHeaders(dst http.Header, src http.Header) {
