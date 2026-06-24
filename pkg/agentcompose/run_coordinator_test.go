@@ -206,6 +206,14 @@ func testRunServiceRunAgentCreatesTerminalSucceededRecord(t *testing.T) {
 }
 
 func TestRunServiceRunAgentInjectsProjectAgentCapabilities(t *testing.T) {
+	testRunServiceRunAgentInjectsProjectAgentCapabilities(t)
+}
+
+func TestE2ERunServiceRunAgentInjectsProjectAgentCapabilities(t *testing.T) {
+	testRunServiceRunAgentInjectsProjectAgentCapabilities(t)
+}
+
+func testRunServiceRunAgentInjectsProjectAgentCapabilities(t *testing.T) {
 	spec := newProjectServiceTestSpec("capset-run", "gpt-test")
 	spec.Agents[0].CapsetIds = []string{"xray-dev"}
 	store, service, projectID := setupRunPreparationProject(t, spec, t.TempDir())
@@ -264,6 +272,14 @@ func TestRunServiceRunAgentInjectsProjectAgentCapabilities(t *testing.T) {
 }
 
 func TestRunServiceRunAgentRefreshesCapabilitiesOnReusedSession(t *testing.T) {
+	testRunServiceRunAgentRefreshesCapabilitiesOnReusedSession(t)
+}
+
+func TestE2ERunServiceRunAgentRefreshesCapabilitiesOnReusedSession(t *testing.T) {
+	testRunServiceRunAgentRefreshesCapabilitiesOnReusedSession(t)
+}
+
+func testRunServiceRunAgentRefreshesCapabilitiesOnReusedSession(t *testing.T) {
 	spec := newProjectServiceTestSpec("capset-reuse", "gpt-test")
 	spec.Agents[0].CapsetIds = []string{"xray-dev"}
 	store, service, projectID := setupRunPreparationProject(t, spec, t.TempDir())
