@@ -1781,8 +1781,7 @@ func TestDaemonAppDoesNotRegisterStaticWebRoutes(t *testing.T) {
 
 func testDaemonAppDoesNotRegisterStaticWebRoutes(t *testing.T) {
 	t.Helper()
-	root := t.TempDir()
-	app, cancel := newTestDaemonAppWithStaticRoots(t, "127.0.0.1:0", nil, filepath.Join(root, "dist"), filepath.Join(root, "dist-ui"))
+	app, cancel := newTestDaemonApp(t, "127.0.0.1:0", nil)
 	defer cancel()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/version", nil)
@@ -1989,15 +1988,9 @@ func testDaemonAppReportsUncreatableUnixSocketPath(t *testing.T) {
 }
 
 func newTestDaemonApp(t *testing.T, httpListen string, startBackground func(do.Injector) error) (*DaemonApp, context.CancelFunc) {
-	return newTestDaemonAppWithStaticRoots(t, httpListen, startBackground, "", "")
-}
-
-func newTestDaemonAppWithStaticRoots(t *testing.T, httpListen string, startBackground func(do.Injector) error, httpRoot string, uiRoot string) (*DaemonApp, context.CancelFunc) {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", root)
-	t.Setenv("HTTP_ROOT", httpRoot)
-	t.Setenv("UI_ROOT", uiRoot)
 	t.Setenv("HTTP_LISTEN", httpListen)
 	t.Setenv("RUNTIME_DRIVER", config.RuntimeDriverDocker)
 	t.Setenv("SESSION_START_TIMEOUT", "1s")

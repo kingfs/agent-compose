@@ -13,7 +13,7 @@ func TestE2EConfigWorkflows(t *testing.T) {
 func testConfigWorkflows(t *testing.T) {
 	t.Helper()
 	t.Run("parses environment", testNewConfigParsesEnvironment)
-	t.Run("allows empty http root and requires valid driver", testNewConfigAllowsEmptyHTTPRootAndRequiresValidDriver)
+	t.Run("allows default roots and requires valid driver", testNewConfigAllowsDefaultRootsAndRequiresValidDriver)
 	t.Run("defaults daemon listen config", testNewConfigDefaultsDaemonListenConfig)
 	t.Run("uses explicit daemon socket", testNewConfigUsesExplicitDaemonSocket)
 	t.Run("enables tcp only when http listen is explicit", testNewConfigEnablesTCPOnlyWhenHTTPListenIsExplicit)

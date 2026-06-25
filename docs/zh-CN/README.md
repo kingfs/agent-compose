@@ -110,7 +110,7 @@ npm run build:ui
 npm run dev:ui
 ```
 
-前端可以由 daemon 静态资源能力提供，也可以作为独立静态服务部署，并反向代理到 daemon 的 API 和 Jupyter proxy 路由。
+daemon 不托管 Web UI。请使用 nginx 等静态服务提供构建后的前端，并将 API 和 Jupyter proxy 路由反向代理到 daemon。仓库中的 `docker-compose.yml` 包含用于该部署方式的 `agent-compose-frontend` nginx 服务。
 
 ## 配置
 

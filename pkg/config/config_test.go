@@ -48,11 +48,7 @@ func TestNewConfigNormalizesJupyterProxyBase(t *testing.T) {
 
 func testNewConfigParsesEnvironment(t *testing.T) {
 	root := t.TempDir()
-	httpRoot := filepath.Join(root, "dist")
-	uiRoot := filepath.Join(root, "dist-ui")
 	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
-	t.Setenv("HTTP_ROOT", httpRoot)
-	t.Setenv("UI_ROOT", uiRoot)
 	t.Setenv("HTTP_LISTEN", "127.0.0.1:9000")
 	t.Setenv("AGENT_COMPOSE_SOCKET", filepath.Join(root, "agent-compose.sock"))
 	t.Setenv("AGENT_COMPOSE_HOST", "https://agent-compose.example")
@@ -101,12 +97,6 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 		t.Fatalf("NewConfig returned error: %v", err)
 	}
 
-	if config.HttpRoot != httpRoot {
-		t.Fatalf("HttpRoot = %q, want %q", config.HttpRoot, httpRoot)
-	}
-	if config.UIRoot != uiRoot {
-		t.Fatalf("UIRoot = %q, want %q", config.UIRoot, uiRoot)
-	}
 	if config.HttpListen != "127.0.0.1:9000" || config.RuntimeDriver != RuntimeDriverDocker {
 		t.Fatalf("listen/driver = %q/%q", config.HttpListen, config.RuntimeDriver)
 	}
@@ -169,23 +159,18 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 	}
 }
 
-func TestNewConfigAllowsEmptyHTTPRootAndRequiresValidDriver(t *testing.T) {
-	testNewConfigAllowsEmptyHTTPRootAndRequiresValidDriver(t)
+func TestNewConfigAllowsDefaultRootsAndRequiresValidDriver(t *testing.T) {
+	testNewConfigAllowsDefaultRootsAndRequiresValidDriver(t)
 }
 
-func testNewConfigAllowsEmptyHTTPRootAndRequiresValidDriver(t *testing.T) {
+func testNewConfigAllowsDefaultRootsAndRequiresValidDriver(t *testing.T) {
 	t.Helper()
 	di := do.New()
 	do.ProvideValue(di, slog.Default())
-	config, err := NewConfig(di)
-	if err != nil {
-		t.Fatalf("NewConfig returned error for empty HTTP_ROOT: %v", err)
-	}
-	if config.HttpRoot != "" {
-		t.Fatalf("HttpRoot = %q, want empty", config.HttpRoot)
+	if _, err := NewConfig(di); err != nil {
+		t.Fatalf("NewConfig returned error for default roots: %v", err)
 	}
 
-	t.Setenv("HTTP_ROOT", t.TempDir())
 	t.Setenv("RUNTIME_DRIVER", "bad-driver")
 	if _, err := NewConfig(di); err == nil {
 		t.Fatalf("expected invalid runtime driver to fail")
@@ -327,7 +312,6 @@ func testNewConfigDefaultsImagesFromDefaultImage(t *testing.T) {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
-	t.Setenv("HTTP_ROOT", filepath.Join(root, "dist"))
 
 	di := do.New()
 	do.ProvideValue(di, slog.Default())
@@ -381,7 +365,6 @@ func testNewConfigDefaultsDataRootFromXDGDataHome(t *testing.T) {
 	t.Setenv("DATA_ROOT", "")
 	t.Setenv("DATA_ROOT", "")
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "xdg-data"))
-	t.Setenv("HTTP_ROOT", filepath.Join(root, "dist"))
 
 	di := do.New()
 	do.ProvideValue(di, slog.Default())
@@ -407,7 +390,6 @@ func testNewConfigEnsuresHostDirectoriesExist(t *testing.T) {
 	dockerHostSessionRoot := filepath.Join(root, "host-sessions")
 	t.Setenv("DATA_ROOT", dataRoot)
 	t.Setenv("DOCKER_HOST_SESSION_ROOT", dockerHostSessionRoot)
-	t.Setenv("HTTP_ROOT", filepath.Join(root, "dist"))
 
 	di := do.New()
 	do.ProvideValue(di, slog.Default())
@@ -441,7 +423,6 @@ func TestNewConfigPreservesWindowsDockerHostSessionRoot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
 	t.Setenv("DOCKER_HOST_SESSION_ROOT", `E:/program/agent-compose-main/data/agent-compose/sessions`)
-	t.Setenv("HTTP_ROOT", filepath.Join(root, "dist"))
 
 	di := do.New()
 	do.ProvideValue(di, slog.Default())
@@ -460,7 +441,6 @@ func TestNewConfigPreservesUNCDockerHostSessionRoot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
 	t.Setenv("DOCKER_HOST_SESSION_ROOT", `\\server\share\agent-compose\sessions`)
-	t.Setenv("HTTP_ROOT", filepath.Join(root, "dist"))
 
 	di := do.New()
 	do.ProvideValue(di, slog.Default())
@@ -479,7 +459,6 @@ func TestNewConfigRejectsWindowsDockerHostSessionRootParentSegment(t *testing.T)
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
 	t.Setenv("DOCKER_HOST_SESSION_ROOT", `E:\program\..\agent-compose\sessions`)
-	t.Setenv("HTTP_ROOT", filepath.Join(root, "dist"))
 
 	di := do.New()
 	do.ProvideValue(di, slog.Default())
@@ -500,7 +479,6 @@ func testNewConfigRejectsFileDataRoot(t *testing.T) {
 		t.Fatalf("write data root file: %v", err)
 	}
 	t.Setenv("DATA_ROOT", dataRoot)
-	t.Setenv("HTTP_ROOT", filepath.Join(root, "dist"))
 
 	di := do.New()
 	do.ProvideValue(di, slog.Default())

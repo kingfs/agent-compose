@@ -37,7 +37,6 @@ func testSupportSetupRegistersServiceGraph(t *testing.T) {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", root)
-	t.Setenv("HTTP_ROOT", root)
 	t.Setenv("SESSION_ROOT", filepath.Join(root, "sessions"))
 	t.Setenv("RUNTIME_DRIVER", driverpkg.RuntimeDriverDocker)
 	t.Setenv("DOCKER_IMAGE", "guest:latest")

@@ -681,10 +681,9 @@ for example `scheduler.session.ResumeSession(...)`.
 
 ## Frontend Service
 
-The daemon no longer hosts `HTTP_ROOT` / `UI_ROOT` static assets. `HTTP_ROOT` and
-`UI_ROOT` remain in the configuration structure and in some compatibility test
-paths, but the daemon main process does not register Web/UI catch-all routes or
-`/ui` static routes.
+The daemon does not host Web/UI static assets and no longer supports
+`HTTP_ROOT` / `UI_ROOT` static-root configuration. The daemon main process only
+registers API, Connect, webhook/workspace, and Jupyter proxy routes.
 
 The current Docker deployment provides an independent frontend service:
 

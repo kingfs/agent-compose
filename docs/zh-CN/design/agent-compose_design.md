@@ -507,7 +507,7 @@ loader 内还暴露 v1 `SessionService` 的 unary RPC bridge：
 
 ## 前端服务
 
-daemon 不再托管 `HTTP_ROOT` / `UI_ROOT` 静态资源。`HTTP_ROOT` 和 `UI_ROOT` 仍保留在配置结构和部分测试兼容路径中，但 daemon 主进程不注册 Web/UI catch-all 或 `/ui` 静态路由。
+daemon 不托管 Web/UI 静态资源，也不再支持 `HTTP_ROOT` / `UI_ROOT` 静态根目录配置。daemon 主进程只注册 API、Connect、webhook/workspace 和 Jupyter proxy 路由。
 
 当前 Docker 部署提供独立前端服务：
 

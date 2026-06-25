@@ -40,8 +40,6 @@ type Config struct {
 	HttpListen                 string
 	AgentComposeSocket         string
 	AgentComposeHost           string
-	HttpRoot                   string
-	UIRoot                     string
 	HTTPBasicAuth              string
 	HttpBasicAuth              string
 	WebhookBodyLimitBytes      int64
@@ -124,9 +122,6 @@ func NewConfig(di do.Injector) (*Config, error) {
 	}
 
 	sessionRoot := filepath.Join(dataRoot, "sessions")
-
-	httpRoot := os.Getenv("HTTP_ROOT")
-	uiRoot := os.Getenv("UI_ROOT")
 
 	httpListen := strings.TrimSpace(os.Getenv("HTTP_LISTEN"))
 	if httpListen != "" {
@@ -401,8 +396,6 @@ func NewConfig(di do.Injector) (*Config, error) {
 
 	dataRoot = mustAbs(dataRoot)
 	sessionRoot = mustAbs(sessionRoot)
-	httpRoot = mustAbs(httpRoot)
-	uiRoot = mustAbs(uiRoot)
 	boxliteHome = mustAbs(boxliteHome)
 	boxliteRuntimeDir = mustAbs(boxliteRuntimeDir)
 	dockerHome = mustAbs(dockerHome)
@@ -441,8 +434,6 @@ func NewConfig(di do.Injector) (*Config, error) {
 		HttpListen:                 httpListen,
 		AgentComposeSocket:         agentComposeSocket,
 		AgentComposeHost:           agentComposeHost,
-		HttpRoot:                   httpRoot,
-		UIRoot:                     uiRoot,
 		HTTPBasicAuth:              basicAuth,
 		HttpBasicAuth:              basicAuth,
 		WebhookBodyLimitBytes:      webhookBodyLimitBytes,
