@@ -1,11 +1,15 @@
-FROM docker.io/library/archlinux:latest
+ARG REGISTRY_MIRROR=docker.io
+
+FROM ${REGISTRY_MIRROR}/library/archlinux:latest
+
+ARG GOPROXY=https://goproxy.cn
 
 RUN ln -sfv /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
 RUN printf 'Server = http://mirrors.tuna.tsinghua.edu.cn/archlinux/$repo/os/$arch\n' > /etc/pacman.d/mirrorlist
 RUN pacman -Syu --disable-download-timeout --noconfirm git git-lfs git-delta tig lazygit npm go rsync python python-pip less pre-commit the_silver_searcher ripgrep vim bash-completion tmux which openbsd-netcat socat podman podman-compose jq yq ed zip protobuf buf uv proxychains-ng
 
-RUN go env -w GOPROXY=https://proxy.golang.org,direct &&\
+RUN go env -w GOPROXY=${GOPROXY},direct &&\
     env GOPATH=/usr/local/go go install github.com/go-task/task/v3/cmd/task@latest &&\
     env GOPATH=/usr/local/go go install google.golang.org/protobuf/cmd/protoc-gen-go@latest &&\
     env GOPATH=/usr/local/go go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest &&\
@@ -26,6 +30,7 @@ RUN npm config set prefix /usr/local/ &&\
     npm install -g @anthropic-ai/claude-code &&\
     npm install -g @anthropic-ai/claude-code-linux-x64 &&\
     npm install -g @google/gemini-cli &&\
+    npm install -g opencode-ai &&\
     npm install -g @qwen-code/qwen-code@latest &&\
     npm install -g @bufbuild/protobuf @bufbuild/protoc-gen-es &&\
     npm install -g typescript-language-server typescript
@@ -39,7 +44,9 @@ ENV ALL_PROXY=${ALL_PROXY}
 
 ENV HOME=/root \
     GOPATH=/usr/local/go \
-    GOPROXY=https://proxy.golang.org,direct \
+    GOPROXY=${GOPROXY},direct \
+    OPENCODE_DISABLE_AUTOUPDATE=true \
+    OPENCODE_DISABLE_MODELS_FETCH=1 \
     PATH=/root/.local/bin:/usr/local/go/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 COPY ./assets/.codex/ /root/.codex/
