@@ -2,8 +2,6 @@ package agentcompose
 
 import (
 	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	agentcomposev1 "agent-compose/proto/agentcompose/v1"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"bytes"
 	"context"
@@ -37,6 +35,11 @@ type LoaderManager struct {
 	sessions   *SessionRPCBridge
 	dashboard  *DashboardOverviewHub
 	eventQueue *WebhookRunQueue
+
+	runExecutor        *LoaderRunExecutor
+	eventDispatcher    *LoaderEventDispatcher
+	sessionRunner      *LoaderSessionRunner
+	projectAgentRunner ProjectAgentRunner
 
 	once         sync.Once
 	mu           sync.RWMutex
@@ -86,7 +89,7 @@ func NewLoaderManager(di do.Injector) (*LoaderManager, error) {
 		return nil, err
 	}
 	dashboard, _ := do.Invoke[*DashboardOverviewHub](di)
-	return &LoaderManager{
+	m := &LoaderManager{
 		config:       config,
 		rootCtx:      rootCtx,
 		store:        do.MustInvoke[*Store](di),
@@ -105,7 +108,27 @@ func NewLoaderManager(di do.Injector) (*LoaderManager, error) {
 		loaders:      map[string]Loader{},
 		running:      map[string]int{},
 		scheduleWake: make(chan struct{}, 1),
-	}, nil
+	}
+	m.initLoaderComponents()
+	return m, nil
+}
+
+func (m *LoaderManager) initLoaderComponents() {
+	if m == nil {
+		return
+	}
+	if m.runExecutor == nil {
+		m.runExecutor = NewLoaderRunExecutor(m)
+	}
+	if m.eventDispatcher == nil {
+		m.eventDispatcher = NewLoaderEventDispatcher(m)
+	}
+	if m.sessionRunner == nil {
+		m.sessionRunner = NewLoaderSessionRunner(m)
+	}
+	if m.projectAgentRunner == nil {
+		m.projectAgentRunner = NewServiceProjectAgentRunner(m)
+	}
 }
 
 func (m *LoaderManager) Start() {
@@ -342,6 +365,7 @@ func stopTimer(timer *time.Timer) {
 }
 
 func (m *LoaderManager) eventLoop() {
+	m.initLoaderComponents()
 	for {
 		select {
 		case <-m.rootCtx.Done():
@@ -350,166 +374,9 @@ func (m *LoaderManager) eventLoop() {
 			if !ok {
 				return
 			}
-			payloadJSON, err := marshalJSONCompact(map[string]any{
-				"topic":     event.Topic,
-				"createdAt": event.CreatedAt.Format(time.RFC3339Nano),
-				"payload":   event.Payload,
-			})
-			if err != nil {
-				slog.Warn("failed to encode loader topic event payload", "topic", event.Topic, "error", err)
-				continue
-			}
-			targets := m.collectEventLoaderTargets(event.Topic)
-			targets = dedupeWebhookEventTargets(event, targets)
-			if len(targets) == 0 {
-				ack := event.NoSubscriberAck
-				if ack == nil {
-					ack = event.Ack
-				}
-				if ack != nil {
-					if err := ack(m.rootCtx); err != nil {
-						slog.Warn("failed to mark unmatched loader topic event published", "event_id", event.EventID, "topic", event.Topic, "error", err)
-					}
-				}
-				continue
-			}
-			if m.eventShouldRetryForBusy(event, targets) {
-				m.retryLoaderTopicEvent(event, "loader is already running")
-				continue
-			}
-			reservations, ok := m.reserveEventQueueSlots(event, len(targets))
-			if !ok {
-				m.retryLoaderTopicEvent(event, "webhook queue is full")
-				continue
-			}
-			if event.Source == TopicEventSourceWebhook {
-				m.dispatchWebhookEventTargets(event, targets, payloadJSON, reservations)
-				continue
-			}
-			for _, target := range targets {
-				if event.EventID != "" {
-					if err := m.configDB.UpsertEventDelivery(m.rootCtx, EventDelivery{
-						EventID:   event.EventID,
-						LoaderID:  target.loader.Summary.ID,
-						TriggerID: target.trigger.ID,
-						Status:    EventDeliveryStatusMatched,
-					}); err != nil {
-						slog.Warn("failed to record event delivery match", "event_id", event.EventID, "loader_id", target.loader.Summary.ID, "trigger_id", target.trigger.ID, "error", err)
-					}
-				}
-				reservation := reservations[0]
-				reservations = reservations[1:]
-				runCtx, cancel := context.WithTimeout(m.rootCtx, m.loaderRunTimeout(0))
-				go func(target eventLoaderTarget, payloadJSON string, topic string, ack func(context.Context) error, release func(), reservation *webhookQueueReservation) {
-					defer cancel()
-					defer reservation.Release()
-					if _, err := m.runLoader(runCtx, target.loader, &target.trigger, payloadJSON, topic, true, loaderRunOptions{retryWhenBusy: event.Source == TopicEventSourceWebhook}, ack); err != nil {
-						if errors.Is(err, errLoaderRunBusyForRetry) {
-							m.retryLoaderTopicEvent(event, "loader is already running")
-							return
-						}
-						slog.Warn("loader event run failed", "loader_id", target.loader.Summary.ID, "trigger_id", target.trigger.ID, "topic", topic, "error", err)
-						if release != nil {
-							release()
-						}
-					}
-				}(target, payloadJSON, event.Topic, event.Ack, event.Release, reservation)
-			}
+			m.eventDispatcher.Dispatch(event)
 		}
 	}
-}
-
-func (m *LoaderManager) retryLoaderTopicEvent(event LoaderTopicEvent, reason string) {
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		reason = "loader topic event retry requested"
-	}
-	if event.Retry != nil {
-		if err := event.Retry(m.rootCtx, reason, time.Now().UTC().Add(time.Second)); err != nil {
-			slog.Warn("failed to retry loader topic event", "event_id", event.EventID, "topic", event.Topic, "reason", reason, "error", err)
-		}
-		return
-	}
-	if event.Release != nil {
-		event.Release()
-	}
-}
-
-func (m *LoaderManager) dispatchWebhookEventTargets(event LoaderTopicEvent, targets []eventLoaderTarget, payloadJSON string, reservations []*webhookQueueReservation) {
-	acquiredLoaderIDs := make([]string, 0, len(targets))
-	for _, target := range targets {
-		if !m.enterRun(target.loader) {
-			for _, loaderID := range acquiredLoaderIDs {
-				m.leaveRun(loaderID)
-			}
-			for _, reservation := range reservations {
-				reservation.Release()
-			}
-			m.retryLoaderTopicEvent(event, "loader is already running")
-			return
-		}
-		acquiredLoaderIDs = append(acquiredLoaderIDs, target.loader.Summary.ID)
-	}
-	prepared := make([]preparedLoaderRun, 0, len(targets))
-	for index, target := range targets {
-		preparedRun, err := m.prepareLoaderRun(m.rootCtx, target.loader, &target.trigger, payloadJSON, event.Topic, loaderRunOptions{alreadyEntered: true})
-		if err != nil {
-			for _, item := range prepared {
-				m.abortPreparedLoaderRun(context.WithoutCancel(m.rootCtx), item, err.Error())
-			}
-			for _, loaderID := range acquiredLoaderIDs[index+1:] {
-				m.leaveRun(loaderID)
-			}
-			for _, reservation := range reservations {
-				reservation.Release()
-			}
-			reason := err.Error()
-			if errors.Is(err, errLoaderRunBusyForRetry) {
-				reason = "loader is already running"
-			}
-			m.retryLoaderTopicEvent(event, reason)
-			return
-		}
-		prepared = append(prepared, preparedRun)
-	}
-	if event.Ack != nil {
-		if err := event.Ack(m.rootCtx); err != nil {
-			slog.Warn("failed to mark loader topic event published", "event_id", event.EventID, "topic", event.Topic, "error", err)
-		}
-	}
-	for index, item := range prepared {
-		var reservation *webhookQueueReservation
-		if index < len(reservations) {
-			reservation = reservations[index]
-		}
-		runCtx, cancel := context.WithTimeout(m.rootCtx, m.loaderRunTimeout(0))
-		go func(item preparedLoaderRun, reservation *webhookQueueReservation) {
-			defer cancel()
-			defer reservation.Release()
-			if _, err := m.executePreparedLoaderRun(runCtx, item); err != nil {
-				slog.Warn("loader event run failed", "loader_id", item.loader.Summary.ID, "trigger_id", item.run.TriggerID, "topic", event.Topic, "error", err)
-			}
-		}(item, reservation)
-	}
-}
-
-func (m *LoaderManager) collectEventLoaderTargets(topic string) []eventLoaderTarget {
-	targets := make([]eventLoaderTarget, 0)
-	for _, loader := range m.snapshotLoaders() {
-		if !loader.Summary.Enabled {
-			continue
-		}
-		for _, trigger := range loader.Triggers {
-			if !trigger.Enabled || trigger.Kind != LoaderTriggerKindEvent || !loaderTriggerTopicMatches(trigger.Topic, topic) {
-				continue
-			}
-			targets = append(targets, eventLoaderTarget{
-				loader:  loader,
-				trigger: trigger,
-			})
-		}
-	}
-	return targets
 }
 
 func dedupeWebhookEventTargets(event LoaderTopicEvent, targets []eventLoaderTarget) []eventLoaderTarget {
@@ -533,48 +400,9 @@ func dedupeWebhookEventTargets(event LoaderTopicEvent, targets []eventLoaderTarg
 	return deduped
 }
 
-func (m *LoaderManager) eventShouldRetryForBusy(event LoaderTopicEvent, targets []eventLoaderTarget) bool {
-	if event.Source != TopicEventSourceWebhook || len(targets) == 0 {
-		return false
-	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, target := range targets {
-		loaderID := strings.TrimSpace(target.loader.Summary.ID)
-		if normalizeLoaderConcurrencyPolicy(target.loader.Summary.ConcurrencyPolicy) != LoaderConcurrencyPolicyParallel && m.running[loaderID] > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func (m *LoaderManager) reserveEventQueueSlots(event LoaderTopicEvent, count int) ([]*webhookQueueReservation, bool) {
-	if count <= 0 {
-		return nil, true
-	}
-	if event.Source != TopicEventSourceWebhook {
-		return noopWebhookQueueReservations(count), true
-	}
-	if m.eventQueue == nil {
-		queue, err := newWebhookRunQueueFromConfig(m.config)
-		if err != nil {
-			slog.Warn("failed to initialize webhook queue config", "error", err)
-			queue = &WebhookRunQueue{running: map[string]int{}}
-		}
-		m.eventQueue = queue
-	}
-	reservations := make([]*webhookQueueReservation, 0, count)
-	for i := 0; i < count; i++ {
-		reservation, ok := m.eventQueue.Reserve(event)
-		if !ok {
-			for _, reserved := range reservations {
-				reserved.Release()
-			}
-			return nil, false
-		}
-		reservations = append(reservations, reservation)
-	}
-	return reservations, true
+	m.initLoaderComponents()
+	return m.eventDispatcher.reserveQueueSlots(event, count)
 }
 
 func (m *LoaderManager) collectDueScheduledRuns(now time.Time) []scheduledLoaderRun {
@@ -650,156 +478,6 @@ type loaderRunOptions struct {
 }
 
 var errLoaderRunBusyForRetry = errors.New("loader is already running")
-
-func (m *LoaderManager) runLoader(ctx context.Context, loader Loader, trigger *LoaderTrigger, payloadJSON, source string, automatic bool, options loaderRunOptions, triggerEventAck ...func(context.Context) error) (LoaderRunSummary, error) {
-	prepared, err := m.prepareLoaderRun(ctx, loader, trigger, payloadJSON, source, options)
-	if err != nil {
-		return LoaderRunSummary{}, err
-	}
-	if len(triggerEventAck) > 0 && triggerEventAck[0] != nil {
-		if err := triggerEventAck[0](ctx); err != nil {
-			slog.Warn("failed to mark loader topic event published", "topic", source, "error", err)
-		}
-	}
-	return m.executePreparedLoaderRun(ctx, prepared)
-}
-
-func (m *LoaderManager) prepareLoaderRun(ctx context.Context, loader Loader, trigger *LoaderTrigger, payloadJSON, source string, options loaderRunOptions) (preparedLoaderRun, error) {
-	payloadJSON, err := normalizeJSONDocument(payloadJSON)
-	if err != nil {
-		if options.alreadyEntered {
-			m.leaveRun(loader.Summary.ID)
-		}
-		return preparedLoaderRun{}, err
-	}
-	now := time.Now().UTC()
-	run := LoaderRunSummary{
-		ID:               uuid.NewString(),
-		LoaderID:         loader.Summary.ID,
-		TriggerSource:    strings.TrimSpace(source),
-		Status:           LoaderRunStatusRunning,
-		StartedAt:        now,
-		PayloadJSON:      payloadJSON,
-		SourceScriptHash: loaderSourceSHA(loader.Script),
-		ArtifactsDir:     m.runArtifactsDir(loader.Summary.ID, ""),
-	}
-	if trigger != nil {
-		run.TriggerID = trigger.ID
-		run.TriggerKind = trigger.Kind
-	}
-	run.ArtifactsDir = m.runArtifactsDir(loader.Summary.ID, run.ID)
-
-	entered := options.alreadyEntered
-	if !entered && !m.enterRun(loader) {
-		if options.retryWhenBusy {
-			return preparedLoaderRun{}, errLoaderRunBusyForRetry
-		}
-		if err := os.MkdirAll(run.ArtifactsDir, 0o755); err != nil {
-			return preparedLoaderRun{}, fmt.Errorf("create loader run artifacts dir: %w", err)
-		}
-		_ = m.writeRunArtifact(run.ArtifactsDir, "payload.json", payloadJSON)
-		run.Status = LoaderRunStatusSkipped
-		run.CompletedAt = now
-		run.Error = "loader is already running"
-		if err := m.configDB.CreateLoaderRun(ctx, run); err != nil {
-			return preparedLoaderRun{}, err
-		}
-		m.updateTriggerEventDelivery(ctx, run)
-		m.notifyDashboard("loader_run_updated")
-		_ = m.configDB.UpdateLoaderLastError(ctx, loader.Summary.ID, run.Error)
-		_ = m.addLoaderEvent(ctx, loader.Summary.ID, run.ID, run.TriggerID, "loader.run.skipped", "warn", run.Error, nil, "", "", "")
-		_ = m.writeRunArtifact(run.ArtifactsDir, "error.txt", run.Error)
-		return preparedLoaderRun{loader: loader, trigger: trigger, run: run, payloadJSON: payloadJSON}, nil
-	}
-
-	if err := os.MkdirAll(run.ArtifactsDir, 0o755); err != nil {
-		m.leaveRun(loader.Summary.ID)
-		return preparedLoaderRun{}, fmt.Errorf("create loader run artifacts dir: %w", err)
-	}
-	_ = m.writeRunArtifact(run.ArtifactsDir, "payload.json", payloadJSON)
-
-	if err := m.configDB.CreateLoaderRun(ctx, run); err != nil {
-		m.leaveRun(loader.Summary.ID)
-		return preparedLoaderRun{}, err
-	}
-	m.updateTriggerEventDelivery(ctx, run)
-	m.notifyDashboard("loader_run_updated")
-	_ = m.addLoaderEvent(ctx, loader.Summary.ID, run.ID, run.TriggerID, "loader.run.started", "info", "loader run started", map[string]any{"source": run.TriggerSource}, "", "", "")
-	return preparedLoaderRun{loader: loader, trigger: trigger, run: run, payloadJSON: payloadJSON}, nil
-}
-
-func (m *LoaderManager) executePreparedLoaderRun(ctx context.Context, prepared preparedLoaderRun) (LoaderRunSummary, error) {
-	if prepared.run.Status == LoaderRunStatusSkipped {
-		return prepared.run, nil
-	}
-	defer m.leaveRun(prepared.loader.Summary.ID)
-	run := prepared.run
-	host := &loaderRunHost{manager: m, loader: prepared.loader, run: &run, triggerEvent: parseLoaderTriggerEventMetadata(prepared.payloadJSON)}
-	execution, execErr := m.engine.Execute(ctx, LoaderExecutionRequest{
-		Runtime:     prepared.loader.Summary.Runtime,
-		Script:      prepared.loader.Script,
-		Trigger:     prepared.trigger,
-		PayloadJSON: prepared.payloadJSON,
-	}, host)
-
-	// Use a cancel-free context for all post-run bookkeeping so cleanup and
-	// status writes still persist when the run context has hit its deadline.
-	writeCtx := context.WithoutCancel(ctx)
-	host.cleanupCommandSessions(writeCtx)
-
-	completedAt := time.Now().UTC()
-	run.CompletedAt = completedAt
-	run.DurationMs = completedAt.Sub(run.StartedAt).Milliseconds()
-	if execErr != nil {
-		run.Status = LoaderRunStatusFailed
-		run.Error = execErr.Error()
-		_ = m.writeRunArtifact(run.ArtifactsDir, "error.txt", run.Error)
-		_ = m.configDB.UpdateLoaderLastError(writeCtx, prepared.loader.Summary.ID, run.Error)
-		_ = m.addLoaderEvent(writeCtx, prepared.loader.Summary.ID, run.ID, run.TriggerID, "loader.run.failed", "error", run.Error, nil, "", "", "")
-	} else {
-		run.Status = LoaderRunStatusSucceeded
-		run.ResultJSON = execution.ResultJSON
-		if execution.ResultJSON != "" {
-			_ = m.writeRunArtifact(run.ArtifactsDir, "result.json", execution.ResultJSON)
-		}
-		_ = m.configDB.UpdateLoaderLastError(writeCtx, prepared.loader.Summary.ID, "")
-		_ = m.addLoaderEvent(writeCtx, prepared.loader.Summary.ID, run.ID, run.TriggerID, "loader.run.completed", "info", "loader run completed", map[string]any{"resultJson": execution.ResultJSON}, "", "", "")
-	}
-	if err := m.configDB.UpdateLoaderRun(writeCtx, run); err != nil {
-		return LoaderRunSummary{}, err
-	}
-	m.updateTriggerEventDelivery(writeCtx, run)
-	m.notifyDashboard("loader_run_updated")
-	if err := m.Refresh(writeCtx); err != nil {
-		slog.Warn("failed to refresh loaders after run", "loader_id", prepared.loader.Summary.ID, "error", err)
-	}
-	return run, nil
-}
-
-func (m *LoaderManager) abortPreparedLoaderRun(ctx context.Context, prepared preparedLoaderRun, reason string) {
-	if prepared.run.Status == LoaderRunStatusSkipped {
-		return
-	}
-	defer m.leaveRun(prepared.loader.Summary.ID)
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		reason = "loader run aborted before execution"
-	}
-	run := prepared.run
-	completedAt := time.Now().UTC()
-	run.Status = LoaderRunStatusFailed
-	run.CompletedAt = completedAt
-	run.DurationMs = completedAt.Sub(run.StartedAt).Milliseconds()
-	run.Error = reason
-	_ = m.writeRunArtifact(run.ArtifactsDir, "error.txt", run.Error)
-	_ = m.configDB.UpdateLoaderLastError(ctx, prepared.loader.Summary.ID, run.Error)
-	_ = m.addLoaderEvent(ctx, prepared.loader.Summary.ID, run.ID, run.TriggerID, "loader.run.failed", "error", run.Error, nil, "", "", "")
-	if err := m.configDB.UpdateLoaderRun(ctx, run); err != nil {
-		slog.Warn("failed to abort prepared loader run", "loader_id", prepared.loader.Summary.ID, "run_id", run.ID, "error", err)
-	}
-	m.updateTriggerEventDelivery(ctx, run)
-	m.notifyDashboard("loader_run_updated")
-}
 
 func (m *LoaderManager) updateTriggerEventDelivery(ctx context.Context, run LoaderRunSummary) {
 	if m == nil || m.configDB == nil {
@@ -1185,8 +863,7 @@ func (h *loaderRunHost) useProjectManagedAgentRun(request LoaderAgentRequest) bo
 }
 
 func (h *loaderRunHost) ProjectAgent(ctx context.Context, prompt string, request LoaderAgentRequest) (LoaderAgentResult, error) {
-	runService := h.manager.projectRunService()
-	run, execErr, err := runService.runProjectAgent(ctx, &agentcomposev2.RunAgentRequest{
+	run, execErr, err := h.manager.projectAgentRunnerComponent().RunProjectAgent(ctx, &agentcomposev2.RunAgentRequest{
 		ProjectId:        h.loader.Summary.ManagedProjectID,
 		AgentName:        h.loader.Summary.ManagedAgentName,
 		Prompt:           prompt,
@@ -1228,21 +905,6 @@ func (h *loaderRunHost) ProjectAgent(ctx context.Context, prompt string, request
 		return result, execErr
 	}
 	return result, nil
-}
-
-func (m *LoaderManager) projectRunService() *Service {
-	if m == nil {
-		return &Service{}
-	}
-	return &Service{
-		config:   m.config,
-		store:    m.store,
-		configDB: m.configDB,
-		driver:   m.driver,
-		executor: m.executor,
-		images:   m.images,
-		streams:  m.streams,
-	}
 }
 
 func loaderAgentResultFromProjectRun(run ProjectRunRecord, outputSchemaJSON string) (LoaderAgentResult, error) {
@@ -1370,182 +1032,6 @@ func (h *loaderRunHost) LLM(ctx context.Context, prompt string, request LoaderLL
 	return response, nil
 }
 
-func (m *LoaderManager) shutdownLoaderSession(ctx context.Context, sessionID string) error {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return nil
-	}
-	stopCtx := context.WithoutCancel(ctx)
-	session, err := m.store.GetSession(stopCtx, sessionID)
-	if err != nil {
-		return err
-	}
-	if session.Summary.VMStatus != VMStatusRunning {
-		return nil
-	}
-	if err := m.driver.StopSessionVM(stopCtx, session); err != nil {
-		return err
-	}
-	session.Summary.VMStatus = VMStatusStopped
-	if err := m.store.UpdateSession(stopCtx, session); err != nil {
-		return err
-	}
-	m.streams.PublishSessionUpdated(&session.Summary)
-	event := SessionEvent{ID: uuid.NewString(), Type: "session.stopped", Level: "info", Message: "session stopped", CreatedAt: time.Now().UTC()}
-	_ = m.store.AddEvent(stopCtx, session.Summary.ID, event)
-	m.streams.PublishEventAdded(session.Summary.ID, event)
-	loaded, err := m.store.GetSession(stopCtx, session.Summary.ID)
-	if err != nil {
-		return err
-	}
-	m.Publish("agent-compose.session.stopped", sessionTopicPayload(loaded, "loader"))
-	return nil
-}
-
-func (m *LoaderManager) ensureLoaderSession(ctx context.Context, loader Loader, request LoaderAgentRequest) (*Session, string, error) {
-	return m.ensureLoaderSessionWithOptions(ctx, loader, request, true)
-}
-
-func (m *LoaderManager) ensureLoaderCommandSession(ctx context.Context, loader Loader, request LoaderAgentRequest) (*Session, string, error) {
-	return m.ensureLoaderSessionWithOptions(ctx, loader, request, false)
-}
-
-func (m *LoaderManager) ensureLoaderSessionWithOptions(ctx context.Context, loader Loader, request LoaderAgentRequest, titleOverridesSession bool) (*Session, string, error) {
-	agentDefinition, err := m.loaderAgentDefinition(ctx, loader)
-	if err != nil {
-		return nil, "", err
-	}
-	effectivePolicy := normalizeLoaderSessionPolicy(loader.Summary.SessionPolicy)
-	if strings.TrimSpace(request.SessionPolicy) != "" {
-		effectivePolicy = normalizeLoaderSessionPolicy(request.SessionPolicy)
-	}
-	hasOverrides := loaderAgentRequestOverridesSession(request, titleOverridesSession)
-	forceNew := effectivePolicy == LoaderSessionPolicyNew || hasOverrides
-	if !forceNew {
-		if binding, ok, err := m.configDB.GetLoaderBinding(ctx, loader.Summary.ID); err != nil {
-			return nil, "", err
-		} else if ok {
-			session, eventType, err := m.loadOrResumeLoaderSession(ctx, binding.SessionID)
-			if err == nil {
-				return session, eventType, nil
-			}
-			slog.Warn("failed to reuse loader sticky session, creating a new one", "loader_id", loader.Summary.ID, "session_id", binding.SessionID, "error", err)
-		}
-	}
-
-	envItems, err := m.configDB.ListGlobalEnv(ctx)
-	if err != nil {
-		return nil, "", err
-	}
-	if agentDefinition != nil {
-		envItems = mergeEnvItems(envItems, agentDefinition.EnvItems)
-	}
-	envItems = mergeEnvItems(envItems, loader.EnvItems)
-	envItems = mergeEnvItems(envItems, request.SessionEnv)
-	providerEnvItems := envItems
-	envItems = filterPersistedRuntimeEnv(envItems)
-	capabilityVars, capabilityTags := buildCapabilityGatewaySessionVars(capabilityGatewayProxyTarget(m.cap), loader.Summary.CapsetIDs)
-	envItems = mergeEnvItems(envItems, capabilityVars)
-	tags := []SessionTag{{Name: "origin", Value: "loader"}, {Name: "loader_id", Value: loader.Summary.ID}, {Name: "loader_name", Value: loader.Summary.Name}}
-	tags = append(tags, capabilityTags...)
-
-	var workspaceSnapshot *SessionWorkspace
-	workspaceID := firstNonEmpty(strings.TrimSpace(request.WorkspaceID), strings.TrimSpace(loader.Summary.WorkspaceID))
-	if agentDefinition != nil {
-		workspaceID = firstNonEmpty(strings.TrimSpace(request.WorkspaceID), strings.TrimSpace(loader.Summary.WorkspaceID), strings.TrimSpace(agentDefinition.WorkspaceID))
-	}
-	if workspaceID != "" {
-		workspaceConfig, err := m.configDB.GetWorkspaceConfig(ctx, workspaceID)
-		if err != nil {
-			return nil, "", err
-		}
-		workspaceSnapshot = toSessionWorkspaceSnapshot(workspaceConfig)
-	}
-
-	driverValue := firstNonEmpty(strings.TrimSpace(request.Driver), strings.TrimSpace(loader.Summary.Driver))
-	if agentDefinition != nil {
-		driverValue = firstNonEmpty(strings.TrimSpace(request.Driver), strings.TrimSpace(loader.Summary.Driver), strings.TrimSpace(agentDefinition.Driver))
-	}
-	driver, err := driverpkg.ResolveSessionRuntimeDriver(driverValue, m.config.RuntimeDriver)
-	if err != nil {
-		return nil, "", err
-	}
-	agentGuestImage := ""
-	if agentDefinition != nil {
-		agentGuestImage = agentDefinition.GuestImage
-	}
-	guestImage := driverpkg.ResolveSessionGuestImage(request.GuestImage, loader.Summary.GuestImage, agentGuestImage, driverpkg.DefaultGuestImageForDriver(m.config, driver))
-	title := firstNonEmpty(strings.TrimSpace(request.Title), strings.TrimSpace(loader.Summary.Name), defaultLoaderName(time.Now().UTC()))
-	if agentDefinition != nil {
-		tags = append(tags, sessionTagsFromProto(agentDefinitionTags(*agentDefinition))...)
-	}
-	session, err := m.store.CreateSession(ctx,
-		title,
-		"",
-		driver,
-		guestImage,
-		workspaceID,
-		SessionTypeScript+":"+loader.Summary.ID,
-		workspaceSnapshot,
-		envItems,
-		tags,
-	)
-	if err != nil {
-		return nil, "", err
-	}
-	session.ProviderEnvItems = providerEnvItems
-	if err := prepareSessionWorkspace(ctx, m.config, m.configDB, session); err != nil {
-		session.Summary.VMStatus = VMStatusFailed
-		_ = m.store.UpdateSession(ctx, session)
-		return nil, "", err
-	}
-	writeCapabilityGuide(ctx, m.cap, m.store, m.streams, session, loader.Summary.CapsetIDs)
-	if err := m.driver.StartSessionVM(ctx, session); err != nil {
-		session.Summary.VMStatus = VMStatusFailed
-		_ = m.store.UpdateSession(ctx, session)
-		return nil, "", err
-	}
-	session.Summary.VMStatus = VMStatusRunning
-	if err := m.store.UpdateSession(ctx, session); err != nil {
-		return nil, "", err
-	}
-	m.streams.PublishSessionUpdated(&session.Summary)
-	event := SessionEvent{ID: uuid.NewString(), Type: "session.created", Level: "info", Message: fmt.Sprintf("session started with %s driver using guest image %s", session.Summary.Driver, session.Summary.GuestImage), CreatedAt: time.Now().UTC()}
-	_ = m.store.AddEvent(ctx, session.Summary.ID, event)
-	m.streams.PublishEventAdded(session.Summary.ID, event)
-	if effectivePolicy == LoaderSessionPolicySticky {
-		_ = m.configDB.UpsertLoaderBinding(ctx, LoaderBinding{LoaderID: loader.Summary.ID, SessionID: session.Summary.ID})
-	}
-	loaded, err := m.store.GetSession(ctx, session.Summary.ID)
-	if err != nil {
-		return nil, "", err
-	}
-	restoreSessionTransientFields(loaded, session)
-	m.Publish("agent-compose.session.created", map[string]any{
-		"sessionId":     loaded.Summary.ID,
-		"title":         loaded.Summary.Title,
-		"driver":        loaded.Summary.Driver,
-		"triggerSource": loaded.Summary.TriggerSource,
-		"source":        "loader",
-		"loaderId":      loader.Summary.ID,
-	})
-	return loaded, "loader.session.created", nil
-}
-
-func sessionTagsFromProto(items []*agentcomposev1.SessionTag) []SessionTag {
-	if len(items) == 0 {
-		return nil
-	}
-	result := make([]SessionTag, 0, len(items))
-	for _, item := range items {
-		if item == nil {
-			continue
-		}
-		result = append(result, SessionTag{Name: item.GetName(), Value: item.GetValue()})
-	}
-	return result
-}
-
 func loaderAgentRequestOverridesSession(request LoaderAgentRequest, includeTitle bool) bool {
 	return (includeTitle && strings.TrimSpace(request.Title) != "") ||
 		strings.TrimSpace(request.Driver) != "" ||
@@ -1567,43 +1053,6 @@ func loaderCommandRequestOverridesSession(request LoaderCommandRequest) bool {
 		strings.TrimSpace(request.GuestImage) != "" ||
 		strings.TrimSpace(request.WorkspaceID) != "" ||
 		len(normalizeEnvItems(request.SessionEnv)) > 0
-}
-
-func (m *LoaderManager) loadOrResumeLoaderSession(ctx context.Context, sessionID string) (*Session, string, error) {
-	session, err := m.store.GetSession(ctx, sessionID)
-	if err != nil {
-		return nil, "", err
-	}
-	if session.Summary.VMStatus == VMStatusRunning {
-		return session, "", nil
-	}
-	if err := prepareSessionWorkspace(ctx, m.config, m.configDB, session); err != nil {
-		return nil, "", err
-	}
-	writeCapabilityGuide(ctx, m.cap, m.store, m.streams, session, sessionCapabilityCapsets(session))
-	if err := m.driver.StartSessionVM(ctx, session); err != nil {
-		return nil, "", err
-	}
-	session.Summary.VMStatus = VMStatusRunning
-	if err := m.store.UpdateSession(ctx, session); err != nil {
-		return nil, "", err
-	}
-	m.streams.PublishSessionUpdated(&session.Summary)
-	event := SessionEvent{ID: uuid.NewString(), Type: "session.resumed", Level: "info", Message: fmt.Sprintf("session resumed with %s driver using guest image %s", session.Summary.Driver, session.Summary.GuestImage), CreatedAt: time.Now().UTC()}
-	_ = m.store.AddEvent(ctx, session.Summary.ID, event)
-	m.streams.PublishEventAdded(session.Summary.ID, event)
-	loaded, err := m.store.GetSession(ctx, session.Summary.ID)
-	if err != nil {
-		return nil, "", err
-	}
-	restoreSessionTransientFields(loaded, session)
-	m.Publish("agent-compose.session.resumed", map[string]any{
-		"sessionId": loaded.Summary.ID,
-		"title":     loaded.Summary.Title,
-		"driver":    loaded.Summary.Driver,
-		"source":    "loader",
-	})
-	return loaded, "loader.session.resumed", nil
 }
 
 func (m *LoaderManager) runArtifactsDir(loaderID, runID string) string {

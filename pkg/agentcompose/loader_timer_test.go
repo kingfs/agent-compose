@@ -1777,12 +1777,15 @@ func TestLoaderRunHostAgentUsesLoaderDefaultAgentWhenRequestOmitsProvider(t *tes
 	}
 }
 
-func TestLoaderManagerProjectRunServiceCarriesImageBackend(t *testing.T) {
+func TestLoaderManagerProjectAgentRunnerCarriesImageBackend(t *testing.T) {
 	backend := &fakeImageBackend{}
 	manager := &LoaderManager{images: backend}
-	service := manager.projectRunService()
-	if service.images != backend {
-		t.Fatalf("projectRunService images = %#v, want manager image backend", service.images)
+	runner, ok := manager.projectAgentRunnerComponent().(serviceProjectAgentRunner)
+	if !ok {
+		t.Fatalf("projectAgentRunner type = %T, want serviceProjectAgentRunner", manager.projectAgentRunner)
+	}
+	if runner.service.images != backend {
+		t.Fatalf("project agent runner images = %#v, want manager image backend", runner.service.images)
 	}
 }
 
