@@ -1,6 +1,7 @@
 package agentcompose
 
 import (
+	sessionruntime "agent-compose/pkg/agentcompose/runtime"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	"context"
@@ -9,27 +10,14 @@ import (
 	"github.com/samber/do/v2"
 )
 
-type SessionVMInfo struct {
-	BoxID      string
-	JupyterURL string
-	ProxyState *ProxyState
-}
-
-type BoxRuntime interface {
-	EnsureSession(context.Context, *Session, VMState, ProxyState) (SessionVMInfo, error)
-	StopSession(context.Context, *Session, VMState) (bool, error)
-	Exec(context.Context, *Session, VMState, ExecSpec) (ExecResult, error)
-	ExecStream(context.Context, *Session, VMState, ExecSpec, ExecStreamWriter) (ExecResult, error)
-}
+type SessionVMInfo = sessionruntime.SessionVMInfo
+type BoxRuntime = sessionruntime.BoxRuntime
 
 type sessionAliveRuntime interface {
 	IsSessionAlive(context.Context, *Session, VMState) (bool, error)
 }
 
-type RuntimeProvider interface {
-	ForDriver(string) (BoxRuntime, error)
-	ForSession(*Session) (BoxRuntime, error)
-}
+type RuntimeProvider = sessionruntime.RuntimeProvider
 
 type runtimeProvider struct {
 	config   *appconfig.Config

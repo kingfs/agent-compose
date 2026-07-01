@@ -508,64 +508,7 @@ func (s *Service) ResumeSession(ctx context.Context, req *connect.Request[agentc
 }
 
 func (s *Service) reconcileSessionRuntimeState(ctx context.Context, session *Session) (*Session, error) {
-	if session == nil || session.Summary.VMStatus != VMStatusRunning {
-		return session, nil
-	}
-	driver, err := driverpkg.ResolveSessionRuntimeDriver(session.Summary.Driver, s.config.RuntimeDriver)
-	if err != nil {
-		return nil, err
-	}
-	if driver != driverpkg.RuntimeDriverMicrosandbox {
-		return session, nil
-	}
-	proxyState, err := s.store.GetProxyState(session.Summary.ID)
-	if err != nil {
-		return nil, err
-	}
-	if jupyterTargetReachable(proxyState, 250*time.Millisecond) {
-		return session, nil
-	}
-	vmState, err := s.store.GetVMState(session.Summary.ID)
-	if err != nil {
-		return nil, err
-	}
-	runtime, err := s.runtimes.ForDriver(driver)
-	if err != nil {
-		return nil, err
-	}
-	microsandboxRuntime, ok := runtime.(sessionAliveRuntime)
-	if !ok {
-		return session, nil
-	}
-	alive, err := microsandboxRuntime.IsSessionAlive(ctx, session, vmState)
-	if err != nil {
-		return nil, err
-	}
-	if alive {
-		return session, nil
-	}
-	now := time.Now().UTC()
-	vmState.StoppedAt = now
-	vmState.LastError = ""
-	vmState.BoxID = ""
-	if err := s.store.SaveVMState(session.Summary.ID, vmState); err != nil {
-		return nil, err
-	}
-	session.Summary.VMStatus = VMStatusStopped
-	if err := s.store.UpdateSession(ctx, session); err != nil {
-		return nil, err
-	}
-	if s.configDB != nil {
-		_ = s.configDB.RevokeLLMFacadeTokensForSession(ctx, session.Summary.ID)
-	}
-	_ = s.store.AddEvent(ctx, session.Summary.ID, SessionEvent{
-		ID:        uuid.NewString(),
-		Type:      "session.runtime_lost",
-		Level:     "warn",
-		Message:   "session marked stopped after microsandbox runtime became unreachable",
-		CreatedAt: now,
-	})
-	return s.store.GetSession(ctx, session.Summary.ID)
+	return serviceReconcileSessionRuntimeState(ctx, s, session)
 }
 
 func (s *Service) StopSession(ctx context.Context, req *connect.Request[agentcomposev1.SessionIDRequest]) (*connect.Response[agentcomposev1.SessionResponse], error) {
@@ -594,42 +537,7 @@ func jupyterTargetReachable(proxyState ProxyState, timeout time.Duration) bool {
 }
 
 func (s *Service) ensureSessionProxyReady(ctx context.Context, sessionID string) (*Session, ProxyState, error) {
-	session, err := s.store.GetSession(ctx, sessionID)
-	if err != nil {
-		return nil, ProxyState{}, err
-	}
-	proxyState, err := s.store.GetProxyState(session.Summary.ID)
-	if err != nil {
-		return nil, ProxyState{}, err
-	}
-	if session.Summary.VMStatus == VMStatusRunning && jupyterTargetReachable(proxyState, 1500*time.Millisecond) {
-		return session, proxyState, nil
-	}
-	startCtx, cancel := context.WithTimeout(ctx, s.config.SessionStartTimeout)
-	defer cancel()
-	if err := prepareSessionWorkspace(startCtx, s.config, s.configDB, session); err != nil {
-		session.Summary.VMStatus = VMStatusFailed
-		_ = s.store.UpdateSession(ctx, session)
-		return nil, ProxyState{}, err
-	}
-	if err := s.driver.StartSessionVM(startCtx, session); err != nil {
-		session.Summary.VMStatus = VMStatusFailed
-		_ = s.store.UpdateSession(ctx, session)
-		return nil, ProxyState{}, err
-	}
-	session.Summary.VMStatus = VMStatusRunning
-	if err := s.store.UpdateSession(ctx, session); err != nil {
-		return nil, ProxyState{}, err
-	}
-	loaded, err := s.store.GetSession(ctx, session.Summary.ID)
-	if err != nil {
-		return nil, ProxyState{}, err
-	}
-	proxyState, err = s.store.GetProxyState(session.Summary.ID)
-	if err != nil {
-		return nil, ProxyState{}, err
-	}
-	return loaded, proxyState, nil
+	return serviceEnsureSessionProxyReady(ctx, s, sessionID)
 }
 
 func (s *Service) GetSessionProxy(ctx context.Context, req *connect.Request[agentcomposev1.SessionIDRequest]) (*connect.Response[agentcomposev1.SessionProxyResponse], error) {
