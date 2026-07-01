@@ -1,4 +1,4 @@
-package agentcompose
+package image
 
 import (
 	"context"
@@ -32,6 +32,31 @@ func NewAutoImageBackend(mode string, dockerBackend, ociBackend ImageBackend) *A
 		pingDocker:  pingDockerDaemon,
 		pingTimeout: defaultDockerPingTimeout,
 	}
+}
+
+func NewAutoImageBackendWithPing(mode string, dockerBackend, ociBackend ImageBackend, pingDocker DockerPingFunc, pingTimeout time.Duration) *AutoImageBackend {
+	backend := NewAutoImageBackend(mode, dockerBackend, ociBackend)
+	backend.pingDocker = pingDocker
+	backend.pingTimeout = pingTimeout
+	return backend
+}
+
+func (b *AutoImageBackend) LastSelection() string {
+	if b == nil {
+		return ""
+	}
+	return b.lastSelection
+}
+
+func (b *AutoImageBackend) Mode() string {
+	if b == nil {
+		return ""
+	}
+	return b.mode
+}
+
+func (b *AutoImageBackend) HasConfiguredBackends() bool {
+	return b != nil && b.docker != nil && b.oci != nil
 }
 
 func (b *AutoImageBackend) ListImages(ctx context.Context, req ImageListRequest) (ImageListResult, error) {
@@ -68,7 +93,7 @@ func (b *AutoImageBackend) RemoveImage(ctx context.Context, req ImageRemoveReque
 
 func (b *AutoImageBackend) backend(ctx context.Context) (ImageBackend, error) {
 	if b == nil {
-		return nil, imageBackendOpError{Op: "select image backend", Err: fmt.Errorf("auto image backend is required")}
+		return nil, BackendOpError{Op: "select image backend", Err: fmt.Errorf("auto image backend is required")}
 	}
 	mode := strings.ToLower(strings.TrimSpace(b.mode))
 	if mode == "" {
@@ -89,13 +114,13 @@ func (b *AutoImageBackend) backend(ctx context.Context) (ImageBackend, error) {
 		b.lastSelection = appconfig.ImageStoreModeOCI
 		return b.requireBackend(b.oci, appconfig.ImageStoreModeOCI)
 	default:
-		return nil, imageBackendOpError{Op: "select image backend", Err: fmt.Errorf("unsupported image store mode %q", b.mode)}
+		return nil, BackendOpError{Op: "select image backend", Err: fmt.Errorf("unsupported image store mode %q", b.mode)}
 	}
 }
 
 func (b *AutoImageBackend) requireBackend(backend ImageBackend, name string) (ImageBackend, error) {
 	if backend == nil {
-		return nil, imageBackendOpError{Op: "select image backend", Err: fmt.Errorf("%s image backend is required", name)}
+		return nil, BackendOpError{Op: "select image backend", Err: fmt.Errorf("%s image backend is required", name)}
 	}
 	return backend, nil
 }
