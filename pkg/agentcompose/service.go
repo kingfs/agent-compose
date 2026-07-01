@@ -659,7 +659,7 @@ func (s *Service) ExecuteCell(ctx context.Context, req *connect.Request[agentcom
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishLoaderTopic("agent-compose.cell.completed", cellTopicPayload(session.Summary.ID, cell, "api"))
+	s.publishLoaderTopic("agent-compose.cell.completed", loaders.CellTopicPayload(session.Summary.ID, cell, "api"))
 	return connect.NewResponse(&agentcomposev1.ExecuteCellResponse{Session: toProtoSessionSummary(&loaded.Summary), Cell: toProtoCell(cell)}), nil
 }
 
@@ -707,7 +707,7 @@ func (s *Service) ExecuteCellStream(ctx context.Context, req *connect.Request[ag
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishLoaderTopic("agent-compose.cell.completed", cellTopicPayload(session.Summary.ID, cell, "api"))
+	s.publishLoaderTopic("agent-compose.cell.completed", loaders.CellTopicPayload(session.Summary.ID, cell, "api"))
 	return streamErr(stream.Send(&agentcomposev1.ExecuteCellStreamResponse{
 		EventType: agentcomposev1.ExecuteCellStreamEventType_EXECUTE_CELL_STREAM_EVENT_TYPE_COMPLETED,
 		Session:   toProtoSessionSummary(&loaded.Summary),
@@ -752,7 +752,7 @@ func (s *Service) SendAgentMessage(ctx context.Context, req *connect.Request[age
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishLoaderTopic("agent-compose.agent.completed", cellTopicPayload(session.Summary.ID, cell, "api"))
+	s.publishLoaderTopic("agent-compose.agent.completed", loaders.CellTopicPayload(session.Summary.ID, cell, "api"))
 	return connect.NewResponse(&agentcomposev1.SendAgentMessageResponse{UserEvent: toProtoEvent(userEvent), AssistantEvent: toProtoEvent(assistantEvent)}), nil
 }
 
@@ -810,7 +810,7 @@ func (s *Service) SendAgentMessageStream(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishLoaderTopic("agent-compose.agent.completed", cellTopicPayload(session.Summary.ID, cell, "api"))
+	s.publishLoaderTopic("agent-compose.agent.completed", loaders.CellTopicPayload(session.Summary.ID, cell, "api"))
 	return streamErr(stream.Send(&agentcomposev1.SendAgentMessageStreamResponse{
 		EventType:      agentcomposev1.SendAgentMessageStreamEventType_SEND_AGENT_MESSAGE_STREAM_EVENT_TYPE_COMPLETED,
 		Session:        toProtoSessionSummary(&loaded.Summary),

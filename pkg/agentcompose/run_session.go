@@ -8,6 +8,7 @@ import (
 
 	"agent-compose/pkg/agentcompose/capabilities"
 	"agent-compose/pkg/agentcompose/domain"
+	"agent-compose/pkg/agentcompose/loaders"
 	"agent-compose/pkg/agentcompose/runs"
 	"agent-compose/pkg/agentcompose/workspaces"
 	driverpkg "agent-compose/pkg/driver"
@@ -146,7 +147,7 @@ func (s *Service) publishProjectRunSessionStarted(ctx context.Context, session *
 		}
 		s.bus.Publish(LoaderTopicEvent{
 			Topic:     topic,
-			Payload:   sessionTopicPayload(session, "project-run"),
+			Payload:   loaders.SessionTopicPayload(session, "project-run"),
 			CreatedAt: time.Now().UTC(),
 		})
 	}

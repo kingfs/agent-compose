@@ -3,6 +3,7 @@ package agentcompose
 import (
 	"agent-compose/pkg/agentcompose/configstore"
 	"agent-compose/pkg/agentcompose/domain"
+	"agent-compose/pkg/agentcompose/loaders"
 	driverpkg "agent-compose/pkg/driver"
 	"context"
 	"strings"
@@ -223,18 +224,18 @@ func TestModelSessionConfigAndBusBranchCoverage(t *testing.T) {
 		t.Fatalf("expected service topic event")
 	}
 	(*Service)(nil).publishLoaderTopic("agent-compose.missing", nil)
-	if sessionTopicPayload(nil, "test") != nil {
+	if loaders.SessionTopicPayload(nil, "test") != nil {
 		t.Fatalf("sessionTopicPayload nil did not return nil")
 	}
-	sessionPayload := sessionTopicPayload(session, "test")
+	sessionPayload := loaders.SessionTopicPayload(session, "test")
 	if sessionPayload["sessionId"] != "session-branch" || sessionPayload["source"] != "test" {
 		t.Fatalf("session topic payload = %#v", sessionPayload)
 	}
-	cellPayload := cellTopicPayload("session-branch", NotebookCell{ID: "cell-1", Type: CellTypeShell, Agent: "codex", Success: true}, "test")
+	cellPayload := loaders.CellTopicPayload("session-branch", NotebookCell{ID: "cell-1", Type: CellTypeShell, Agent: "codex", Success: true}, "test")
 	if cellPayload["cellId"] != "cell-1" || cellPayload["source"] != "test" {
 		t.Fatalf("cell topic payload = %#v", cellPayload)
 	}
-	commandPayload := loaderCommandEventPayload(LoaderCommandRequest{Mode: "shell", Command: "ignored", Args: []string{"-c"}, Cwd: "/tmp"}, LoaderCommandResult{ExitCode: 2, Success: false, SessionID: "session-branch", CellID: "cell-1"})
+	commandPayload := loaders.CommandEventPayload(LoaderCommandRequest{Mode: "shell", Command: "ignored", Args: []string{"-c"}, Cwd: "/tmp"}, LoaderCommandResult{ExitCode: 2, Success: false, SessionID: "session-branch", CellID: "cell-1"})
 	if commandPayload["command"] != "" || commandPayload["exitCode"] != 2 {
 		t.Fatalf("command event payload = %#v", commandPayload)
 	}

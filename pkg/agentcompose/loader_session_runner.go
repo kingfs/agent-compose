@@ -4,6 +4,7 @@ import (
 	"agent-compose/pkg/agentcompose/api"
 	"agent-compose/pkg/agentcompose/capabilities"
 	"agent-compose/pkg/agentcompose/domain"
+	"agent-compose/pkg/agentcompose/loaders"
 	"agent-compose/pkg/agentcompose/workspaces"
 	driverpkg "agent-compose/pkg/driver"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
@@ -53,7 +54,7 @@ func (r *LoaderSessionRunner) Shutdown(ctx context.Context, sessionID string) er
 	if err != nil {
 		return err
 	}
-	m.Publish("agent-compose.session.stopped", sessionTopicPayload(loaded, "loader"))
+	m.Publish("agent-compose.session.stopped", loaders.SessionTopicPayload(loaded, "loader"))
 	return nil
 }
 

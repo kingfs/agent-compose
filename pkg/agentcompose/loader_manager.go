@@ -982,7 +982,7 @@ func (h *loaderRunHost) Command(ctx context.Context, request LoaderCommandReques
 	}
 	session, eventType, err := h.ensureCommandSession(ctx, agentRequest, cleanupSession)
 	if err != nil {
-		_ = h.manager.addLoaderEvent(ctx, h.loader.Summary.ID, h.run.ID, h.run.TriggerID, "loader.command.failed", "error", err.Error(), loaderCommandEventPayload(request, LoaderCommandResult{}), "", "", "")
+		_ = h.manager.addLoaderEvent(ctx, h.loader.Summary.ID, h.run.ID, h.run.TriggerID, "loader.command.failed", "error", err.Error(), loaders.CommandEventPayload(request, LoaderCommandResult{}), "", "", "")
 		return LoaderCommandResult{}, err
 	}
 	if eventType != "" {
@@ -992,14 +992,14 @@ func (h *loaderRunHost) Command(ctx context.Context, request LoaderCommandReques
 
 	result, err := h.manager.executor.ExecuteLoaderCommand(ctx, session, request)
 	if err != nil {
-		_ = h.addLinkedLoaderEvent(ctx, "loader.command.failed", "error", err.Error(), loaderCommandEventPayload(request, result), result.SessionID, result.CellID, "")
+		_ = h.addLinkedLoaderEvent(ctx, "loader.command.failed", "error", err.Error(), loaders.CommandEventPayload(request, result), result.SessionID, result.CellID, "")
 		return result, err
 	}
 	level := "info"
 	if !result.Success {
 		level = "error"
 	}
-	_ = h.addLinkedLoaderEvent(ctx, "loader.command.completed", level, firstNonEmpty(result.Output, result.Stdout, result.Stderr, "loader command completed"), loaderCommandEventPayload(request, result), result.SessionID, result.CellID, "")
+	_ = h.addLinkedLoaderEvent(ctx, "loader.command.completed", level, firstNonEmpty(result.Output, result.Stdout, result.Stderr, "loader command completed"), loaders.CommandEventPayload(request, result), result.SessionID, result.CellID, "")
 	return result, nil
 }
 
