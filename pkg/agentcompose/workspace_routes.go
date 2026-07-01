@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	transporthttp "agent-compose/pkg/agentcompose/transport/http"
 	workspacehttp "agent-compose/pkg/agentcompose/transport/http/workspace"
 	"github.com/labstack/echo/v4"
 )
 
 func registerWorkspaceRoutes(app *echo.Echo, service *Service) {
-	workspacehttp.RegisterRoutes(app, service)
+	transporthttp.RegisterWorkspaceRoutes(app, service)
 }
 
 func toWorkspaceUploadHTTPError(err error) error {
