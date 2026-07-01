@@ -44,8 +44,8 @@ Use only these status values:
 | 5 | LLM | `refactor/llm-module` | removed | Faraday (`019f1e08-16b2-74e1-b1b7-fa3e37fca0ba`) | `cleaned` | `go test ./pkg/agentcompose -run 'LLM|Facade'`; integration combo test passed | Merged into integration as `8085896`; worktree cleaned. |
 | 6 | Image | `refactor/image-module` | removed | Newton (`019f1e08-1689-78e2-b0aa-67f0d03450d2`) | `cleaned` | `go test ./pkg/agentcompose -run 'Image'`; `go test ./pkg/imagecache`; integration combo test passed | Merged into integration as `bb23ed3`; worktree cleaned. |
 | 7 | Workspace, Config, Agent Definition | `refactor/workspace-config-module` | removed | Raman (`019f1e19-8510-7890-aef0-bddfc55556af`) | `cleaned` | `go test ./pkg/agentcompose -run 'Workspace|Config|AgentDefinition|Agent'`; new package compile tests passed | Merged into integration; worktree cleaned. |
-| 8 | Transport | `refactor/transport-module` | `../agent-compose-refactor-transport` | Tesla (`019f1e41-2339-7c73-8fe9-156d4a619373`) | `in_progress` | `go test ./pkg/agentcompose ./cmd/agent-compose` | Wave 3 task; preserve API routes and response behavior. |
-| 9 | SQLite Store | `refactor/sqlite-store-module` | `../agent-compose-refactor-sqlite-store` | Einstein (`019f1e41-235f-7d53-b29f-6fae5683a893`) | `in_progress` | `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'` | Wave 3 task; preserve DB schema and repository behavior. |
+| 8 | Transport | `refactor/transport-module` | `../agent-compose-refactor-transport` | Tesla (`019f1e41-2339-7c73-8fe9-156d4a619373`) | `merged` | `go test ./pkg/agentcompose ./cmd/agent-compose`; transport package compile tests passed | Merged into integration; cleanup pending. |
+| 9 | SQLite Store | `refactor/sqlite-store-module` | `../agent-compose-refactor-sqlite-store` | Einstein (`019f1e41-235f-7d53-b29f-6fae5683a893`) | `merged` | `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'`; `go test ./pkg/agentcompose/store/sqlite` | Merged into integration; cleanup pending. |
 | 10 | CLI and Daemon | `refactor/cli-daemon-module` | `../agent-compose-refactor-cli-daemon` | unassigned | `not_started` | `go test ./cmd/agent-compose` and `go test ./internal/...` | Start after app/transport structure settles. |
 | 11 | Compatibility Cleanup | `refactor/module-split-cleanup` | `../agent-compose-refactor-cleanup` | owner | `not_started` | `task test` | Remove wrappers after all splits merge. |
 
@@ -60,8 +60,8 @@ Use only these status values:
 | 5 | `refactor/session-module` | `merged` | Merged into integration. |
 | 6 | `refactor/loader-module` | `merged` | Merged into integration. |
 | 7 | `refactor/project-run-module` | `merged` | Merged into integration. |
-| 8 | `refactor/transport-module` | `in_progress` | Wave 3; should follow module service extraction. |
-| 9 | `refactor/sqlite-store-module` | `in_progress` | Wave 3; should follow repository interface stabilization. |
+| 8 | `refactor/transport-module` | `merged` | Merged into integration. |
+| 9 | `refactor/sqlite-store-module` | `merged` | Merged into integration. |
 | 10 | `refactor/cli-daemon-module` | `not_started` | Should follow app/transport stabilization. |
 | 11 | `refactor/module-split-cleanup` | `not_started` | Final wrapper cleanup. |
 
@@ -76,8 +76,8 @@ Use only these status values:
 | `/data/src/github.com/kingfs/agent-compose-refactor-loader` | `refactor/loader-module` | Boyle (`019f1e19-8589-7983-8896-efede4bb245e`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-refactor-project-run` | `refactor/project-run-module` | Fermat (`019f1e19-85be-7961-b584-4b70a44c9afb`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-refactor-workspace-config` | `refactor/workspace-config-module` | Raman (`019f1e19-8510-7890-aef0-bddfc55556af`) | `cleaned` | No |
-| `/data/src/github.com/kingfs/agent-compose-refactor-transport` | `refactor/transport-module` | Tesla (`019f1e41-2339-7c73-8fe9-156d4a619373`) | `in_progress` | Yes |
-| `/data/src/github.com/kingfs/agent-compose-refactor-sqlite-store` | `refactor/sqlite-store-module` | Einstein (`019f1e41-235f-7d53-b29f-6fae5683a893`) | `in_progress` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-transport` | `refactor/transport-module` | Tesla (`019f1e41-2339-7c73-8fe9-156d4a619373`) | `merged` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-sqlite-store` | `refactor/sqlite-store-module` | Einstein (`019f1e41-235f-7d53-b29f-6fae5683a893`) | `merged` | Yes |
 
 ## Integration Log
 
@@ -104,6 +104,8 @@ Use only these status values:
 | 2026-07-01 | Cleaned remaining Wave 2 worktrees | session, loader, project-run | done | Removed worktrees after confirming clean status. |
 | 2026-07-01 | Prepared Wave 3 assignments | transport, sqlite-store | in progress | Owner will create worktrees from latest integration and launch workers. |
 | 2026-07-01 | Launched Wave 3 agents | transport, sqlite-store | in progress | Tesla=transport, Einstein=SQLite store. |
+| 2026-07-01 | Reviewed and merged transport | `refactor/transport-module` | passed | `go test ./pkg/agentcompose ./cmd/agent-compose`; transport package compile tests. |
+| 2026-07-01 | Reviewed and merged sqlite-store | `refactor/sqlite-store-module` | passed | `go test ./pkg/agentcompose/store/sqlite`; `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'`. |
 
 ## Current Owner Decisions
 
@@ -120,4 +122,4 @@ Use only these status values:
 
 | Date | Task | Blocker | Owner Decision | Status |
 | --- | --- | --- | --- | --- |
-| 2026-07-01 | Wave 3 | Awaiting worker completion reports | Owner will review branches, merge into integration, and clean worktrees after validation. | open |
+| 2026-07-01 | Wave 3 | Merged worktrees still need cleanup | Clean transport and sqlite-store worktrees after this progress update is committed. | open |
