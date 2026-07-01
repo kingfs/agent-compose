@@ -4,12 +4,9 @@ import (
 	"agent-compose/pkg/agentcompose/execution"
 	appconfig "agent-compose/pkg/config"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -512,11 +509,11 @@ func (a *execStreamAccumulator) result(exitCode int, success bool) ExecResult {
 }
 
 func hostSessionDir(session *Session) string {
-	return filepath.Dir(session.Summary.WorkspacePath)
+	return execution.HostSessionDir(session)
 }
 
 func hostSessionHome(session *Session) string {
-	return filepath.Join(hostSessionDir(session), "home")
+	return execution.HostSessionHome(session)
 }
 
 func guestCellStateDir(config *appconfig.Config, cellID string) string {
@@ -536,132 +533,15 @@ func mergeExecResults(primary, fallback ExecResult) ExecResult {
 }
 
 func writeAgentSessionArtifact(path string, info *AgentResumeInfo) error {
-	if info == nil {
-		return nil
-	}
-	data, err := json.MarshalIndent(info, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode agent session artifact: %w", err)
-	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		return fmt.Errorf("write agent session artifact: %w", err)
-	}
-	return nil
-}
-
-type storedAgentSessionState struct {
-	SessionID string `json:"sessionId"`
-}
-
-func loadStoredAgentSessionID(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	var state storedAgentSessionState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(state.SessionID)
+	return execution.WriteAgentSessionArtifact(path, info)
 }
 
 func collectAgentResumeInfo(session *Session, agent, agentSessionID, manifestPath string) *AgentResumeInfo {
-	provider := normalizeAgentKind(agent)
-	info := &AgentResumeInfo{
-		Provider:            provider,
-		SessionID:           strings.TrimSpace(agentSessionID),
-		SessionManifestPath: manifestPath,
-		UpdatedAt:           time.Now().UTC(),
-	}
-	statePath := filepath.Join(hostSessionDir(session), "state", "agents", "providers", provider+".json")
-	if stat, err := os.Stat(statePath); err == nil && !stat.IsDir() {
-		info.SessionStatePath = statePath
-		if info.SessionID == "" {
-			info.SessionID = loadStoredAgentSessionID(statePath)
-		}
-	}
-	info.SessionJSONLPaths = findAgentSessionJSONLPaths(hostSessionHome(session), provider, info.SessionID)
-	if info.Provider == "" && info.SessionID == "" && info.SessionStatePath == "" && info.SessionManifestPath == "" && len(info.SessionJSONLPaths) == 0 {
-		return nil
-	}
-	return info
-}
-
-func findAgentSessionJSONLPaths(homeDir, provider, sessionID string) []string {
-	roots := agentSessionJSONLRoots(homeDir, provider)
-	if len(roots) == 0 {
-		return nil
-	}
-	seen := map[string]struct{}{}
-	var paths []string
-	for _, root := range roots {
-		if strings.TrimSpace(root) == "" {
-			continue
-		}
-		info, err := os.Stat(root)
-		if err != nil {
-			continue
-		}
-		if !info.IsDir() {
-			if shouldIncludeAgentJSONL(root, provider, sessionID) {
-				if _, ok := seen[root]; !ok {
-					seen[root] = struct{}{}
-					paths = append(paths, root)
-				}
-			}
-			continue
-		}
-		_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-			if walkErr != nil || entry == nil || entry.IsDir() {
-				return nil
-			}
-			if !shouldIncludeAgentJSONL(path, provider, sessionID) {
-				return nil
-			}
-			if _, ok := seen[path]; ok {
-				return nil
-			}
-			seen[path] = struct{}{}
-			paths = append(paths, path)
-			return nil
-		})
-	}
-	sort.Strings(paths)
-	return paths
-}
-
-func agentSessionJSONLRoots(homeDir, provider string) []string {
-	switch provider {
-	case "codex":
-		return []string{
-			filepath.Join(homeDir, ".codex", "history.jsonl"),
-			filepath.Join(homeDir, ".codex", "sessions"),
-		}
-	case "claude":
-		return []string{
-			filepath.Join(homeDir, ".claude"),
-			filepath.Join(homeDir, ".config", "claude"),
-			filepath.Join(homeDir, ".config", "Claude"),
-		}
-	case "gemini":
-		return []string{
-			filepath.Join(homeDir, ".gemini"),
-			filepath.Join(homeDir, ".config", "gemini"),
-			filepath.Join(homeDir, ".local", "share", "gemini"),
-		}
-	default:
-		return nil
-	}
+	return execution.CollectAgentResumeInfo(session, agent, agentSessionID, manifestPath)
 }
 
 func shouldIncludeAgentJSONL(path, provider, sessionID string) bool {
-	if filepath.Ext(path) != ".jsonl" {
-		return false
-	}
-	if provider == "codex" && sessionID != "" && strings.Contains(path, string(filepath.Separator)+"sessions"+string(filepath.Separator)) {
-		return strings.Contains(filepath.Base(path), sessionID)
-	}
-	return true
+	return execution.ShouldIncludeAgentJSONL(path, provider, sessionID)
 }
 
 func (e *Executor) executeAgent(ctx context.Context, session *Session, request ExecuteAgentRequest) (NotebookCell, SessionEvent, SessionEvent, error) {
