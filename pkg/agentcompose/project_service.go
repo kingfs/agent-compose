@@ -353,7 +353,7 @@ func (s *Service) resolveProjectRef(ctx context.Context, ref *agentcomposev2.Pro
 		}
 	}
 	if len(matches) == 0 {
-		return ProjectRecord{}, fmt.Errorf("project %s not found: %w", name, sql.ErrNoRows)
+		return ProjectRecord{}, resourceError(ErrNotFound, "project", name, fmt.Sprintf("project %s not found", name), sql.ErrNoRows)
 	}
 	if len(matches) > 1 {
 		return ProjectRecord{}, classifyError(ErrAmbiguous, fmt.Sprintf("project name %s is ambiguous; use project_id or source_path", name), nil)

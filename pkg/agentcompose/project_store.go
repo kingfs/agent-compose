@@ -99,7 +99,7 @@ func (s *ConfigStore) UpsertProject(ctx context.Context, project ProjectRecord) 
 			return ProjectRecord{}, fmt.Errorf("update project %s: %w", project.ID, err)
 		}
 		if rows, _ := result.RowsAffected(); rows == 0 {
-			return ProjectRecord{}, fmt.Errorf("project %s not found", project.ID)
+			return ProjectRecord{}, resourceError(ErrNotFound, "project", project.ID, fmt.Sprintf("project %s not found", project.ID), nil)
 		}
 		return s.GetProject(ctx, project.ID)
 	}
@@ -159,7 +159,7 @@ func (s *ConfigStore) SaveProjectRevision(ctx context.Context, revision ProjectR
 		return ProjectRevisionRecord{}, false, fmt.Errorf("update project revision pointer %s: %w", revision.ProjectID, err)
 	}
 	if rows, _ := result.RowsAffected(); rows == 0 {
-		return ProjectRevisionRecord{}, false, fmt.Errorf("project %s not found", revision.ProjectID)
+		return ProjectRevisionRecord{}, false, resourceError(ErrNotFound, "project", revision.ProjectID, fmt.Sprintf("project %s not found", revision.ProjectID), nil)
 	}
 	if err := tx.Commit(); err != nil {
 		return ProjectRevisionRecord{}, false, fmt.Errorf("commit project revision tx: %w", err)
@@ -173,7 +173,8 @@ func (s *ConfigStore) GetProject(ctx context.Context, projectID string) (Project
 		return ProjectRecord{}, err
 	}
 	if !found {
-		return ProjectRecord{}, fmt.Errorf("project %s not found: %w", strings.TrimSpace(projectID), sql.ErrNoRows)
+		id := strings.TrimSpace(projectID)
+		return ProjectRecord{}, resourceError(ErrNotFound, "project", id, fmt.Sprintf("project %s not found", id), sql.ErrNoRows)
 	}
 	return item, nil
 }
@@ -237,7 +238,8 @@ func (s *ConfigStore) GetProjectRevision(ctx context.Context, projectID string, 
 	item, err := scanProjectRevision(row.Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return ProjectRevisionRecord{}, fmt.Errorf("project revision %s/%d not found: %w", strings.TrimSpace(projectID), revision, err)
+			id := fmt.Sprintf("%s/%d", strings.TrimSpace(projectID), revision)
+			return ProjectRevisionRecord{}, resourceError(ErrNotFound, "project revision", id, fmt.Sprintf("project revision %s not found", id), err)
 		}
 		return ProjectRevisionRecord{}, err
 	}
@@ -279,7 +281,8 @@ func (s *ConfigStore) GetProjectAgent(ctx context.Context, projectID, agentName 
 	item, err := scanProjectAgent(row.Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return ProjectAgentRecord{}, fmt.Errorf("project agent %s/%s not found: %w", strings.TrimSpace(projectID), strings.TrimSpace(agentName), err)
+			id := strings.TrimSpace(projectID) + "/" + strings.TrimSpace(agentName)
+			return ProjectAgentRecord{}, resourceError(ErrNotFound, "project agent", id, fmt.Sprintf("project agent %s not found", id), err)
 		}
 		return ProjectAgentRecord{}, err
 	}
@@ -342,7 +345,8 @@ func (s *ConfigStore) GetProjectScheduler(ctx context.Context, projectID, schedu
 	item, err := scanProjectScheduler(row.Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return ProjectSchedulerRecord{}, fmt.Errorf("project scheduler %s/%s not found: %w", strings.TrimSpace(projectID), strings.TrimSpace(schedulerID), err)
+			id := strings.TrimSpace(projectID) + "/" + strings.TrimSpace(schedulerID)
+			return ProjectSchedulerRecord{}, resourceError(ErrNotFound, "project scheduler", id, fmt.Sprintf("project scheduler %s not found", id), err)
 		}
 		return ProjectSchedulerRecord{}, err
 	}
@@ -361,7 +365,8 @@ func (s *ConfigStore) SetProjectSchedulerEnabled(ctx context.Context, projectID,
 		return ProjectSchedulerRecord{}, fmt.Errorf("update project scheduler %s/%s enabled state: %w", projectID, schedulerID, err)
 	}
 	if rows, _ := result.RowsAffected(); rows == 0 {
-		return ProjectSchedulerRecord{}, fmt.Errorf("project scheduler %s/%s not found", projectID, schedulerID)
+		id := projectID + "/" + schedulerID
+		return ProjectSchedulerRecord{}, resourceError(ErrNotFound, "project scheduler", id, fmt.Sprintf("project scheduler %s not found", id), nil)
 	}
 	return s.GetProjectScheduler(ctx, projectID, schedulerID)
 }
@@ -426,7 +431,7 @@ func (s *ConfigStore) UpdateProjectRun(ctx context.Context, run ProjectRunRecord
 		return ProjectRunRecord{}, fmt.Errorf("update project run %s: %w", run.RunID, err)
 	}
 	if rows, _ := result.RowsAffected(); rows == 0 {
-		return ProjectRunRecord{}, fmt.Errorf("project run %s not found", run.RunID)
+		return ProjectRunRecord{}, resourceError(ErrNotFound, "project run", run.RunID, fmt.Sprintf("project run %s not found", run.RunID), nil)
 	}
 	return s.GetProjectRun(ctx, run.RunID)
 }
@@ -436,7 +441,8 @@ func (s *ConfigStore) GetProjectRun(ctx context.Context, runID string) (ProjectR
 	item, err := scanProjectRun(row.Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return ProjectRunRecord{}, fmt.Errorf("project run %s not found: %w", strings.TrimSpace(runID), err)
+			id := strings.TrimSpace(runID)
+			return ProjectRunRecord{}, resourceError(ErrNotFound, "project run", id, fmt.Sprintf("project run %s not found", id), err)
 		}
 		return ProjectRunRecord{}, err
 	}
