@@ -3,15 +3,9 @@ package agentcompose
 import (
 	"context"
 	"fmt"
-	"io"
-	"slices"
 	"strings"
-	"time"
 
 	"connectrpc.com/connect"
-	"github.com/docker/docker/api/types/filters"
-	typesimage "github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/client"
 
 	"agent-compose/pkg/agentcompose/images"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -27,7 +21,13 @@ type (
 	ImageInspectResult  = images.InspectResult
 	ImageRemoveRequest  = images.RemoveRequest
 	ImageRemoveResult   = images.RemoveResult
+	DockerImageBackend  = images.DockerBackend
+	dockerImageClient   = images.DockerClient
 )
+
+func NewDockerImageBackend(options ...images.DockerBackendOption) *DockerImageBackend {
+	return images.NewDockerBackend(options...)
+}
 
 func (s *Service) ListImages(ctx context.Context, req *connect.Request[agentcomposev2.ListImagesRequest]) (*connect.Response[agentcomposev2.ListImagesResponse], error) {
 	backend, err := s.imageBackendForStore(req.Msg.GetStore())
@@ -145,165 +145,6 @@ func (s *Service) imageBackendForStore(store agentcomposev2.ImageStoreKind) (Ima
 	}
 }
 
-type dockerImageClient interface {
-	ImageList(context.Context, typesimage.ListOptions) ([]typesimage.Summary, error)
-	ImagePull(context.Context, string, typesimage.PullOptions) (io.ReadCloser, error)
-	ImageInspect(context.Context, string, ...client.ImageInspectOption) (typesimage.InspectResponse, error)
-	ImageRemove(context.Context, string, typesimage.RemoveOptions) ([]typesimage.DeleteResponse, error)
-	DaemonHost() string
-	Close() error
-}
-
-type DockerImageBackend struct {
-	newClient func() (dockerImageClient, error)
-	now       func() time.Time
-}
-
-func NewDockerImageBackend() *DockerImageBackend {
-	return &DockerImageBackend{
-		newClient: func() (dockerImageClient, error) {
-			return client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-		},
-		now: time.Now,
-	}
-}
-
-func (b *DockerImageBackend) ListImages(ctx context.Context, req ImageListRequest) (ImageListResult, error) {
-	dockerClient, endpoint, err := b.client()
-	if err != nil {
-		return ImageListResult{}, err
-	}
-	defer func() { _ = dockerClient.Close() }()
-
-	options := typesimage.ListOptions{All: req.All, SharedSize: true}
-	if query := strings.TrimSpace(req.Query); query != "" {
-		options.Filters = filters.NewArgs(filters.Arg("reference", query))
-	}
-	images, err := dockerClient.ImageList(ctx, options)
-	if err != nil {
-		return ImageListResult{}, imageBackendOpError{Op: "list images", Endpoint: endpoint, Err: err}
-	}
-	result := make([]*agentcomposev2.Image, 0, len(images))
-	for _, image := range images {
-		result = append(result, dockerSummaryToProtoImage(image, b.inspectedAt(), ""))
-	}
-	return ImageListResult{
-		Images: result,
-		StoreStatus: &agentcomposev2.ImageStoreStatus{
-			Store:     agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_DOCKER_DAEMON,
-			Available: true,
-			Endpoint:  endpoint,
-		},
-	}, nil
-}
-
-func (b *DockerImageBackend) PullImage(ctx context.Context, req ImagePullRequest) (ImagePullResult, error) {
-	imageRef := strings.TrimSpace(req.ImageRef)
-	dockerClient, endpoint, err := b.client()
-	if err != nil {
-		return ImagePullResult{}, err
-	}
-	defer func() { _ = dockerClient.Close() }()
-
-	reader, err := dockerClient.ImagePull(ctx, imageRef, typesimage.PullOptions{Platform: dockerPlatformString(req.Platform)})
-	if err != nil {
-		return ImagePullResult{}, imageBackendOpError{Op: "pull image", Endpoint: endpoint, ImageRef: imageRef, Err: err}
-	}
-	progress, err := consumeDockerImagePullProgress(reader)
-	closeErr := reader.Close()
-	if err != nil {
-		return ImagePullResult{}, imageBackendOpError{Op: "pull image", Endpoint: endpoint, ImageRef: imageRef, Err: err}
-	}
-	if closeErr != nil {
-		return ImagePullResult{}, imageBackendOpError{Op: "pull image", Endpoint: endpoint, ImageRef: imageRef, Err: closeErr}
-	}
-
-	inspect, err := dockerClient.ImageInspect(ctx, imageRef)
-	if err != nil {
-		return ImagePullResult{}, imageBackendOpError{Op: "inspect pulled image", Endpoint: endpoint, ImageRef: imageRef, Err: err}
-	}
-	image := dockerInspectToProtoImage(inspect, b.inspectedAt(), imageRef)
-	return ImagePullResult{
-		Image:       image,
-		ResolvedRef: firstNonEmpty(image.GetResolvedRef(), imageRef),
-		Progress:    progress,
-	}, nil
-}
-
-func (b *DockerImageBackend) InspectImage(ctx context.Context, req ImageInspectRequest) (ImageInspectResult, error) {
-	imageRef := strings.TrimSpace(req.ImageRef)
-	dockerClient, endpoint, err := b.client()
-	if err != nil {
-		return ImageInspectResult{}, err
-	}
-	defer func() { _ = dockerClient.Close() }()
-
-	image, err := dockerClient.ImageInspect(ctx, imageRef)
-	if err != nil {
-		return ImageInspectResult{}, imageBackendOpError{Op: "inspect image", Endpoint: endpoint, ImageRef: imageRef, Err: err}
-	}
-	return ImageInspectResult{
-		Image: dockerInspectToProtoImage(image, b.inspectedAt(), imageRef),
-		StoreStatus: &agentcomposev2.ImageStoreStatus{
-			Store:     agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_DOCKER_DAEMON,
-			Available: true,
-			Endpoint:  endpoint,
-		},
-	}, nil
-}
-
-func (b *DockerImageBackend) RemoveImage(ctx context.Context, req ImageRemoveRequest) (ImageRemoveResult, error) {
-	imageRef := strings.TrimSpace(req.ImageRef)
-	dockerClient, endpoint, err := b.client()
-	if err != nil {
-		return ImageRemoveResult{}, err
-	}
-	defer func() { _ = dockerClient.Close() }()
-
-	deleted, err := dockerClient.ImageRemove(ctx, imageRef, typesimage.RemoveOptions{
-		Force:         req.Force,
-		PruneChildren: req.PruneChildren,
-	})
-	if err != nil {
-		return ImageRemoveResult{}, imageBackendOpError{Op: "remove image", Endpoint: endpoint, ImageRef: imageRef, Err: err}
-	}
-	result := ImageRemoveResult{ImageRef: imageRef}
-	for _, item := range deleted {
-		if item.Untagged != "" {
-			result.UntaggedRefs = append(result.UntaggedRefs, item.Untagged)
-		}
-		if item.Deleted != "" {
-			result.DeletedIDs = append(result.DeletedIDs, item.Deleted)
-		}
-	}
-	slices.Sort(result.UntaggedRefs)
-	slices.Sort(result.DeletedIDs)
-	return result, nil
-}
-
-func (b *DockerImageBackend) client() (dockerImageClient, string, error) {
-	if b == nil || b.newClient == nil {
-		return nil, "", imageBackendOpError{Op: "connect docker daemon", Endpoint: dockerEndpointFromEnv(), Err: fmt.Errorf("docker image client factory is required")}
-	}
-	dockerClient, err := b.newClient()
-	endpoint := dockerEndpointFromEnv()
-	if dockerClient != nil && strings.TrimSpace(dockerClient.DaemonHost()) != "" {
-		endpoint = dockerClient.DaemonHost()
-	}
-	if err != nil {
-		return nil, "", imageBackendOpError{Op: "connect docker daemon", Endpoint: endpoint, Err: err}
-	}
-	return dockerClient, endpoint, nil
-}
-
-func (b *DockerImageBackend) inspectedAt() string {
-	now := time.Now
-	if b != nil && b.now != nil {
-		now = b.now
-	}
-	return now().UTC().Format(time.RFC3339Nano)
-}
-
 type imageBackendOpError = images.OpError
 
 func connectErrorForImageBackend(op, imageRef string, err error) error {
@@ -335,30 +176,10 @@ func connectErrorForImageBackend(op, imageRef string, err error) error {
 	return connect.NewError(connect.CodeUnknown, err)
 }
 
-func dockerSummaryToProtoImage(image typesimage.Summary, inspectedAt, imageRef string) *agentcomposev2.Image {
-	return images.DockerSummaryToProtoImage(image, inspectedAt, imageRef)
-}
-
-func dockerInspectToProtoImage(image typesimage.InspectResponse, inspectedAt, imageRef string) *agentcomposev2.Image {
-	return images.DockerInspectToProtoImage(image, inspectedAt, imageRef)
-}
-
-func consumeDockerImagePullProgress(reader io.Reader) ([]*agentcomposev2.ImagePullProgress, error) {
-	return images.ConsumeDockerImagePullProgress(reader)
-}
-
 func paginateImages(items []*agentcomposev2.Image, offset, limit uint32) ([]*agentcomposev2.Image, bool, uint32) {
 	return images.PaginateProtoImages(items, offset, limit)
 }
 
 func nonNegativeUint64(value int64) uint64 {
 	return images.NonNegativeUint64(value)
-}
-
-func dockerPlatformString(platform *agentcomposev2.ImagePlatform) string {
-	return images.DockerPlatformString(platform)
-}
-
-func dockerEndpointFromEnv() string {
-	return images.DockerEndpointFromEnv()
 }

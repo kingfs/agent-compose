@@ -271,7 +271,7 @@ func testSupportConstructorsAndHelpers(t *testing.T) {
 		t.Fatalf("NewService OCI backend = %#v ok=%v", service.ociImages, ok)
 	}
 	autoBackend, ok := service.autoImages.(*AutoImageBackend)
-	if !ok || autoBackend.docker == nil || autoBackend.oci == nil || autoBackend.mode != config.ImageStoreMode {
+	if !ok || !autoBackend.HasDockerBackend() || !autoBackend.HasOCIBackend() || autoBackend.Mode() != config.ImageStoreMode {
 		t.Fatalf("NewService auto backend = %#v ok=%v", service.autoImages, ok)
 	}
 
