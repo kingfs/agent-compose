@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	runspkg "agent-compose/pkg/agentcompose/runs"
 	"agent-compose/pkg/compose"
 )
 
@@ -353,7 +354,7 @@ agents:
 	if len(tagOnlyRuns) != 0 {
 		t.Fatalf("tag-only session returned SQLite relations: %#v", tagOnlyRuns)
 	}
-	statuses, err := ListProjectSessionStatuses(ctx, store, sessionStore, ProjectSessionRelationFilter{ProjectID: project.ID, Statuses: []string{ProjectRunStatusRunning}})
+	statuses, err := runspkg.ListProjectSessionStatuses(ctx, store, sessionStore, ProjectSessionRelationFilter{ProjectID: project.ID, Statuses: []string{ProjectRunStatusRunning}})
 	if err != nil {
 		t.Fatalf("ListProjectSessionStatuses returned error: %v", err)
 	}

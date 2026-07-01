@@ -36,13 +36,13 @@ func testImageEnsureSkipsNonDockerDrivers(t *testing.T) {
 		},
 	}
 	for _, driver := range []string{driverpkg.RuntimeDriverBoxlite, driverpkg.RuntimeDriverMicrosandbox} {
-		if err := service.ensureDriverImage(context.Background(), driverImageEnsureRequest{
+		if err := images.EnsureDriverImage(context.Background(), service.config, service.images, images.EnsureRequest{
 			Driver:      driver,
 			ImageRef:    "guest:v1",
 			ProjectName: "skip",
 			AgentName:   driver,
 		}); err != nil {
-			t.Fatalf("ensureDriverImage(%s) returned error: %v", driver, err)
+			t.Fatalf("EnsureDriverImage(%s) returned error: %v", driver, err)
 		}
 	}
 }

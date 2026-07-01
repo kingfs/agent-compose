@@ -13,6 +13,7 @@ import (
 
 	"agent-compose/pkg/agentcompose/api"
 	"agent-compose/pkg/agentcompose/domain"
+	"agent-compose/pkg/agentcompose/images"
 	loaderpkg "agent-compose/pkg/agentcompose/loaders"
 	"agent-compose/pkg/agentcompose/projects"
 	"agent-compose/pkg/agentcompose/runs"
@@ -110,7 +111,7 @@ func (s *Service) ApplyProject(ctx context.Context, req *connect.Request[agentco
 			Applied:  false,
 		}), nil
 	}
-	if err := s.ensureProjectAgentImages(ctx, normalized.spec.Name, agentRecords); err != nil {
+	if err := images.EnsureProjectAgentImages(ctx, s.config, s.images, normalized.spec.Name, agentRecords); err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
 	}
 

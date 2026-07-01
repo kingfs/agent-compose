@@ -8,6 +8,7 @@ import (
 
 	"agent-compose/pkg/agentcompose/capabilities"
 	"agent-compose/pkg/agentcompose/domain"
+	"agent-compose/pkg/agentcompose/images"
 	"agent-compose/pkg/agentcompose/loaders"
 	"agent-compose/pkg/agentcompose/runs"
 	"agent-compose/pkg/agentcompose/workspaces"
@@ -36,7 +37,7 @@ func (s *Service) ensureProjectRunSession(ctx context.Context, run ProjectRunRec
 				return ProjectRunSessionResult{}, err
 			}
 			guestImage := driverpkg.ResolveSessionGuestImage(session.Summary.GuestImage, driverpkg.DefaultGuestImageForDriver(s.config, driver))
-			if err := s.ensureDriverImage(ctx, driverImageEnsureRequest{
+			if err := images.EnsureDriverImage(ctx, s.config, s.images, images.EnsureRequest{
 				Driver:      driver,
 				ImageRef:    guestImage,
 				ProjectName: run.ProjectName,
@@ -62,7 +63,7 @@ func (s *Service) ensureProjectRunSession(ctx context.Context, run ProjectRunRec
 		return ProjectRunSessionResult{}, err
 	}
 	guestImage := driverpkg.ResolveSessionGuestImage(run.ImageRef, driverpkg.DefaultGuestImageForDriver(s.config, driver))
-	if err := s.ensureDriverImage(ctx, driverImageEnsureRequest{
+	if err := images.EnsureDriverImage(ctx, s.config, s.images, images.EnsureRequest{
 		Driver:      driver,
 		ImageRef:    guestImage,
 		ProjectName: run.ProjectName,

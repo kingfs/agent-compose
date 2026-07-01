@@ -14,6 +14,7 @@ import (
 
 	"agent-compose/pkg/agentcompose/api"
 	"agent-compose/pkg/agentcompose/execution"
+	"agent-compose/pkg/agentcompose/runs"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -166,7 +167,7 @@ func (s *Service) resolveExecTargetSession(ctx context.Context, req *agentcompos
 		}
 		return nil, "", connect.NewError(connect.CodeInternal, err)
 	}
-	statuses, err := ListProjectSessionStatuses(ctx, s.configDB, s.store, ProjectSessionRelationFilter{
+	statuses, err := runs.ListProjectSessionStatuses(ctx, s.configDB, s.store, ProjectSessionRelationFilter{
 		ProjectID: project.ID,
 		AgentName: selector.GetAgentName(),
 	})

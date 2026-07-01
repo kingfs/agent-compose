@@ -3,7 +3,6 @@ package agentcompose
 import (
 	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/projects"
-	"agent-compose/pkg/agentcompose/runs"
 	"context"
 	"fmt"
 	"strings"
@@ -72,10 +71,6 @@ func (s *ConfigStore) ListProjectRunsForSession(ctx context.Context, sessionID s
 		return nil, fmt.Errorf("session id is required")
 	}
 	return s.ListProjectSessionRuns(ctx, ProjectSessionRelationFilter{SessionID: sessionID})
-}
-
-func ListProjectSessionStatuses(ctx context.Context, configDB *ConfigStore, store *Store, filter ProjectSessionRelationFilter) ([]ProjectSessionStatus, error) {
-	return runs.ListProjectSessionStatuses(ctx, configDB, store, filter)
 }
 
 func placeholders(count int) string {

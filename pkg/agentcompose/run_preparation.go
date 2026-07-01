@@ -104,7 +104,7 @@ func (s *Service) materializeLocalProjectRunWorkspace(run ProjectRunRecord, proj
 	if err != nil {
 		return WorkspaceConfig{}, err
 	}
-	workspaceID := projectRunWorkspaceID(run, "local")
+	workspaceID := runs.WorkspaceID(run, "local")
 	configJSON := workspaces.DefaultFileConfigJSON(s.config, workspaceID)
 	if _, err := workspaces.ValidateFileWorkspaceConfig(s.config, workspaceID, configJSON); err != nil {
 		return WorkspaceConfig{}, err
@@ -114,7 +114,7 @@ func (s *Service) materializeLocalProjectRunWorkspace(run ProjectRunRecord, proj
 	}
 	config := WorkspaceConfig{
 		ID:         workspaceID,
-		Name:       projectRunWorkspaceName(run, "local"),
+		Name:       runs.WorkspaceName(run, "local"),
 		Type:       "file",
 		ConfigJSON: configJSON,
 		Comment:    fmt.Sprintf("project run %s local workspace snapshot", run.RunID),
@@ -136,7 +136,7 @@ func (s *Service) materializeLocalProjectRunWorkspace(run ProjectRunRecord, proj
 }
 
 func projectRunGitWorkspaceConfig(run ProjectRunRecord, workspace *compose.WorkspaceSpec) (WorkspaceConfig, error) {
-	workspaceID := projectRunWorkspaceID(run, "git")
+	workspaceID := runs.WorkspaceID(run, "git")
 	if strings.TrimSpace(workspace.URL) == "" {
 		return WorkspaceConfig{}, fmt.Errorf("git workspace url is required")
 	}
@@ -153,19 +153,11 @@ func projectRunGitWorkspaceConfig(run ProjectRunRecord, workspace *compose.Works
 	}
 	return WorkspaceConfig{
 		ID:         workspaceID,
-		Name:       projectRunWorkspaceName(run, "git"),
+		Name:       runs.WorkspaceName(run, "git"),
 		Type:       "git",
 		ConfigJSON: string(payload),
 		Comment:    fmt.Sprintf("project run %s git workspace snapshot", run.RunID),
 	}, nil
-}
-
-func projectRunWorkspaceID(run ProjectRunRecord, provider string) string {
-	return runs.WorkspaceID(run, provider)
-}
-
-func projectRunWorkspaceName(run ProjectRunRecord, provider string) string {
-	return runs.WorkspaceName(run, provider)
 }
 
 func resetFileWorkspaceSnapshotContent(config *appconfig.Config, workspaceID string) error {
