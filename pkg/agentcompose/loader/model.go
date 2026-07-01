@@ -1,6 +1,7 @@
 package loader
 
 import (
+	"agent-compose/pkg/agentcompose/configsvc"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -66,11 +67,7 @@ type Loader struct {
 	EnvItems []SessionEnvVar `json:"env_items,omitempty"`
 }
 
-type SessionEnvVar struct {
-	Name   string `json:"name"`
-	Value  string `json:"value,omitempty"`
-	Secret bool   `json:"secret,omitempty"`
-}
+type SessionEnvVar = configsvc.EnvVar
 
 type LoaderTrigger struct {
 	LoaderID    string    `json:"loader_id"`
