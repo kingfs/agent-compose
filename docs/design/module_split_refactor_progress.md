@@ -40,9 +40,9 @@ Use only these status values:
 | 1 | Session | `refactor/session-module` | `../agent-compose-refactor-session` | unassigned | `not_started` | `go test ./pkg/agentcompose ./pkg/driver` | Preserve session API and runtime behavior. |
 | 2 | Loader | `refactor/loader-module` | `../agent-compose-refactor-loader` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Loader|Webhook|Event'` | Preserve loader DB schema and script API. |
 | 3 | Project and Run | `refactor/project-run-module` | `../agent-compose-refactor-project-run` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Project|Run|Compose'` | Preserve ApplyProject and run semantics. |
-| 4 | Event and Webhook | `refactor/event-webhook-module` | `../agent-compose-refactor-event-webhook` | Hypatia (`019f1e08-16de-7653-a575-1b736b059058`) | `merged` | `go test ./pkg/agentcompose -run 'Event|Webhook|Topic'`; integration combo test passed | Merged into integration as `23577d6`; cleanup pending. |
-| 5 | LLM | `refactor/llm-module` | `../agent-compose-refactor-llm` | Faraday (`019f1e08-16b2-74e1-b1b7-fa3e37fca0ba`) | `merged` | `go test ./pkg/agentcompose -run 'LLM|Facade'`; integration combo test passed | Merged into integration as `8085896`; cleanup pending. |
-| 6 | Image | `refactor/image-module` | `../agent-compose-refactor-image` | Newton (`019f1e08-1689-78e2-b0aa-67f0d03450d2`) | `merged` | `go test ./pkg/agentcompose -run 'Image'`; `go test ./pkg/imagecache`; integration combo test passed | Merged into integration as `bb23ed3`; cleanup pending. |
+| 4 | Event and Webhook | `refactor/event-webhook-module` | removed | Hypatia (`019f1e08-16de-7653-a575-1b736b059058`) | `cleaned` | `go test ./pkg/agentcompose -run 'Event|Webhook|Topic'`; integration combo test passed | Merged into integration as `23577d6`; worktree cleaned. |
+| 5 | LLM | `refactor/llm-module` | removed | Faraday (`019f1e08-16b2-74e1-b1b7-fa3e37fca0ba`) | `cleaned` | `go test ./pkg/agentcompose -run 'LLM|Facade'`; integration combo test passed | Merged into integration as `8085896`; worktree cleaned. |
+| 6 | Image | `refactor/image-module` | removed | Newton (`019f1e08-1689-78e2-b0aa-67f0d03450d2`) | `cleaned` | `go test ./pkg/agentcompose -run 'Image'`; `go test ./pkg/imagecache`; integration combo test passed | Merged into integration as `bb23ed3`; worktree cleaned. |
 | 7 | Workspace, Config, Agent Definition | `refactor/workspace-config-module` | `../agent-compose-refactor-workspace-config` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Workspace|Config|AgentDefinition|Agent'` | Preserve config and file workspace behavior. |
 | 8 | Transport | `refactor/transport-module` | `../agent-compose-refactor-transport` | unassigned | `not_started` | `go test ./pkg/agentcompose ./cmd/agent-compose` | Start after Phase 1 merges. |
 | 9 | SQLite Store | `refactor/sqlite-store-module` | `../agent-compose-refactor-sqlite-store` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'` | Start after Phase 1 merges. |
@@ -69,9 +69,9 @@ Use only these status values:
 
 | Worktree Path | Branch | Owner | Status | Cleanup Required |
 | --- | --- | --- | --- | --- |
-| `/data/src/github.com/kingfs/agent-compose-refactor-image` | `refactor/image-module` | Newton (`019f1e08-1689-78e2-b0aa-67f0d03450d2`) | `merged` | Yes |
-| `/data/src/github.com/kingfs/agent-compose-refactor-llm` | `refactor/llm-module` | Faraday (`019f1e08-16b2-74e1-b1b7-fa3e37fca0ba`) | `merged` | Yes |
-| `/data/src/github.com/kingfs/agent-compose-refactor-event-webhook` | `refactor/event-webhook-module` | Hypatia (`019f1e08-16de-7653-a575-1b736b059058`) | `merged` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-image` | `refactor/image-module` | Newton (`019f1e08-1689-78e2-b0aa-67f0d03450d2`) | `cleaned` | No |
+| `/data/src/github.com/kingfs/agent-compose-refactor-llm` | `refactor/llm-module` | Faraday (`019f1e08-16b2-74e1-b1b7-fa3e37fca0ba`) | `cleaned` | No |
+| `/data/src/github.com/kingfs/agent-compose-refactor-event-webhook` | `refactor/event-webhook-module` | Hypatia (`019f1e08-16de-7653-a575-1b736b059058`) | `cleaned` | No |
 
 ## Integration Log
 
@@ -86,6 +86,7 @@ Use only these status values:
 | 2026-07-01 | Reviewed and committed Wave 1 worker branches | image, llm, event-webhook | done | Owner reproduced module tests before merge. |
 | 2026-07-01 | Merged Wave 1 branches into integration | image, llm, event-webhook | done | Merge commits `bb23ed3`, `8085896`, `23577d6`. |
 | 2026-07-01 | Ran integration Wave 1 tests | `refactor/module-split-integration` | passed | `go test ./pkg/agentcompose -run 'Image|LLM|Facade|Event|Webhook|Topic'`; `go test ./pkg/agentcompose/image ./pkg/agentcompose/llm ./pkg/agentcompose/event ./pkg/agentcompose/webhook ./pkg/imagecache`. |
+| 2026-07-01 | Cleaned Wave 1 worker worktrees | image, llm, event-webhook | done | Removed the three worker worktrees after confirming clean status. |
 
 ## Current Owner Decisions
 
@@ -100,4 +101,4 @@ Use only these status values:
 
 | Date | Task | Blocker | Owner Decision | Status |
 | --- | --- | --- | --- | --- |
-| 2026-07-01 | Wave 1 | Merged worktrees still need cleanup | Clean image, LLM, and event/webhook worktrees after this progress update is committed. | open |
+| 2026-07-01 | Wave 2 | Next module worktrees not created yet | Start session, loader, and project/run after owner launches Wave 2. | open |
