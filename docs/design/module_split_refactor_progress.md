@@ -47,7 +47,7 @@ Use only these status values:
 | 8 | Transport | `refactor/transport-module` | removed | Tesla (`019f1e41-2339-7c73-8fe9-156d4a619373`) | `cleaned` | `go test ./pkg/agentcompose ./cmd/agent-compose`; transport package compile tests passed | Merged into integration; worktree cleaned. |
 | 9 | SQLite Store | `refactor/sqlite-store-module` | removed | Einstein (`019f1e41-235f-7d53-b29f-6fae5683a893`) | `cleaned` | `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'`; `go test ./pkg/agentcompose/store/sqlite` | Merged into integration; worktree cleaned. |
 | 10 | CLI and Daemon | `refactor/cli-daemon-module` | removed | Confucius (`019f1e58-e119-7372-b0bf-583d78d94edf`) | `cleaned` | `go test ./cmd/agent-compose`; `go test ./internal/...` | Merged into integration; worktree cleaned. |
-| 11 | Compatibility Cleanup | `refactor/module-split-cleanup` | `../agent-compose-refactor-cleanup` | owner | `not_started` | `task test` | Remove wrappers after all splits merge. |
+| 11 | Compatibility Cleanup | `refactor/module-split-cleanup` | integration worktree | owner | `in_progress` | `task test` | Final audit and safe cleanup; compatibility wrappers remain where they preserve existing API/tests. |
 
 ## Planned Merge Order
 
@@ -63,7 +63,7 @@ Use only these status values:
 | 8 | `refactor/transport-module` | `merged` | Merged into integration. |
 | 9 | `refactor/sqlite-store-module` | `merged` | Merged into integration. |
 | 10 | `refactor/cli-daemon-module` | `merged` | Merged into integration. |
-| 11 | `refactor/module-split-cleanup` | `not_started` | Final wrapper cleanup. |
+| 11 | `refactor/module-split-cleanup` | `in_progress` | Final audit, safe cleanup, and verification. |
 
 ## Worktree Registry
 
@@ -112,6 +112,7 @@ Use only these status values:
 | 2026-07-01 | Launched CLI/Daemon agent | `refactor/cli-daemon-module` | in progress | Confucius=CLI/Daemon. |
 | 2026-07-01 | Reviewed and merged CLI/Daemon | `refactor/cli-daemon-module` | passed | `go test ./cmd/agent-compose`; `go test ./internal/...`. |
 | 2026-07-01 | Cleaned CLI/Daemon worktree | `refactor/cli-daemon-module` | done | Removed worktree after confirming clean status. |
+| 2026-07-01 | Started final cleanup audit | `refactor/module-split-integration` | in progress | Keep thin compatibility wrappers that are still required for existing API, tests, and downstream call sites. |
 
 ## Current Owner Decisions
 
@@ -124,9 +125,10 @@ Use only these status values:
 - Wave 2 assignments are workspace/config/agent definition, session, loader, and project/run.
 - Wave 3 assignments are transport and SQLite store.
 - Wave 4 assignment is CLI/Daemon.
+- Final cleanup keeps behavior-preserving compatibility wrappers unless removing them is proven safe by tests and call-site migration.
 
 ## Blockers
 
 | Date | Task | Blocker | Owner Decision | Status |
 | --- | --- | --- | --- | --- |
-| 2026-07-01 | Cleanup | Compatibility cleanup not started yet | Create cleanup worktree and remove temporary wrappers where safe, then run final verification. | open |
+| 2026-07-01 | Cleanup | Final verification not complete | Run final test suite and update tracker with results. | open |
