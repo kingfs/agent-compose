@@ -8,7 +8,7 @@ import (
 )
 
 func (s *ConfigStore) eventStore() *event.Store {
-	return event.NewStore(s.db)
+	return s.sqliteStore().EventRepository()
 }
 
 func (s *ConfigStore) ensureEventSchema(ctx context.Context) error {

@@ -7,10 +7,11 @@ import (
 	"time"
 
 	loaderpkg "agent-compose/pkg/agentcompose/loader"
+	sqlitestore "agent-compose/pkg/agentcompose/store/sqlite"
 )
 
 func (s *ConfigStore) loaderStore() *loaderpkg.Store {
-	return loaderpkg.NewStore(s.db)
+	return s.sqliteStore().LoaderRepository()
 }
 
 func (s *ConfigStore) ensureLoaderSchema(ctx context.Context) error {
@@ -45,30 +46,7 @@ func decodeCapsetIDs(raw string) []string {
 }
 
 func ensureColumn(ctx context.Context, db *sql.DB, table, column, definition string) error {
-	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table+")")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var cid int
-		var name string
-		var typ string
-		var notNull int
-		var defaultValue any
-		var pk int
-		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
-			return err
-		}
-		if name == column {
-			return nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	_, err = db.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition)
-	return err
+	return sqlitestore.EnsureColumn(ctx, db, table, column, definition)
 }
 
 func (s *ConfigStore) CreateLoader(ctx context.Context, item Loader) (Loader, error) {

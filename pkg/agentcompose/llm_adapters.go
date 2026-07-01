@@ -9,7 +9,7 @@ func (s *ConfigStore) llmStore() *llmpkg.Store {
 	if s == nil {
 		return nil
 	}
-	return llmpkg.NewStore(s.db, func(ctx context.Context) ([]llmpkg.GlobalEnvVar, error) {
+	return s.sqliteStore().LLMRepository(func(ctx context.Context) ([]llmpkg.GlobalEnvVar, error) {
 		items, err := s.ListGlobalEnv(ctx)
 		if err != nil {
 			return nil, err

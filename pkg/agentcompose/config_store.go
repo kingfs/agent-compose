@@ -8,121 +8,66 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
-
 	"github.com/samber/do/v2"
+
+	sqlitestore "agent-compose/pkg/agentcompose/store/sqlite"
 )
 
 const storedUnixMillisecondThreshold int64 = 10_000_000_000
 
 type ConfigStore struct {
-	db *sql.DB
+	db     *sql.DB
+	sqlite *sqlitestore.Store
 }
 
 func NewConfigStore(di do.Injector) (*ConfigStore, error) {
 	config := do.MustInvoke[*appconfig.Config](di)
-	if err := os.MkdirAll(config.DataRoot, 0o755); err != nil {
-		return nil, fmt.Errorf("create agent-compose data root: %w", err)
-	}
-	dbPath := config.DbAddr
-	db, err := sql.Open("sqlite", dbPath)
+	sqliteDB, err := sqlitestore.Open(config.DataRoot, config.DbAddr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open sqlite db: %w", err)
+		return nil, err
 	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	store := &ConfigStore{db: db}
+	store := &ConfigStore{db: sqliteDB.DB(), sqlite: sqliteDB}
 	if err := store.initSchema(context.Background()); err != nil {
-		_ = db.Close()
+		_ = store.db.Close()
 		return nil, err
 	}
 	return store, nil
 }
 
+func (s *ConfigStore) sqliteStore() *sqlitestore.Store {
+	if s == nil {
+		return nil
+	}
+	if s.sqlite == nil {
+		s.sqlite = sqlitestore.NewStore(s.db)
+	}
+	return s.sqlite
+}
+
 func (s *ConfigStore) initSchema(ctx context.Context) error {
-	statements := []string{
-		`PRAGMA journal_mode = WAL;`,
-		`PRAGMA foreign_keys = ON;`,
-	}
-	for _, stmt := range statements {
-		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("init agent-compose config schema: %w", err)
-		}
-	}
-	if err := s.ensureGlobalEnvSchema(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureLLMSchema(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureCapabilityGatewaySchema(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureWorkspaceConfigSchema(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureLoaderSchema(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureAgentDefinitionSchema(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureProjectSchema(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureEventSchema(ctx); err != nil {
-		return err
-	}
-	return nil
+	return s.sqliteStore().InitSchema(ctx,
+		s.ensureGlobalEnvSchema,
+		s.ensureLLMSchema,
+		s.ensureCapabilityGatewaySchema,
+		s.ensureWorkspaceConfigSchema,
+		s.ensureLoaderSchema,
+		s.ensureAgentDefinitionSchema,
+		s.ensureProjectSchema,
+		s.ensureEventSchema,
+	)
 }
 
 func (s *ConfigStore) ensureGlobalEnvSchema(ctx context.Context) error {
-	const createStmt = `CREATE TABLE IF NOT EXISTS global_env (
-		name TEXT PRIMARY KEY,
-		value TEXT NOT NULL,
-		secret INTEGER NOT NULL DEFAULT 0,
-		updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
-	);`
-	if _, err := s.db.ExecContext(ctx, createStmt); err != nil {
-		return fmt.Errorf("create global env schema: %w", err)
-	}
-	columnTypes, err := s.tableColumnTypes(ctx, "global_env")
-	if err != nil {
-		return err
-	}
-	if isIntegerColumnType(columnTypes["updated_at"]) {
-		return nil
-	}
-	return s.rebuildGlobalEnvTable(ctx)
+	return s.sqliteStore().EnsureGlobalEnvSchema(ctx)
 }
 
 func (s *ConfigStore) ensureWorkspaceConfigSchema(ctx context.Context) error {
-	const createStmt = `CREATE TABLE IF NOT EXISTS workspace_config (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		type TEXT NOT NULL,
-		config_json TEXT NOT NULL DEFAULT '{}',
-		comment TEXT NOT NULL DEFAULT '',
-		created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)),
-		updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
-	);`
-	if _, err := s.db.ExecContext(ctx, createStmt); err != nil {
-		return fmt.Errorf("create workspace config schema: %w", err)
-	}
-	columnTypes, err := s.tableColumnTypes(ctx, "workspace_config")
-	if err != nil {
-		return err
-	}
-	if isIntegerColumnType(columnTypes["created_at"]) && isIntegerColumnType(columnTypes["updated_at"]) {
-		return nil
-	}
-	return s.rebuildWorkspaceConfigTable(ctx)
+	return s.sqliteStore().EnsureWorkspaceConfigSchema(ctx)
 }
 
 func (s *ConfigStore) ensureAgentDefinitionSchema(ctx context.Context) error {
@@ -176,97 +121,15 @@ func (s *ConfigStore) ensureAgentDefinitionSchema(ctx context.Context) error {
 }
 
 func (s *ConfigStore) tableColumnTypes(ctx context.Context, tableName string) (map[string]string, error) {
-	trimmedTableName := strings.TrimSpace(tableName)
-	if trimmedTableName == "" {
-		return nil, fmt.Errorf("schema table name is required")
-	}
-	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`SELECT name, type FROM pragma_table_info('%s')`, strings.ReplaceAll(trimmedTableName, "'", "''")))
-	if err != nil {
-		return nil, fmt.Errorf("query schema for %s: %w", tableName, err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	columnTypes := make(map[string]string)
-	for rows.Next() {
-		var name string
-		var columnType string
-		if err := rows.Scan(&name, &columnType); err != nil {
-			return nil, fmt.Errorf("scan schema for %s: %w", tableName, err)
-		}
-		columnTypes[strings.ToLower(strings.TrimSpace(name))] = strings.TrimSpace(columnType)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate schema for %s: %w", tableName, err)
-	}
-	return columnTypes, nil
+	return s.sqliteStore().TableColumnTypes(ctx, tableName)
 }
 
 func (s *ConfigStore) rebuildGlobalEnvTable(ctx context.Context) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin global env migration tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	updatedAtExpr := normalizeSQLiteTimestampExpr("updated_at")
-	statements := []string{
-		`DROP TABLE IF EXISTS global_env_legacy;`,
-		`ALTER TABLE global_env RENAME TO global_env_legacy;`,
-		`CREATE TABLE global_env (
-			name TEXT PRIMARY KEY,
-			value TEXT NOT NULL,
-			secret INTEGER NOT NULL DEFAULT 0,
-			updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
-		);`,
-		fmt.Sprintf(`INSERT INTO global_env(name, value, secret, updated_at)
-			SELECT name, value, secret, %s FROM global_env_legacy;`, updatedAtExpr),
-		`DROP TABLE global_env_legacy;`,
-	}
-	for _, stmt := range statements {
-		if _, err := tx.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("migrate global env schema: %w", err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit global env migration tx: %w", err)
-	}
-	return nil
+	return s.sqliteStore().RebuildGlobalEnvTable(ctx)
 }
 
 func (s *ConfigStore) rebuildWorkspaceConfigTable(ctx context.Context) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin workspace config migration tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	createdAtExpr := normalizeSQLiteTimestampExpr("created_at")
-	updatedAtExpr := normalizeSQLiteTimestampExpr("updated_at")
-	statements := []string{
-		`DROP TABLE IF EXISTS workspace_config_legacy;`,
-		`ALTER TABLE workspace_config RENAME TO workspace_config_legacy;`,
-		`CREATE TABLE workspace_config (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			type TEXT NOT NULL,
-			config_json TEXT NOT NULL DEFAULT '{}',
-			comment TEXT NOT NULL DEFAULT '',
-			created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)),
-			updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
-		);`,
-		fmt.Sprintf(`INSERT INTO workspace_config(id, name, type, config_json, comment, created_at, updated_at)
-			SELECT id, name, type, config_json, comment, %s, %s FROM workspace_config_legacy;`, createdAtExpr, updatedAtExpr),
-		`DROP TABLE workspace_config_legacy;`,
-	}
-	for _, stmt := range statements {
-		if _, err := tx.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("migrate workspace config schema: %w", err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit workspace config migration tx: %w", err)
-	}
-	return nil
+	return s.sqliteStore().RebuildWorkspaceConfigTable(ctx)
 }
 
 func (s *ConfigStore) ListGlobalEnv(ctx context.Context) ([]SessionEnvVar, error) {
@@ -870,15 +733,11 @@ func parseStoredTime(value any) time.Time {
 }
 
 func normalizeSQLiteTimestampExpr(columnName string) string {
-	return fmt.Sprintf(`CASE
-		WHEN trim(COALESCE(%[1]s, '')) = '' THEN CAST(strftime('%%s','now') AS INTEGER)
-		WHEN trim(COALESCE(%[1]s, '')) NOT GLOB '*[^0-9]*' THEN CAST(%[1]s AS INTEGER)
-		ELSE COALESCE(CAST(strftime('%%s', %[1]s) AS INTEGER), CAST(strftime('%%s','now') AS INTEGER))
-	END`, columnName)
+	return sqlitestore.NormalizeSQLiteTimestampExpr(columnName)
 }
 
 func isIntegerColumnType(columnType string) bool {
-	return strings.Contains(strings.ToUpper(strings.TrimSpace(columnType)), "INT")
+	return sqlitestore.IsIntegerColumnType(columnType)
 }
 
 func boolToInt(value bool) int {
