@@ -646,42 +646,43 @@ func (s *Service) projectManagedSchedulersFromSpec(ctx context.Context, project 
 }
 
 func projectManagedSchedulerRecords(builds []projectManagedSchedulerBuild) []ProjectSchedulerRecord {
-	schedulers := make([]ProjectSchedulerRecord, 0, len(builds))
-	for _, build := range builds {
-		schedulers = append(schedulers, build.scheduler)
-	}
-	return schedulers
+	return projects.SchedulerRecords(projectSchedulerBuildsToProjects(builds))
 }
 
 func projectManagedSchedulerLoaders(builds []projectManagedSchedulerBuild) []Loader {
-	loaders := make([]Loader, 0, len(builds))
-	for _, build := range builds {
-		loaders = append(loaders, build.loader)
-	}
-	return loaders
+	return projects.SchedulerLoaders(projectSchedulerBuildsToProjects(builds))
 }
 
 func projectManagedSchedulerBuildsFromSpec(project ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]projectManagedSchedulerBuild, error) {
-	builds := make([]projectManagedSchedulerBuild, 0)
-	for _, agent := range spec.Agents {
-		record, ok, err := NewProjectSchedulerRecordFromSpec(project.ID, revision, agent)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
-		}
-		loader, err := projectManagedLoaderFromScheduler(project, record, agent)
-		if err != nil {
-			return nil, err
-		}
-		builds = append(builds, projectManagedSchedulerBuild{
-			scheduler:          record,
-			loader:             loader,
-			validationTriggers: loader.Triggers,
+	builds, err := projects.NewSchedulerBuildsFromSpec(project, revision, spec)
+	if err != nil {
+		return nil, err
+	}
+	return projectSchedulerBuildsFromProjects(builds), nil
+}
+
+func projectSchedulerBuildsToProjects(builds []projectManagedSchedulerBuild) []projects.SchedulerBuild {
+	result := make([]projects.SchedulerBuild, 0, len(builds))
+	for _, build := range builds {
+		result = append(result, projects.SchedulerBuild{
+			Scheduler:          build.scheduler,
+			Loader:             build.loader,
+			ValidationTriggers: build.validationTriggers,
 		})
 	}
-	return builds, nil
+	return result
+}
+
+func projectSchedulerBuildsFromProjects(builds []projects.SchedulerBuild) []projectManagedSchedulerBuild {
+	result := make([]projectManagedSchedulerBuild, 0, len(builds))
+	for _, build := range builds {
+		result = append(result, projectManagedSchedulerBuild{
+			scheduler:          build.Scheduler,
+			loader:             build.Loader,
+			validationTriggers: build.ValidationTriggers,
+		})
+	}
+	return result
 }
 
 func (s *Service) projectManagedSchedulerBuildsFromSpec(ctx context.Context, project ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]projectManagedSchedulerBuild, error) {

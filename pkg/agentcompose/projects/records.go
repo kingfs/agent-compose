@@ -155,6 +155,51 @@ func NewManagedLoaderFromScheduler(project domain.ProjectRecord, scheduler domai
 	}, nil
 }
 
+type SchedulerBuild struct {
+	Scheduler          domain.ProjectSchedulerRecord
+	Loader             domain.Loader
+	ValidationTriggers []domain.LoaderTrigger
+}
+
+func SchedulerRecords(builds []SchedulerBuild) []domain.ProjectSchedulerRecord {
+	schedulers := make([]domain.ProjectSchedulerRecord, 0, len(builds))
+	for _, build := range builds {
+		schedulers = append(schedulers, build.Scheduler)
+	}
+	return schedulers
+}
+
+func SchedulerLoaders(builds []SchedulerBuild) []domain.Loader {
+	loaders := make([]domain.Loader, 0, len(builds))
+	for _, build := range builds {
+		loaders = append(loaders, build.Loader)
+	}
+	return loaders
+}
+
+func NewSchedulerBuildsFromSpec(project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]SchedulerBuild, error) {
+	builds := make([]SchedulerBuild, 0)
+	for _, agent := range spec.Agents {
+		record, ok, err := NewSchedulerRecordFromSpec(project.ID, revision, agent)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		loader, err := NewManagedLoaderFromScheduler(project, record, agent)
+		if err != nil {
+			return nil, err
+		}
+		builds = append(builds, SchedulerBuild{
+			Scheduler:          record,
+			Loader:             loader,
+			ValidationTriggers: loader.Triggers,
+		})
+	}
+	return builds, nil
+}
+
 func NewSchedulerRecordFromSpec(projectID string, revision int64, agent compose.NormalizedAgentSpec) (domain.ProjectSchedulerRecord, bool, error) {
 	if agent.Scheduler == nil {
 		return domain.ProjectSchedulerRecord{}, false, nil
