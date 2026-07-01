@@ -530,7 +530,7 @@ func (e *Executor) executeAgent(ctx context.Context, session *Session, request E
 	if message == "" {
 		return NotebookCell{}, SessionEvent{}, SessionEvent{}, fmt.Errorf("message is required")
 	}
-	agent = normalizeAgentKind(agent)
+	agent = domain.NormalizeAgentKind(agent)
 	if agent == "" {
 		agent = "codex"
 	}
@@ -564,7 +564,7 @@ func (e *Executor) executeAgent(ctx context.Context, session *Session, request E
 		Type:      CellTypeAgent,
 		Source:    message,
 		CreatedAt: startedAt,
-		Agent:     normalizeAgentKind(agent),
+		Agent:     domain.NormalizeAgentKind(agent),
 		Running:   true,
 	}
 	if err := e.store.AddCell(ctx, session, cell); err != nil {
@@ -593,7 +593,7 @@ func (e *Executor) executeAgent(ctx context.Context, session *Session, request E
 			Type:      "agent.assistant.failed",
 			Level:     "error",
 			CreatedAt: time.Now().UTC(),
-			Message:   fmt.Sprintf("%s run failed: %v", normalizeAgentKind(agent), finalErr),
+			Message:   fmt.Sprintf("%s run failed: %v", domain.NormalizeAgentKind(agent), finalErr),
 		}
 		execResult = mergeExecResults(execResult, streamed.result(firstNonZeroInt(execResult.ExitCode, 1), false))
 		execResult.ExitCode = firstNonZeroInt(execResult.ExitCode, 1)
@@ -619,7 +619,7 @@ func (e *Executor) executeAgent(ctx context.Context, session *Session, request E
 		cell.ExitCode = execResult.ExitCode
 		cell.Success = false
 		cell.Running = false
-		cell.Agent = firstNonEmpty(result.Agent, cell.Agent, normalizeAgentKind(agent))
+		cell.Agent = firstNonEmpty(result.Agent, cell.Agent, domain.NormalizeAgentKind(agent))
 		cell.AgentSessionID = agentSessionID
 		cell.StopReason = result.StopReason
 		cell.AgentResume = resumeInfo

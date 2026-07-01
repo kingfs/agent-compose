@@ -781,7 +781,7 @@ func (h *loaderRunHost) Agent(ctx context.Context, prompt string, request Loader
 		_ = h.addLinkedLoaderEvent(ctx, eventType, "info", "loader session ready", map[string]any{"sessionId": session.Summary.ID}, session.Summary.ID, "", "")
 	}
 
-	agentConfig := agentExecutionConfig{Provider: normalizeAgentKind(request.Agent)}
+	agentConfig := agentExecutionConfig{Provider: domain.NormalizeAgentKind(request.Agent)}
 	var agentDefinitionID string
 	if agentConfig.Provider == "" {
 		agentDefinition, err := h.manager.loaderAgentDefinition(ctx, h.loader)
@@ -797,7 +797,7 @@ func (h *loaderRunHost) Agent(ctx context.Context, prompt string, request Loader
 		agentDefinitionID = strings.TrimSpace(h.loader.Summary.AgentID)
 	}
 	if agentConfig.Provider == "" {
-		agentConfig.Provider = normalizeAgentKind(h.loader.Summary.DefaultAgent)
+		agentConfig.Provider = domain.NormalizeAgentKind(h.loader.Summary.DefaultAgent)
 	}
 	if agentConfig.Provider == "" {
 		agentConfig.Provider = "codex"

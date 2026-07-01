@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/llms"
 )
 
@@ -41,7 +42,7 @@ func ensureSessionAgentRuntimeLLMConfig(ctx context.Context, config *appconfig.C
 	if config == nil || configDB == nil || session == nil {
 		return agentRuntimeLLMConfig{}, nil
 	}
-	switch normalizeAgentKind(agent) {
+	switch domain.NormalizeAgentKind(agent) {
 	case "codex":
 		env, err := ensureSessionCodexLLMFacadeConfig(ctx, config, configDB, session, model, source, runID)
 		return agentRuntimeLLMConfig{Env: env}, err

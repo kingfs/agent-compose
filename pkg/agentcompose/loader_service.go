@@ -120,7 +120,7 @@ func (s *Service) resolveLoaderDefaultAgent(ctx context.Context, agentID, provid
 	if !agent.Enabled {
 		return "", fmt.Errorf("agent definition %s is disabled", agentID)
 	}
-	if strings.TrimSpace(provider) != "" && normalizeAgentKind(provider) == "" {
+	if strings.TrimSpace(provider) != "" && domain.NormalizeAgentKind(provider) == "" {
 		return "", fmt.Errorf("loader default agent provider %q is not supported", provider)
 	}
 	return agent.Provider, nil

@@ -827,7 +827,7 @@ type agentExecutionConfig struct {
 }
 
 func (s *Service) resolveSessionAgentConfig(ctx context.Context, session *Session, requested string) agentExecutionConfig {
-	provider := normalizeAgentKind(requested)
+	provider := domain.NormalizeAgentKind(requested)
 	config := agentExecutionConfig{Provider: provider}
 	if session == nil {
 		return config
@@ -844,9 +844,9 @@ func (s *Service) resolveSessionAgentConfig(ctx context.Context, session *Sessio
 }
 
 func agentExecutionConfigFromDefinition(agent AgentDefinition, fallbackProvider string) agentExecutionConfig {
-	provider := normalizeAgentKind(agent.Provider)
+	provider := domain.NormalizeAgentKind(agent.Provider)
 	if provider == "" {
-		provider = normalizeAgentKind(fallbackProvider)
+		provider = domain.NormalizeAgentKind(fallbackProvider)
 	}
 	model := strings.TrimSpace(agent.Model)
 	if provider == "opencode" {
@@ -924,10 +924,6 @@ func llmJSONResponseText(text, outputSchemaJSON string) string {
 	return strings.TrimSpace(text)
 }
 
-func normalizeAgentKind(agent string) string {
-	return domain.NormalizeAgentKind(agent)
-}
-
 type agentExecResponse struct {
 	Provider   string `json:"provider"`
 	SessionID  string `json:"sessionId"`
@@ -971,7 +967,7 @@ func writeAgentPromptFile(config *appconfig.Config, session *Session, agent, mes
 	if err := os.MkdirAll(promptDir, 0o755); err != nil {
 		return "", fmt.Errorf("create agent prompt dir: %w", err)
 	}
-	name := fmt.Sprintf("%s-%d.txt", normalizeAgentKind(agent), time.Now().UTC().UnixNano())
+	name := fmt.Sprintf("%s-%d.txt", domain.NormalizeAgentKind(agent), time.Now().UTC().UnixNano())
 	hostPath := filepath.Join(promptDir, name)
 	if err := os.WriteFile(hostPath, []byte(message), 0o644); err != nil {
 		return "", fmt.Errorf("write agent prompt file: %w", err)
@@ -1027,7 +1023,7 @@ func writeAgentOutputSchemaFile(config *appconfig.Config, session *Session, agen
 	if err := os.MkdirAll(schemaDir, 0o755); err != nil {
 		return "", fmt.Errorf("create agent schema dir: %w", err)
 	}
-	name := fmt.Sprintf("%s-%d.json", normalizeAgentKind(agent), time.Now().UTC().UnixNano())
+	name := fmt.Sprintf("%s-%d.json", domain.NormalizeAgentKind(agent), time.Now().UTC().UnixNano())
 	hostPath := filepath.Join(schemaDir, name)
 	if err := os.WriteFile(hostPath, []byte(schemaJSON), 0o644); err != nil {
 		return "", fmt.Errorf("write agent schema file: %w", err)
