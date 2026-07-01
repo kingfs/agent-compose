@@ -349,7 +349,7 @@ func (s *ConfigStore) MarkEventPublished(ctx context.Context, eventID, claimID s
 	}
 	if affected == 0 {
 		if _, err := s.GetEvent(ctx, eventID); err != nil {
-			return fmt.Errorf("event %s not found", eventID)
+			return resourceError(ErrNotFound, "event", eventID, fmt.Sprintf("event %s not found", eventID), err)
 		}
 		return nil
 	}
@@ -385,7 +385,7 @@ func (s *ConfigStore) UpdateEventPayload(ctx context.Context, eventID, payloadJS
 		return fmt.Errorf("read event payload update count: %w", err)
 	}
 	if affected == 0 {
-		return fmt.Errorf("event %s not found", eventID)
+		return resourceError(ErrNotFound, "event", eventID, fmt.Sprintf("event %s not found", eventID), nil)
 	}
 	return nil
 }
@@ -495,7 +495,7 @@ func (s *ConfigStore) MarkEventNoSubscriber(ctx context.Context, eventID, claimI
 	}
 	if affected == 0 {
 		if _, err := s.GetEvent(ctx, eventID); err != nil {
-			return fmt.Errorf("event %s not found", eventID)
+			return resourceError(ErrNotFound, "event", eventID, fmt.Sprintf("event %s not found", eventID), err)
 		}
 		return nil
 	}
