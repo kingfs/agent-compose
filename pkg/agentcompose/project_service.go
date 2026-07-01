@@ -619,26 +619,11 @@ func projectServiceSourcePath(source *agentcomposev2.ProjectSource) string {
 }
 
 func issueFromComposeError(err error) *agentcomposev2.ProjectValidationIssue {
-	var validationErr *compose.ValidationError
-	if errors.As(err, &validationErr) {
-		return projectValidationIssue(validationErr.Path, validationErr.Message)
-	}
-	var parseErr *compose.ParseError
-	if errors.As(err, &parseErr) {
-		return projectValidationIssue(parseErr.Path, parseErr.Message)
-	}
-	return projectValidationIssue("spec", err.Error())
+	return api.IssueFromComposeError(err)
 }
 
 func projectValidationIssue(path, message string) *agentcomposev2.ProjectValidationIssue {
-	if strings.TrimSpace(path) == "" {
-		path = "spec"
-	}
-	return &agentcomposev2.ProjectValidationIssue{
-		Severity: agentcomposev2.ProjectValidationSeverity_PROJECT_VALIDATION_SEVERITY_ERROR,
-		Path:     path,
-		Message:  message,
-	}
+	return api.ProjectValidationIssue(path, message)
 }
 
 func specHashOrEmpty(normalized normalizedV2Project) string {
