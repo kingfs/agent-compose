@@ -18,6 +18,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
+	"agent-compose/pkg/agentcompose/images"
 	"agent-compose/pkg/imagecache"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
@@ -25,8 +26,9 @@ import (
 func TestOCIImageBackendListInspectRemoveWithMetadata(t *testing.T) {
 	cache := newAgentcomposeImageCache(t, "")
 	image := saveAgentcomposeOCIMetadata(t, cache, "team/app:latest")
-	backend := NewOCIImageBackend(cache)
-	backend.now = func() time.Time { return time.Date(2026, 6, 11, 13, 14, 15, 0, time.UTC) }
+	backend := NewOCIImageBackend(cache, images.WithOCIClock(func() time.Time {
+		return time.Date(2026, 6, 11, 13, 14, 15, 0, time.UTC)
+	}))
 
 	list, err := backend.ListImages(context.Background(), ImageListRequest{Query: "team"})
 	if err != nil {

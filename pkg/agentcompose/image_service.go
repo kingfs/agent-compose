@@ -179,7 +179,3 @@ func connectErrorForImageBackend(op, imageRef string, err error) error {
 func paginateImages(items []*agentcomposev2.Image, offset, limit uint32) ([]*agentcomposev2.Image, bool, uint32) {
 	return images.PaginateProtoImages(items, offset, limit)
 }
-
-func nonNegativeUint64(value int64) uint64 {
-	return images.NonNegativeUint64(value)
-}
