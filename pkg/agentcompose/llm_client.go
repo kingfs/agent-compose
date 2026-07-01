@@ -5,8 +5,6 @@ import (
 	appconfig "agent-compose/pkg/config"
 	"context"
 	"net/http"
-	"os"
-	"strings"
 
 	"github.com/samber/do/v2"
 )
@@ -85,80 +83,32 @@ func applyLLMForwardHeaders(dst http.Header, src http.Header) {
 }
 
 func (c *LLMClient) resolveSetting(ctx context.Context, fallback string, keys ...string) string {
-	if value := strings.TrimSpace(c.lookupGlobalEnv(ctx, keys...)); value != "" {
-		return value
-	}
-	for _, key := range keys {
-		if value := strings.TrimSpace(os.Getenv(strings.TrimSpace(key))); value != "" {
-			return value
-		}
-	}
-	if value := strings.TrimSpace(fallback); value != "" {
-		return value
-	}
-	return ""
+	return llms.ResolveSetting(ctx, c.globalEnvStore(), fallback, keys...)
 }
 
 func (c *LLMClient) resolveEndpoint(ctx context.Context) string {
-	return c.resolveEndpointForProtocol(ctx, c.resolveProtocol(ctx))
-}
-
-func (c *LLMClient) resolveEndpointForProtocol(ctx context.Context, protocol string) string {
-	if value := strings.TrimSpace(c.lookupGlobalEnv(ctx, "LLM_API_ENDPOINT")); value != "" {
-		return normalizeLLMAPIEndpointForProtocol(value, protocol)
-	}
-	if value := strings.TrimSpace(os.Getenv("LLM_API_ENDPOINT")); value != "" {
-		return normalizeLLMAPIEndpointForProtocol(value, protocol)
-	}
-	if c != nil && c.config != nil {
-		if value := strings.TrimSpace(c.config.LLMAPIEndpoint); value != "" {
-			return normalizeLLMAPIEndpointForProtocol(value, protocol)
-		}
-	}
-	return normalizeLLMAPIEndpointForProtocol("https://api.openai.com", protocol)
+	return llms.ResolveEndpoint(ctx, c.globalEnvStore(), c.clientConfig())
 }
 
 func (c *LLMClient) resolveProtocol(ctx context.Context) string {
-	protocol := strings.ToLower(strings.TrimSpace(c.lookupGlobalEnv(ctx, "LLM_API_PROTOCOL")))
-	if protocol == "" {
-		protocol = strings.ToLower(strings.TrimSpace(os.Getenv("LLM_API_PROTOCOL")))
-	}
-	if protocol == "" && c != nil && c.config != nil {
-		protocol = strings.ToLower(strings.TrimSpace(c.config.LLMAPIProtocol))
-	}
-	switch strings.ReplaceAll(protocol, "-", "_") {
-	case "", llmAPIProtocolResponses:
-		return llmAPIProtocolResponses
-	case "chat", "chat_completions", "chat_completion":
-		return llmAPIProtocolChatCompletions
-	default:
-		return protocol
-	}
+	return llms.ResolveProtocol(ctx, c.globalEnvStore(), c.clientConfig())
 }
 
-func (c *LLMClient) lookupGlobalEnv(ctx context.Context, keys ...string) string {
-	if c == nil || c.configDB == nil || len(keys) == 0 {
-		return ""
+func (c *LLMClient) globalEnvStore() llms.GlobalEnvStore {
+	if c == nil {
+		return nil
 	}
-	items, err := c.configDB.ListGlobalEnv(ctx)
-	if err != nil {
-		return ""
+	return c.configDB
+}
+
+func (c *LLMClient) clientConfig() llms.ClientConfig {
+	if c == nil || c.config == nil {
+		return llms.ClientConfig{}
 	}
-	for _, key := range keys {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		for _, item := range items {
-			if !strings.EqualFold(strings.TrimSpace(item.Name), key) {
-				continue
-			}
-			if value := strings.TrimSpace(item.Value); value != "" {
-				return value
-			}
-		}
+	return llms.ClientConfig{
+		Endpoint: c.config.LLMAPIEndpoint,
+		Protocol: c.config.LLMAPIProtocol,
 	}
-	return ""
 }
 
 func normalizeLLMAPIEndpoint(raw string) string {
