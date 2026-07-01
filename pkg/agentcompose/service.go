@@ -25,6 +25,7 @@ import (
 	"agent-compose/pkg/agentcompose/api"
 	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/execution"
+	"agent-compose/pkg/agentcompose/loaders"
 	"agent-compose/pkg/capproxy"
 	"agent-compose/pkg/imagecache"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
@@ -1116,10 +1117,7 @@ func validateLoaderCommandRequest(request LoaderCommandRequest) error {
 }
 
 func loaderCommandContext(ctx context.Context, timeoutMs int64) (context.Context, context.CancelFunc) {
-	if timeoutMs <= 0 {
-		return context.WithCancel(ctx)
-	}
-	return context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+	return loaders.CommandContext(ctx, timeoutMs)
 }
 
 func loaderCommandCellSource(request LoaderCommandRequest) string {
