@@ -37,9 +37,9 @@ Use only these status values:
 | Task | Module | Branch | Worktree | Assignee | Status | Validation | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 0 | Baseline and governance | `refactor/module-split-base` | main worktree | owner | `ready_for_review` | Docs only | Plan and tracker committed; integration branch created. |
-| 1 | Session | `refactor/session-module` | `../agent-compose-refactor-session` | Kant (`019f1e19-8561-7761-8b4c-395057e1bc04`) | `in_progress` | `go test ./pkg/agentcompose ./pkg/driver` | Wave 2 task; preserve session API and runtime behavior. |
-| 2 | Loader | `refactor/loader-module` | `../agent-compose-refactor-loader` | Boyle (`019f1e19-8589-7983-8896-efede4bb245e`) | `in_progress` | `go test ./pkg/agentcompose -run 'Loader|Webhook|Event'` | Wave 2 task; preserve loader DB schema and script API. |
-| 3 | Project and Run | `refactor/project-run-module` | `../agent-compose-refactor-project-run` | Fermat (`019f1e19-85be-7961-b584-4b70a44c9afb`) | `in_progress` | `go test ./pkg/agentcompose -run 'Project|Run|Compose'` | Wave 2 task; preserve ApplyProject and run semantics. |
+| 1 | Session | `refactor/session-module` | `../agent-compose-refactor-session` | Kant (`019f1e19-8561-7761-8b4c-395057e1bc04`) | `merged` | `go test ./pkg/agentcompose ./pkg/driver`; integration combo tests passed | Merged into integration; cleanup pending. |
+| 2 | Loader | `refactor/loader-module` | `../agent-compose-refactor-loader` | Boyle (`019f1e19-8589-7983-8896-efede4bb245e`) | `merged` | `go test ./pkg/agentcompose -run 'Loader|Webhook|Event'`; integration combo tests passed | Merged into integration; cleanup pending. |
+| 3 | Project and Run | `refactor/project-run-module` | `../agent-compose-refactor-project-run` | Fermat (`019f1e19-85be-7961-b584-4b70a44c9afb`) | `merged` | `go test ./pkg/agentcompose -run 'Project|Run|Compose'`; integration combo tests passed | Merged into integration; cleanup pending. |
 | 4 | Event and Webhook | `refactor/event-webhook-module` | removed | Hypatia (`019f1e08-16de-7653-a575-1b736b059058`) | `cleaned` | `go test ./pkg/agentcompose -run 'Event|Webhook|Topic'`; integration combo test passed | Merged into integration as `23577d6`; worktree cleaned. |
 | 5 | LLM | `refactor/llm-module` | removed | Faraday (`019f1e08-16b2-74e1-b1b7-fa3e37fca0ba`) | `cleaned` | `go test ./pkg/agentcompose -run 'LLM|Facade'`; integration combo test passed | Merged into integration as `8085896`; worktree cleaned. |
 | 6 | Image | `refactor/image-module` | removed | Newton (`019f1e08-1689-78e2-b0aa-67f0d03450d2`) | `cleaned` | `go test ./pkg/agentcompose -run 'Image'`; `go test ./pkg/imagecache`; integration combo test passed | Merged into integration as `bb23ed3`; worktree cleaned. |
@@ -57,9 +57,9 @@ Use only these status values:
 | 2 | `refactor/llm-module` | `merged` | Merged into integration as `8085896`. |
 | 3 | `refactor/event-webhook-module` | `merged` | Merged into integration as `23577d6`. |
 | 4 | `refactor/workspace-config-module` | `merged` | Merged into integration. |
-| 5 | `refactor/session-module` | `in_progress` | Wave 2; larger dependency surface. |
-| 6 | `refactor/loader-module` | `in_progress` | Wave 2; depends on session/event ports. |
-| 7 | `refactor/project-run-module` | `in_progress` | Wave 2; depends on loader/image ports. |
+| 5 | `refactor/session-module` | `merged` | Merged into integration. |
+| 6 | `refactor/loader-module` | `merged` | Merged into integration. |
+| 7 | `refactor/project-run-module` | `merged` | Merged into integration. |
 | 8 | `refactor/transport-module` | `not_started` | Should follow module service extraction. |
 | 9 | `refactor/sqlite-store-module` | `not_started` | Should follow repository interface stabilization. |
 | 10 | `refactor/cli-daemon-module` | `not_started` | Should follow app/transport stabilization. |
@@ -72,9 +72,9 @@ Use only these status values:
 | `/data/src/github.com/kingfs/agent-compose-refactor-image` | `refactor/image-module` | Newton (`019f1e08-1689-78e2-b0aa-67f0d03450d2`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-refactor-llm` | `refactor/llm-module` | Faraday (`019f1e08-16b2-74e1-b1b7-fa3e37fca0ba`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-refactor-event-webhook` | `refactor/event-webhook-module` | Hypatia (`019f1e08-16de-7653-a575-1b736b059058`) | `cleaned` | No |
-| `/data/src/github.com/kingfs/agent-compose-refactor-session` | `refactor/session-module` | Kant (`019f1e19-8561-7761-8b4c-395057e1bc04`) | `in_progress` | Yes |
-| `/data/src/github.com/kingfs/agent-compose-refactor-loader` | `refactor/loader-module` | Boyle (`019f1e19-8589-7983-8896-efede4bb245e`) | `in_progress` | Yes |
-| `/data/src/github.com/kingfs/agent-compose-refactor-project-run` | `refactor/project-run-module` | Fermat (`019f1e19-85be-7961-b584-4b70a44c9afb`) | `in_progress` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-session` | `refactor/session-module` | Kant (`019f1e19-8561-7761-8b4c-395057e1bc04`) | `merged` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-loader` | `refactor/loader-module` | Boyle (`019f1e19-8589-7983-8896-efede4bb245e`) | `merged` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-project-run` | `refactor/project-run-module` | Fermat (`019f1e19-85be-7961-b584-4b70a44c9afb`) | `merged` | Yes |
 | `/data/src/github.com/kingfs/agent-compose-refactor-workspace-config` | `refactor/workspace-config-module` | Raman (`019f1e19-8510-7890-aef0-bddfc55556af`) | `cleaned` | No |
 
 ## Integration Log
@@ -95,6 +95,10 @@ Use only these status values:
 | 2026-07-01 | Launched Wave 2 agents | workspace-config, session, loader, project-run | in progress | Raman=workspace/config/agentdef, Kant=session, Boyle=loader, Fermat=project/run. |
 | 2026-07-01 | Reviewed and merged workspace-config | `refactor/workspace-config-module` | passed | `go test ./pkg/agentcompose -run 'Workspace|Config|AgentDefinition|Agent'`; `go test ./pkg/agentcompose/workspace ./pkg/agentcompose/configsvc ./pkg/agentcompose/agentdef ./pkg/agentcompose/transport/http/workspace`. |
 | 2026-07-01 | Cleaned workspace-config worktree | `refactor/workspace-config-module` | done | Removed worktree after confirming clean status. |
+| 2026-07-01 | Reviewed and merged session | `refactor/session-module` | passed | Resolved `model.go` alias conflict with workspace/config; `go test ./pkg/agentcompose ./pkg/driver`. |
+| 2026-07-01 | Reviewed and merged loader | `refactor/loader-module` | passed | Resolved env alias integration; `go test ./pkg/agentcompose -run 'Loader|Webhook|Event'`. |
+| 2026-07-01 | Reviewed and merged project-run | `refactor/project-run-module` | passed | `go test ./pkg/agentcompose -run 'Project|Run|Compose'`; `go test ./pkg/agentcompose/project ./pkg/agentcompose/run`. |
+| 2026-07-01 | Ran Wave 2 integration tests | `refactor/module-split-integration` | passed | `go test ./pkg/agentcompose -run 'Workspace|Config|AgentDefinition|Agent|Project|Run|Compose|Loader|Webhook|Event'`; `go test ./pkg/agentcompose ./pkg/driver`; new package compile tests. |
 
 ## Current Owner Decisions
 
@@ -110,4 +114,4 @@ Use only these status values:
 
 | Date | Task | Blocker | Owner Decision | Status |
 | --- | --- | --- | --- | --- |
-| 2026-07-01 | Wave 2 | Awaiting worker completion reports | Owner will review branches, merge into integration in planned order, and clean worktrees after validation. | open |
+| 2026-07-01 | Wave 2 | Merged worktrees still need cleanup | Clean session, loader, and project-run worktrees after this progress update is committed. | open |
