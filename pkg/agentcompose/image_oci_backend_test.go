@@ -25,8 +25,7 @@ import (
 func TestOCIImageBackendListInspectRemoveWithMetadata(t *testing.T) {
 	cache := newAgentcomposeImageCache(t, "")
 	image := saveAgentcomposeOCIMetadata(t, cache, "team/app:latest")
-	backend := NewOCIImageBackend(cache)
-	backend.now = func() time.Time { return time.Date(2026, 6, 11, 13, 14, 15, 0, time.UTC) }
+	backend := NewOCIImageBackendWithClock(cache, func() time.Time { return time.Date(2026, 6, 11, 13, 14, 15, 0, time.UTC) })
 
 	list, err := backend.ListImages(context.Background(), ImageListRequest{Query: "team"})
 	if err != nil {
