@@ -1,4 +1,4 @@
-package agentcompose
+package llm
 
 import (
 	appconfig "agent-compose/pkg/config"
@@ -13,13 +13,12 @@ import (
 	pathpkg "path"
 	"strings"
 
-	llmpkg "agent-compose/pkg/agentcompose/llm"
 	"github.com/samber/do/v2"
 )
 
-type LLMClient struct {
+type Client struct {
 	config   *appconfig.Config
-	configDB *ConfigStore
+	configDB *Store
 	client   *http.Client
 }
 
@@ -112,33 +111,140 @@ type llmChatCompletionsChoice struct {
 	FinishReason string                    `json:"finish_reason"`
 }
 
-func NewLLMClient(di do.Injector) (*LLMClient, error) {
+func NewClient(di do.Injector) (*Client, error) {
 	config := do.MustInvoke[*appconfig.Config](di)
-	return &LLMClient{
+	return &Client{
 		config:   config,
-		configDB: do.MustInvoke[*ConfigStore](di),
+		configDB: do.MustInvoke[*Store](di),
 		client: &http.Client{
 			Timeout: config.LLMTimeout,
 		},
 	}, nil
 }
 
-func (c *LLMClient) Generate(ctx context.Context, prompt, model, outputSchemaJSON string) (LLMGenerateResult, error) {
-	result, err := llmpkg.NewClientWithDeps(c.config, c.configDB.llmStore(), c.client).Generate(ctx, prompt, model, outputSchemaJSON)
+func NewClientWithDeps(config *appconfig.Config, store *Store, client *http.Client) *Client {
+	if client == nil {
+		client = &http.Client{}
+		if config != nil {
+			client.Timeout = config.LLMTimeout
+		}
+	}
+	return &Client{config: config, configDB: store, client: client}
+}
+
+func (c *Client) Generate(ctx context.Context, prompt, model, outputSchemaJSON string) (LLMGenerateResult, error) {
+	if c == nil {
+		return LLMGenerateResult{}, fmt.Errorf("llm client is unavailable")
+	}
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return LLMGenerateResult{}, fmt.Errorf("prompt is required")
+	}
+	target, err := resolveLLMTarget(ctx, c.config, c.configDB, model)
 	if err != nil {
 		return LLMGenerateResult{}, err
 	}
+	protocol := normalizeLLMWireAPI(target.WireAPI)
+	endpoint := strings.TrimSpace(target.Endpoint)
+	if endpoint == "" {
+		return LLMGenerateResult{}, fmt.Errorf("llm api endpoint is not configured")
+	}
+	model = strings.TrimSpace(firstNonEmpty(model, target.Model.Name, target.Model.ID))
+	if model == "" {
+		return LLMGenerateResult{}, fmt.Errorf("llm model is required")
+	}
+	if protocol == llmAPIProtocolChatCompletions {
+		return c.generateChatCompletions(ctx, endpoint, prompt, model, outputSchemaJSON, target.Headers)
+	}
+	if protocol != llmAPIProtocolResponses {
+		return LLMGenerateResult{}, fmt.Errorf("unsupported llm api protocol %q", protocol)
+	}
+	request := llmAPIRequest{Model: model, Input: prompt}
+	if schema := strings.TrimSpace(outputSchemaJSON); schema != "" {
+		if !json.Valid([]byte(schema)) {
+			return LLMGenerateResult{}, fmt.Errorf("llm outputSchema must be valid JSON")
+		}
+		request.Text = &llmAPITextOptions{
+			Format: llmAPITextFormat{
+				Type:   "json_schema",
+				Name:   "agent_compose_llm_output",
+				Schema: json.RawMessage(schema),
+				Strict: true,
+			},
+		}
+	}
+	requestBody, err := json.Marshal(request)
+	if err != nil {
+		return LLMGenerateResult{}, fmt.Errorf("encode llm request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(requestBody))
+	if err != nil {
+		return LLMGenerateResult{}, fmt.Errorf("create llm request: %w", err)
+	}
+	applyLLMForwardHeaders(req.Header, target.Headers)
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return LLMGenerateResult{}, fmt.Errorf("call llm endpoint: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return LLMGenerateResult{}, fmt.Errorf("read llm response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		message := strings.TrimSpace(string(body))
+		var failure llmAPIResponse
+		if err := json.Unmarshal(body, &failure); err == nil && failure.Error != nil && strings.TrimSpace(failure.Error.Message) != "" {
+			message = strings.TrimSpace(failure.Error.Message)
+		}
+		if message == "" {
+			message = fmt.Sprintf("llm endpoint returned %s", resp.Status)
+		}
+		return LLMGenerateResult{}, fmt.Errorf("llm endpoint returned %s: %s", resp.Status, message)
+	}
+	var parsed llmAPIResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return LLMGenerateResult{}, fmt.Errorf("decode llm response: %w", err)
+	}
+	text := extractLLMResponseText(parsed)
+	if text == "" {
+		return LLMGenerateResult{}, fmt.Errorf("llm response did not contain text output")
+	}
 	return LLMGenerateResult{
-		Text:         result.Text,
-		Model:        result.Model,
-		ResponseID:   result.ResponseID,
-		FinishReason: result.FinishReason,
+		Text:         text,
+		Model:        firstNonEmpty(strings.TrimSpace(parsed.Model), model),
+		ResponseID:   strings.TrimSpace(parsed.ID),
+		FinishReason: extractLLMFinishReason(parsed),
 	}, nil
+}
+
+func (c *Client) ResolveSetting(ctx context.Context, fallback string, keys ...string) string {
+	return c.resolveSetting(ctx, fallback, keys...)
+}
+
+func (c *Client) ResolveEndpoint(ctx context.Context) string {
+	return c.resolveEndpoint(ctx)
+}
+
+func (c *Client) ResolveEndpointForProtocol(ctx context.Context, protocol string) string {
+	return c.resolveEndpointForProtocol(ctx, protocol)
+}
+
+func (c *Client) ResolveProtocol(ctx context.Context) string {
+	return c.resolveProtocol(ctx)
+}
+
+func NormalizeAPIEndpoint(raw string) string {
+	return normalizeLLMAPIEndpoint(raw)
+}
+
+func NormalizeAPIEndpointForProtocol(raw, protocol string) string {
+	return normalizeLLMAPIEndpointForProtocol(raw, protocol)
 }
 
 // generateChatCompletions calls an OpenAI-compatible Chat Completions backend for
 // unary prompt-to-response text generation (LLMService, scheduler.llm).
-func (c *LLMClient) generateChatCompletions(ctx context.Context, endpoint, prompt, model, outputSchemaJSON string, headers http.Header) (LLMGenerateResult, error) {
+func (c *Client) generateChatCompletions(ctx context.Context, endpoint, prompt, model, outputSchemaJSON string, headers http.Header) (LLMGenerateResult, error) {
 	messages := []llmChatCompletionsMessage{{Role: "user", Content: prompt}}
 	request := llmChatCompletionsRequest{Model: model, Messages: messages}
 	if schema := strings.TrimSpace(outputSchemaJSON); schema != "" {
@@ -208,7 +314,7 @@ func applyLLMForwardHeaders(dst http.Header, src http.Header) {
 	}
 }
 
-func (c *LLMClient) resolveSetting(ctx context.Context, fallback string, keys ...string) string {
+func (c *Client) resolveSetting(ctx context.Context, fallback string, keys ...string) string {
 	if value := strings.TrimSpace(c.lookupGlobalEnv(ctx, keys...)); value != "" {
 		return value
 	}
@@ -223,11 +329,11 @@ func (c *LLMClient) resolveSetting(ctx context.Context, fallback string, keys ..
 	return ""
 }
 
-func (c *LLMClient) resolveEndpoint(ctx context.Context) string {
+func (c *Client) resolveEndpoint(ctx context.Context) string {
 	return c.resolveEndpointForProtocol(ctx, c.resolveProtocol(ctx))
 }
 
-func (c *LLMClient) resolveEndpointForProtocol(ctx context.Context, protocol string) string {
+func (c *Client) resolveEndpointForProtocol(ctx context.Context, protocol string) string {
 	if value := strings.TrimSpace(c.lookupGlobalEnv(ctx, "LLM_API_ENDPOINT")); value != "" {
 		return normalizeLLMAPIEndpointForProtocol(value, protocol)
 	}
@@ -242,7 +348,7 @@ func (c *LLMClient) resolveEndpointForProtocol(ctx context.Context, protocol str
 	return normalizeLLMAPIEndpointForProtocol("https://api.openai.com", protocol)
 }
 
-func (c *LLMClient) resolveProtocol(ctx context.Context) string {
+func (c *Client) resolveProtocol(ctx context.Context) string {
 	protocol := strings.ToLower(strings.TrimSpace(c.lookupGlobalEnv(ctx, "LLM_API_PROTOCOL")))
 	if protocol == "" {
 		protocol = strings.ToLower(strings.TrimSpace(os.Getenv("LLM_API_PROTOCOL")))
@@ -260,7 +366,7 @@ func (c *LLMClient) resolveProtocol(ctx context.Context) string {
 	}
 }
 
-func (c *LLMClient) lookupGlobalEnv(ctx context.Context, keys ...string) string {
+func (c *Client) lookupGlobalEnv(ctx context.Context, keys ...string) string {
 	if c == nil || c.configDB == nil || len(keys) == 0 {
 		return ""
 	}
