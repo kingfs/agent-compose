@@ -46,7 +46,7 @@ Use only these status values:
 | 7 | Workspace, Config, Agent Definition | `refactor/workspace-config-module` | removed | Raman (`019f1e19-8510-7890-aef0-bddfc55556af`) | `cleaned` | `go test ./pkg/agentcompose -run 'Workspace|Config|AgentDefinition|Agent'`; new package compile tests passed | Merged into integration; worktree cleaned. |
 | 8 | Transport | `refactor/transport-module` | removed | Tesla (`019f1e41-2339-7c73-8fe9-156d4a619373`) | `cleaned` | `go test ./pkg/agentcompose ./cmd/agent-compose`; transport package compile tests passed | Merged into integration; worktree cleaned. |
 | 9 | SQLite Store | `refactor/sqlite-store-module` | removed | Einstein (`019f1e41-235f-7d53-b29f-6fae5683a893`) | `cleaned` | `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'`; `go test ./pkg/agentcompose/store/sqlite` | Merged into integration; worktree cleaned. |
-| 10 | CLI and Daemon | `refactor/cli-daemon-module` | `../agent-compose-refactor-cli-daemon` | Confucius (`019f1e58-e119-7372-b0bf-583d78d94edf`) | `merged` | `go test ./cmd/agent-compose`; `go test ./internal/...` | Merged into integration; cleanup pending. |
+| 10 | CLI and Daemon | `refactor/cli-daemon-module` | removed | Confucius (`019f1e58-e119-7372-b0bf-583d78d94edf`) | `cleaned` | `go test ./cmd/agent-compose`; `go test ./internal/...` | Merged into integration; worktree cleaned. |
 | 11 | Compatibility Cleanup | `refactor/module-split-cleanup` | `../agent-compose-refactor-cleanup` | owner | `not_started` | `task test` | Remove wrappers after all splits merge. |
 
 ## Planned Merge Order
@@ -78,7 +78,7 @@ Use only these status values:
 | `/data/src/github.com/kingfs/agent-compose-refactor-workspace-config` | `refactor/workspace-config-module` | Raman (`019f1e19-8510-7890-aef0-bddfc55556af`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-refactor-transport` | `refactor/transport-module` | Tesla (`019f1e41-2339-7c73-8fe9-156d4a619373`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-refactor-sqlite-store` | `refactor/sqlite-store-module` | Einstein (`019f1e41-235f-7d53-b29f-6fae5683a893`) | `cleaned` | No |
-| `/data/src/github.com/kingfs/agent-compose-refactor-cli-daemon` | `refactor/cli-daemon-module` | Confucius (`019f1e58-e119-7372-b0bf-583d78d94edf`) | `merged` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-cli-daemon` | `refactor/cli-daemon-module` | Confucius (`019f1e58-e119-7372-b0bf-583d78d94edf`) | `cleaned` | No |
 
 ## Integration Log
 
@@ -111,6 +111,7 @@ Use only these status values:
 | 2026-07-01 | Prepared Wave 4 assignment | cli-daemon | in progress | Owner will create worktree from latest integration and launch worker. |
 | 2026-07-01 | Launched CLI/Daemon agent | `refactor/cli-daemon-module` | in progress | Confucius=CLI/Daemon. |
 | 2026-07-01 | Reviewed and merged CLI/Daemon | `refactor/cli-daemon-module` | passed | `go test ./cmd/agent-compose`; `go test ./internal/...`. |
+| 2026-07-01 | Cleaned CLI/Daemon worktree | `refactor/cli-daemon-module` | done | Removed worktree after confirming clean status. |
 
 ## Current Owner Decisions
 
@@ -128,4 +129,4 @@ Use only these status values:
 
 | Date | Task | Blocker | Owner Decision | Status |
 | --- | --- | --- | --- | --- |
-| 2026-07-01 | Wave 4 | CLI/Daemon worktree still needs cleanup | Clean CLI/Daemon worktree after this progress update is committed, then start final cleanup. | open |
+| 2026-07-01 | Cleanup | Compatibility cleanup not started yet | Create cleanup worktree and remove temporary wrappers where safe, then run final verification. | open |
