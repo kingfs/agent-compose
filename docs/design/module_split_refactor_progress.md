@@ -46,7 +46,7 @@ Use only these status values:
 | 7 | Workspace, Config, Agent Definition | `refactor/workspace-config-module` | removed | Raman (`019f1e19-8510-7890-aef0-bddfc55556af`) | `cleaned` | `go test ./pkg/agentcompose -run 'Workspace|Config|AgentDefinition|Agent'`; new package compile tests passed | Merged into integration; worktree cleaned. |
 | 8 | Transport | `refactor/transport-module` | removed | Tesla (`019f1e41-2339-7c73-8fe9-156d4a619373`) | `cleaned` | `go test ./pkg/agentcompose ./cmd/agent-compose`; transport package compile tests passed | Merged into integration; worktree cleaned. |
 | 9 | SQLite Store | `refactor/sqlite-store-module` | removed | Einstein (`019f1e41-235f-7d53-b29f-6fae5683a893`) | `cleaned` | `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'`; `go test ./pkg/agentcompose/store/sqlite` | Merged into integration; worktree cleaned. |
-| 10 | CLI and Daemon | `refactor/cli-daemon-module` | `../agent-compose-refactor-cli-daemon` | pending launch | `assigned` | `go test ./cmd/agent-compose` and `go test ./internal/...` | Wave 4 task; preserve command flags/output and daemon startup behavior. |
+| 10 | CLI and Daemon | `refactor/cli-daemon-module` | `../agent-compose-refactor-cli-daemon` | Confucius (`019f1e58-e119-7372-b0bf-583d78d94edf`) | `in_progress` | `go test ./cmd/agent-compose` and `go test ./internal/...` | Wave 4 task; preserve command flags/output and daemon startup behavior. |
 | 11 | Compatibility Cleanup | `refactor/module-split-cleanup` | `../agent-compose-refactor-cleanup` | owner | `not_started` | `task test` | Remove wrappers after all splits merge. |
 
 ## Planned Merge Order
@@ -62,7 +62,7 @@ Use only these status values:
 | 7 | `refactor/project-run-module` | `merged` | Merged into integration. |
 | 8 | `refactor/transport-module` | `merged` | Merged into integration. |
 | 9 | `refactor/sqlite-store-module` | `merged` | Merged into integration. |
-| 10 | `refactor/cli-daemon-module` | `assigned` | Wave 4; should follow app/transport stabilization. |
+| 10 | `refactor/cli-daemon-module` | `in_progress` | Wave 4; should follow app/transport stabilization. |
 | 11 | `refactor/module-split-cleanup` | `not_started` | Final wrapper cleanup. |
 
 ## Worktree Registry
@@ -78,7 +78,7 @@ Use only these status values:
 | `/data/src/github.com/kingfs/agent-compose-refactor-workspace-config` | `refactor/workspace-config-module` | Raman (`019f1e19-8510-7890-aef0-bddfc55556af`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-refactor-transport` | `refactor/transport-module` | Tesla (`019f1e41-2339-7c73-8fe9-156d4a619373`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-refactor-sqlite-store` | `refactor/sqlite-store-module` | Einstein (`019f1e41-235f-7d53-b29f-6fae5683a893`) | `cleaned` | No |
-| `/data/src/github.com/kingfs/agent-compose-refactor-cli-daemon` | `refactor/cli-daemon-module` | pending launch | `assigned` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-cli-daemon` | `refactor/cli-daemon-module` | Confucius (`019f1e58-e119-7372-b0bf-583d78d94edf`) | `in_progress` | Yes |
 
 ## Integration Log
 
@@ -109,6 +109,7 @@ Use only these status values:
 | 2026-07-01 | Reviewed and merged sqlite-store | `refactor/sqlite-store-module` | passed | `go test ./pkg/agentcompose/store/sqlite`; `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'`. |
 | 2026-07-01 | Cleaned Wave 3 worktrees | transport, sqlite-store | done | Removed worktrees after confirming clean status. |
 | 2026-07-01 | Prepared Wave 4 assignment | cli-daemon | in progress | Owner will create worktree from latest integration and launch worker. |
+| 2026-07-01 | Launched CLI/Daemon agent | `refactor/cli-daemon-module` | in progress | Confucius=CLI/Daemon. |
 
 ## Current Owner Decisions
 
@@ -126,4 +127,4 @@ Use only these status values:
 
 | Date | Task | Blocker | Owner Decision | Status |
 | --- | --- | --- | --- | --- |
-| 2026-07-01 | Wave 4 | CLI/Daemon worktree not created yet | Start CLI/Daemon split, then compatibility cleanup and final verification. | open |
+| 2026-07-01 | Wave 4 | Awaiting CLI/Daemon worker completion report | Owner will review branch, merge into integration, clean worktree, then start final cleanup. | open |
