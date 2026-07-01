@@ -29,20 +29,20 @@ Use only these status values:
 
 | Purpose | Branch | Status | Notes |
 | --- | --- | --- | --- |
-| Baseline governance | `refactor/module-split-base` | `in_progress` | Created from `main`; governance docs are the Phase 0 payload. |
-| Integration | `refactor/module-split-integration` | `not_started` | Merge module branches here in planned order. |
+| Baseline governance | `refactor/module-split-base` | `ready_for_review` | Governance docs committed; module branches are created from this baseline. |
+| Integration | `refactor/module-split-integration` | `in_progress` | Created from baseline; module branches will merge here in planned order. |
 
 ## Task Board
 
 | Task | Module | Branch | Worktree | Assignee | Status | Validation | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0 | Baseline and governance | `refactor/module-split-base` | main worktree | owner | `in_progress` | Docs only | Plan and tracker created; pending commit and integration branch creation. |
+| 0 | Baseline and governance | `refactor/module-split-base` | main worktree | owner | `ready_for_review` | Docs only | Plan and tracker committed; integration branch created. |
 | 1 | Session | `refactor/session-module` | `../agent-compose-refactor-session` | unassigned | `not_started` | `go test ./pkg/agentcompose ./pkg/driver` | Preserve session API and runtime behavior. |
 | 2 | Loader | `refactor/loader-module` | `../agent-compose-refactor-loader` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Loader|Webhook|Event'` | Preserve loader DB schema and script API. |
 | 3 | Project and Run | `refactor/project-run-module` | `../agent-compose-refactor-project-run` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Project|Run|Compose'` | Preserve ApplyProject and run semantics. |
-| 4 | Event and Webhook | `refactor/event-webhook-module` | `../agent-compose-refactor-event-webhook` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Event|Webhook|Topic'` | Preserve event dispatch and webhook behavior. |
-| 5 | LLM | `refactor/llm-module` | `../agent-compose-refactor-llm` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'LLM|Facade'` | Preserve LLM provider and facade behavior. |
-| 6 | Image | `refactor/image-module` | `../agent-compose-refactor-image` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Image'` and `go test ./pkg/imagecache` | Preserve Docker and OCI image behavior. |
+| 4 | Event and Webhook | `refactor/event-webhook-module` | `../agent-compose-refactor-event-webhook` | event-webhook agent | `assigned` | `go test ./pkg/agentcompose -run 'Event|Webhook|Topic'` | Wave 1 task; preserve event dispatch and webhook behavior. |
+| 5 | LLM | `refactor/llm-module` | `../agent-compose-refactor-llm` | llm agent | `assigned` | `go test ./pkg/agentcompose -run 'LLM|Facade'` | Wave 1 task; preserve LLM provider and facade behavior. |
+| 6 | Image | `refactor/image-module` | `../agent-compose-refactor-image` | image agent | `assigned` | `go test ./pkg/agentcompose -run 'Image'` and `go test ./pkg/imagecache` | Wave 1 task; preserve Docker and OCI image behavior. |
 | 7 | Workspace, Config, Agent Definition | `refactor/workspace-config-module` | `../agent-compose-refactor-workspace-config` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Workspace|Config|AgentDefinition|Agent'` | Preserve config and file workspace behavior. |
 | 8 | Transport | `refactor/transport-module` | `../agent-compose-refactor-transport` | unassigned | `not_started` | `go test ./pkg/agentcompose ./cmd/agent-compose` | Start after Phase 1 merges. |
 | 9 | SQLite Store | `refactor/sqlite-store-module` | `../agent-compose-refactor-sqlite-store` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'` | Start after Phase 1 merges. |
@@ -53,9 +53,9 @@ Use only these status values:
 
 | Order | Branch | Status | Merge Notes |
 | --- | --- | --- | --- |
-| 1 | `refactor/image-module` | `not_started` | Low dependency surface. |
-| 2 | `refactor/llm-module` | `not_started` | Keep facade route compatibility. |
-| 3 | `refactor/event-webhook-module` | `not_started` | Needed by loader but can expose stable ports. |
+| 1 | `refactor/image-module` | `assigned` | Low dependency surface. |
+| 2 | `refactor/llm-module` | `assigned` | Keep facade route compatibility. |
+| 3 | `refactor/event-webhook-module` | `assigned` | Needed by loader but can expose stable ports. |
 | 4 | `refactor/workspace-config-module` | `not_started` | Watch interaction with session/project. |
 | 5 | `refactor/session-module` | `not_started` | Larger dependency surface. |
 | 6 | `refactor/loader-module` | `not_started` | Depends on session/event ports. |
@@ -69,7 +69,9 @@ Use only these status values:
 
 | Worktree Path | Branch | Owner | Status | Cleanup Required |
 | --- | --- | --- | --- | --- |
-| TBD | TBD | TBD | `not_started` | No |
+| `/data/src/github.com/kingfs/agent-compose-refactor-image` | `refactor/image-module` | image agent | `assigned` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-llm` | `refactor/llm-module` | llm agent | `assigned` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-event-webhook` | `refactor/event-webhook-module` | event-webhook agent | `assigned` | Yes |
 
 ## Integration Log
 
@@ -77,6 +79,9 @@ Use only these status values:
 | --- | --- | --- | --- | --- |
 | 2026-07-01 | Created plan and progress tracker | `refactor/module-split-base` | in progress | No production code moved. |
 | 2026-07-01 | Created baseline branch | `refactor/module-split-base` | done | Existing `.gitignore` change remains uncommitted and outside refactor scope. |
+| 2026-07-01 | Committed governance docs | `refactor/module-split-base` | done | Commit `a2ea0b1`. |
+| 2026-07-01 | Created integration branch | `refactor/module-split-integration` | done | Branch created from baseline. |
+| 2026-07-01 | Created Wave 1 worktrees | image, llm, event-webhook | done | Ready for parallel module work. |
 
 ## Current Owner Decisions
 
@@ -85,9 +90,10 @@ Use only these status values:
 - Do not start transport or SQLite physical store split until Phase 1 module boundaries are mostly merged.
 - Prefer merging lower-dependency modules first: image, LLM, event/webhook.
 - Avoid API, schema, runtime, and CLI behavior changes during this refactor.
+- Wave 1 assignments are image, LLM, and event/webhook.
 
 ## Blockers
 
 | Date | Task | Blocker | Owner Decision | Status |
 | --- | --- | --- | --- | --- |
-| 2026-07-01 | All | Integration branch and module worktrees not created yet | Commit governance docs on baseline branch, then create integration branch and assign Wave 1 worktrees. | open |
+| 2026-07-01 | Wave 1 | Implementation agents have not started module work yet | Worktrees and branches are ready; owner can launch agents with the task briefs from the plan. | open |
