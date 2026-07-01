@@ -1,6 +1,7 @@
 package session
 
 import (
+	"agent-compose/pkg/agentcompose/configsvc"
 	"strings"
 	"time"
 )
@@ -20,11 +21,7 @@ type SessionTag struct {
 	Value string `json:"value"`
 }
 
-type SessionEnvVar struct {
-	Name   string `json:"name"`
-	Value  string `json:"value,omitempty"`
-	Secret bool   `json:"secret,omitempty"`
-}
+type SessionEnvVar = configsvc.EnvVar
 
 func EnvMap(groups ...[]SessionEnvVar) map[string]string {
 	var merged []SessionEnvVar
