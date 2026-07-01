@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"agent-compose/pkg/agentcompose/execution"
+	"agent-compose/pkg/agentcompose/llms"
 	appconfig "agent-compose/pkg/config"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
 )
@@ -59,14 +60,14 @@ func TestRuntimeLLMUseGenericResponsesTextPartsRequiresExplicitProviderFlag(t *t
 		Provider: LLMProvider{ID: "not-qwen", Name: "qwen-compatible-v2"},
 		Model:    LLMModel{ID: "alias-qwen", Name: "qwen3.7-max"},
 	}
-	if runtimeLLMUseGenericResponsesTextParts(target, protocolbridge.ProtocolOpenAIResponses) {
+	if llms.UseGenericResponsesTextParts(target, protocolbridge.ProtocolOpenAIResponses) {
 		t.Fatalf("generic responses text parts should not be enabled by provider/model names")
 	}
 	target.Provider.UseGenericResponsesTextParts = true
-	if !runtimeLLMUseGenericResponsesTextParts(target, protocolbridge.ProtocolOpenAIResponses) {
+	if !llms.UseGenericResponsesTextParts(target, protocolbridge.ProtocolOpenAIResponses) {
 		t.Fatalf("generic responses text parts should be enabled by explicit provider flag")
 	}
-	if runtimeLLMUseGenericResponsesTextParts(target, protocolbridge.ProtocolOpenAIChat) {
+	if llms.UseGenericResponsesTextParts(target, protocolbridge.ProtocolOpenAIChat) {
 		t.Fatalf("generic responses text parts should only apply to OpenAI Responses upstreams")
 	}
 }
@@ -1422,13 +1423,13 @@ func TestGuestRuntimeLLMBaseURLDockerRequiresReachableBaseForLoopback(t *testing
 }
 
 func TestForbiddenRuntimeLLMHeaderDoesNotOvermatchAuthSubstring(t *testing.T) {
-	if forbiddenRuntimeLLMHeader("X-Authored-By") {
+	if llms.ForbiddenRuntimeHeader("X-Authored-By") {
 		t.Fatalf("X-Authored-By should not be treated as a sensitive auth header")
 	}
-	if !forbiddenRuntimeLLMHeader("X-Runtime-Auth") {
+	if !llms.ForbiddenRuntimeHeader("X-Runtime-Auth") {
 		t.Fatalf("X-Runtime-Auth should be treated as sensitive")
 	}
-	if !forbiddenRuntimeLLMHeader("X-Session-Token") {
+	if !llms.ForbiddenRuntimeHeader("X-Session-Token") {
 		t.Fatalf("X-Session-Token should be treated as sensitive")
 	}
 }

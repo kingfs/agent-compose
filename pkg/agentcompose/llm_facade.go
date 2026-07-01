@@ -61,7 +61,7 @@ func (s *Service) handleRuntimeLLMAnthropicMessages(c echo.Context) error {
 
 func (s *Service) handleRuntimeLLM(c echo.Context, inboundProtocol protocolbridge.Protocol, facadeWireAPI string) error {
 	sessionID := strings.TrimSpace(c.Param("session_id"))
-	rawToken := runtimeLLMFacadeToken(c.Request().Header)
+	rawToken := llms.RuntimeFacadeToken(c.Request().Header)
 	if sessionID == "" || rawToken == "" {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "llm facade token is required"})
 	}
@@ -87,7 +87,7 @@ func (s *Service) handleRuntimeLLM(c echo.Context, inboundProtocol protocolbridg
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "read llm request failed"})
 	}
-	inboundAdapter, err := llmProtocolAdapter(inboundProtocol)
+	inboundAdapter, err := llms.ProtocolAdapter(inboundProtocol)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
@@ -110,7 +110,7 @@ func (s *Service) handleRuntimeLLM(c echo.Context, inboundProtocol protocolbridg
 	if token.ProviderID != "" && token.ProviderID != target.Provider.ID {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "llm facade token provider mismatch"})
 	}
-	upstreamProtocol, upstreamEndpoint, err := llmUpstreamProtocolAndEndpoint(target)
+	upstreamProtocol, upstreamEndpoint, err := llms.UpstreamProtocolAndEndpoint(target)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
@@ -131,7 +131,7 @@ func (s *Service) handleRuntimeLLM(c echo.Context, inboundProtocol protocolbridg
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "create upstream llm request failed"})
 	}
-	copyRuntimeLLMHeaders(upstreamReq.Header, c.Request().Header)
+	llms.CopyRuntimeHeaders(upstreamReq.Header, c.Request().Header)
 	applyLLMForwardHeaders(upstreamReq.Header, target.Headers)
 	resp, err := s.llm.client.Do(upstreamReq)
 	if err != nil {
@@ -139,14 +139,14 @@ func (s *Service) handleRuntimeLLM(c echo.Context, inboundProtocol protocolbridg
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		copyRuntimeLLMResponseHeaders(c.Response().Header(), resp.Header)
+		llms.CopyRuntimeResponseHeaders(c.Response().Header(), resp.Header)
 		c.Response().WriteHeader(resp.StatusCode)
-		if err := copyRuntimeLLMResponseBody(c.Response().Writer, resp); err != nil && !errors.Is(err, http.ErrAbortHandler) {
+		if err := llms.CopyRuntimeResponseBody(c.Response().Writer, resp); err != nil && !errors.Is(err, http.ErrAbortHandler) {
 			return err
 		}
 		return nil
 	}
-	if runtimeLLMResponseShouldFlush(resp.Header) {
+	if llms.RuntimeResponseShouldFlush(resp.Header) {
 		return bridgeRuntimeLLMStreamResponse(c, resp, inboundProtocol, upstreamProtocol, normalizeLLMProviderType(target.Provider.ProviderType), target.Model.Name)
 	}
 	upstreamRespBody, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
@@ -158,7 +158,7 @@ func (s *Service) handleRuntimeLLM(c echo.Context, inboundProtocol protocolbridg
 		raw, status := inboundAdapter.EncodeError(err)
 		return writeRuntimeLLMEncodedError(c, raw, status)
 	}
-	copyRuntimeLLMResponseHeaders(c.Response().Header(), resp.Header)
+	llms.CopyRuntimeResponseHeaders(c.Response().Header(), resp.Header)
 	c.Response().Header().Set("Content-Type", "application/json")
 	c.Response().Header().Del("Content-Length")
 	c.Response().WriteHeader(resp.StatusCode)
@@ -171,15 +171,15 @@ func (s *Service) proxyRuntimeLLMTransparent(c echo.Context, upstreamEndpoint st
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "create upstream llm request failed"})
 	}
-	copyRuntimeLLMHeaders(upstreamReq.Header, c.Request().Header)
+	llms.CopyRuntimeHeaders(upstreamReq.Header, c.Request().Header)
 	applyLLMForwardHeaders(upstreamReq.Header, target.Headers)
 	resp, err := s.llm.client.Do(upstreamReq)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "call upstream llm failed"})
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 && runtimeLLMUseGenericResponsesTextParts(target, upstreamProtocol) {
-		if runtimeLLMResponseShouldFlush(resp.Header) {
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 && llms.UseGenericResponsesTextParts(target, upstreamProtocol) {
+		if llms.RuntimeResponseShouldFlush(resp.Header) {
 			return bridgeRuntimeLLMStreamResponse(c, resp, protocolbridge.ProtocolOpenAIResponses, protocolbridge.ProtocolOpenAIResponses, llmProviderFamilyOpenAI, target.Model.Name)
 		}
 		upstreamRespBody, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
@@ -192,16 +192,16 @@ func (s *Service) proxyRuntimeLLMTransparent(c echo.Context, upstreamEndpoint st
 			raw, status := adapter.EncodeError(err)
 			return writeRuntimeLLMEncodedError(c, raw, status)
 		}
-		copyRuntimeLLMResponseHeaders(c.Response().Header(), resp.Header)
+		llms.CopyRuntimeResponseHeaders(c.Response().Header(), resp.Header)
 		c.Response().Header().Set("Content-Type", "application/json")
 		c.Response().Header().Del("Content-Length")
 		c.Response().WriteHeader(resp.StatusCode)
 		_, err = c.Response().Writer.Write(clientBody)
 		return err
 	}
-	copyRuntimeLLMResponseHeaders(c.Response().Header(), resp.Header)
+	llms.CopyRuntimeResponseHeaders(c.Response().Header(), resp.Header)
 	c.Response().WriteHeader(resp.StatusCode)
-	if err := copyRuntimeLLMResponseBody(c.Response().Writer, resp); err != nil && !errors.Is(err, http.ErrAbortHandler) {
+	if err := llms.CopyRuntimeResponseBody(c.Response().Writer, resp); err != nil && !errors.Is(err, http.ErrAbortHandler) {
 		return err
 	}
 	return nil
@@ -213,7 +213,7 @@ func rewriteRuntimeLLMRequestForUpstream(body []byte, target LLMResolvedTarget, 
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, err
 	}
-	changed := normalizeRuntimeLLMRawRequestForUpstream(payload, upstreamProtocol, runtimeLLMUseGenericResponsesTextParts(target, upstreamProtocol))
+	changed := normalizeRuntimeLLMRawRequestForUpstream(payload, upstreamProtocol, llms.UseGenericResponsesTextParts(target, upstreamProtocol))
 	var current string
 	if model != "" {
 		if err := json.Unmarshal(payload["model"], &current); err != nil || current != model {
@@ -229,10 +229,6 @@ func rewriteRuntimeLLMRequestForUpstream(body []byte, target LLMResolvedTarget, 
 		return body, nil
 	}
 	return json.Marshal(payload)
-}
-
-func runtimeLLMUseGenericResponsesTextParts(target LLMResolvedTarget, upstreamProtocol protocolbridge.Protocol) bool {
-	return llms.UseGenericResponsesTextParts(target, upstreamProtocol)
 }
 
 func normalizeRuntimeLLMRawRequestForUpstream(payload map[string]json.RawMessage, upstreamProtocol protocolbridge.Protocol, genericResponsesTextParts bool) bool {
@@ -342,24 +338,16 @@ func normalizeRuntimeLLMRawRoleItems(payload map[string]json.RawMessage, field s
 	return true
 }
 
-func llmProtocolAdapter(protocol protocolbridge.Protocol) (protocolbridge.Adapter, error) {
-	return llms.ProtocolAdapter(protocol)
-}
-
-func llmUpstreamProtocolAndEndpoint(target LLMResolvedTarget) (protocolbridge.Protocol, string, error) {
-	return llms.UpstreamProtocolAndEndpoint(target)
-}
-
 func encodeRuntimeLLMUpstreamRequest(inboundProtocol, upstreamProtocol protocolbridge.Protocol, target LLMResolvedTarget, req *protocolbridge.LLMRequest) ([]byte, error) {
 	if inboundProtocol == upstreamProtocol {
-		adapter, err := llmProtocolAdapter(upstreamProtocol)
+		adapter, err := llms.ProtocolAdapter(upstreamProtocol)
 		if err != nil {
 			return nil, err
 		}
 		return adapter.EncodeRequest(normalizeRuntimeLLMRequestForUpstream(req, upstreamProtocol), protocolbridge.EncodeRequestOptions{Model: target.Model.Name})
 	}
-	if runtimeLLMProtocolsShareFamily(inboundProtocol, upstreamProtocol) {
-		adapter, err := llmProtocolAdapter(upstreamProtocol)
+	if llms.ProtocolsShareFamily(inboundProtocol, upstreamProtocol) {
+		adapter, err := llms.ProtocolAdapter(upstreamProtocol)
 		if err != nil {
 			return nil, err
 		}
@@ -394,13 +382,13 @@ func normalizeRuntimeLLMRequestForUpstream(req *protocolbridge.LLMRequest, upstr
 }
 
 func encodeRuntimeLLMClientResponse(inboundProtocol, upstreamProtocol protocolbridge.Protocol, target LLMResolvedTarget, upstreamBody []byte) ([]byte, error) {
-	inboundAdapter, err := llmProtocolAdapter(inboundProtocol)
+	inboundAdapter, err := llms.ProtocolAdapter(inboundProtocol)
 	if err != nil {
 		return nil, err
 	}
 	var llmResp *protocolbridge.LLMResponse
 	if inboundProtocol == upstreamProtocol {
-		upstreamAdapter, err := llmProtocolAdapter(upstreamProtocol)
+		upstreamAdapter, err := llms.ProtocolAdapter(upstreamProtocol)
 		if err != nil {
 			return nil, err
 		}
@@ -409,8 +397,8 @@ func encodeRuntimeLLMClientResponse(inboundProtocol, upstreamProtocol protocolbr
 			return nil, err
 		}
 	} else {
-		if runtimeLLMProtocolsShareFamily(inboundProtocol, upstreamProtocol) {
-			upstreamAdapter, err := llmProtocolAdapter(upstreamProtocol)
+		if llms.ProtocolsShareFamily(inboundProtocol, upstreamProtocol) {
+			upstreamAdapter, err := llms.ProtocolAdapter(upstreamProtocol)
 			if err != nil {
 				return nil, err
 			}
@@ -432,10 +420,6 @@ func encodeRuntimeLLMClientResponse(inboundProtocol, upstreamProtocol protocolbr
 	return inboundAdapter.EncodeResponse(llmResp, protocolbridge.EncodeResponseOptions{Model: target.Model.Name})
 }
 
-func runtimeLLMProtocolsShareFamily(left, right protocolbridge.Protocol) bool {
-	return llms.ProtocolsShareFamily(left, right)
-}
-
 func writeRuntimeLLMEncodedError(c echo.Context, raw []byte, status int) error {
 	if status == 0 {
 		status = http.StatusBadRequest
@@ -448,7 +432,7 @@ func bridgeRuntimeLLMStreamResponse(c echo.Context, resp *http.Response, inbound
 	if err != nil {
 		return err
 	}
-	copyRuntimeLLMResponseHeaders(c.Response().Header(), resp.Header)
+	llms.CopyRuntimeResponseHeaders(c.Response().Header(), resp.Header)
 	c.Response().Header().Set("Content-Type", "text/event-stream")
 	c.Response().Header().Del("Content-Length")
 	c.Response().Header().Del("Content-Encoding")
@@ -456,7 +440,7 @@ func bridgeRuntimeLLMStreamResponse(c echo.Context, resp *http.Response, inbound
 	flusher, _ := c.Response().Writer.(http.Flusher)
 	writeEvents := func(events []protocolbridge.RawStreamEvent) error {
 		for _, event := range events {
-			if err := writeRawSSEEvent(c.Response().Writer, event); err != nil {
+			if err := llms.WriteRawSSEEvent(c.Response().Writer, event); err != nil {
 				return err
 			}
 			if flusher != nil {
@@ -497,7 +481,7 @@ func bridgeRuntimeLLMStreamResponse(c echo.Context, resp *http.Response, inbound
 		}
 		return writeEvents(events)
 	}
-	err = readRawSSEEvents(resp.Body, func(event protocolbridge.RawStreamEvent) error {
+	err = llms.ReadRawSSEEvents(resp.Body, func(event protocolbridge.RawStreamEvent) error {
 		parts, decodeErr := decoder.Decode(event)
 		if decodeErr != nil {
 			return decodeErr
@@ -534,7 +518,7 @@ func bridgeRuntimeLLMStreamResponse(c echo.Context, resp *http.Response, inbound
 
 func runtimeLLMStreamBridge(inboundProtocol, upstreamProtocol protocolbridge.Protocol, upstreamFamily string, model string) (protocolbridge.StreamDecoder, protocolbridge.StreamEncoder, error) {
 	if inboundProtocol == upstreamProtocol {
-		adapter, err := llmProtocolAdapter(inboundProtocol)
+		adapter, err := llms.ProtocolAdapter(inboundProtocol)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -548,12 +532,12 @@ func runtimeLLMStreamBridge(inboundProtocol, upstreamProtocol protocolbridge.Pro
 		}
 		return decoder, encoder, nil
 	}
-	if runtimeLLMProtocolsShareFamily(inboundProtocol, upstreamProtocol) {
-		upstreamAdapter, err := llmProtocolAdapter(upstreamProtocol)
+	if llms.ProtocolsShareFamily(inboundProtocol, upstreamProtocol) {
+		upstreamAdapter, err := llms.ProtocolAdapter(upstreamProtocol)
 		if err != nil {
 			return nil, nil, err
 		}
-		inboundAdapter, err := llmProtocolAdapter(inboundProtocol)
+		inboundAdapter, err := llms.ProtocolAdapter(inboundProtocol)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -580,36 +564,4 @@ func runtimeLLMStreamBridge(inboundProtocol, upstreamProtocol protocolbridge.Pro
 		return nil, nil, err
 	}
 	return decoder, encoder, nil
-}
-
-func runtimeLLMFacadeToken(header http.Header) string {
-	return llms.RuntimeFacadeToken(header)
-}
-
-func copyRuntimeLLMHeaders(dst http.Header, src http.Header) {
-	llms.CopyRuntimeHeaders(dst, src)
-}
-
-func copyRuntimeLLMResponseHeaders(dst http.Header, src http.Header) {
-	llms.CopyRuntimeResponseHeaders(dst, src)
-}
-
-func copyRuntimeLLMResponseBody(dst io.Writer, resp *http.Response) error {
-	return llms.CopyRuntimeResponseBody(dst, resp)
-}
-
-func runtimeLLMResponseShouldFlush(header http.Header) bool {
-	return llms.RuntimeResponseShouldFlush(header)
-}
-
-func forbiddenRuntimeLLMHeader(name string) bool {
-	return llms.ForbiddenRuntimeHeader(name)
-}
-
-func readRawSSEEvents(r io.Reader, handle func(protocolbridge.RawStreamEvent) error) error {
-	return llms.ReadRawSSEEvents(r, handle)
-}
-
-func writeRawSSEEvent(w io.Writer, event protocolbridge.RawStreamEvent) error {
-	return llms.WriteRawSSEEvent(w, event)
 }
