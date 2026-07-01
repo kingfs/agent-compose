@@ -686,40 +686,33 @@ func projectSchedulerBuildsFromProjects(builds []projects.SchedulerBuild) []proj
 }
 
 func (s *Service) projectManagedSchedulerBuildsFromSpec(ctx context.Context, project ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]projectManagedSchedulerBuild, error) {
-	builds := make([]projectManagedSchedulerBuild, 0)
+	builds, err := projects.NewSchedulerBuildsFromSpec(project, revision, spec)
+	if err != nil {
+		return nil, err
+	}
+	inlineScripts := make(map[string]string, len(spec.Agents))
 	for _, agent := range spec.Agents {
-		record, ok, err := NewProjectSchedulerRecordFromSpec(project.ID, revision, agent)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
+		if agent.Scheduler == nil {
 			continue
 		}
-		loader, err := projectManagedLoaderFromScheduler(project, record, agent)
+		if script := strings.TrimSpace(agent.Scheduler.Script); script != "" {
+			inlineScripts[agent.Name] = agent.Scheduler.Script
+		}
+	}
+	for i := range builds {
+		script := inlineScripts[builds[i].Scheduler.AgentName]
+		if strings.TrimSpace(script) == "" {
+			continue
+		}
+		validation, err := s.validateInlineSchedulerScript(ctx, builds[i].Scheduler.AgentName, script)
 		if err != nil {
 			return nil, err
 		}
-		validationTriggers := loader.Triggers
-		if strings.TrimSpace(agent.Scheduler.Script) != "" {
-			validation, err := s.validateInlineSchedulerScript(ctx, agent.Name, agent.Scheduler.Script)
-			if err != nil {
-				return nil, err
-			}
-			validationTriggers = validation.Triggers
-			loader.Triggers = validation.Triggers
-			record.TriggerCount = len(validation.Triggers)
-		}
-		builds = append(builds, projectManagedSchedulerBuild{
-			scheduler:          record,
-			loader:             loader,
-			validationTriggers: validationTriggers,
-		})
+		builds[i].ValidationTriggers = validation.Triggers
+		builds[i].Loader.Triggers = validation.Triggers
+		builds[i].Scheduler.TriggerCount = len(validation.Triggers)
 	}
-	return builds, nil
-}
-
-func projectManagedLoaderFromScheduler(project ProjectRecord, scheduler ProjectSchedulerRecord, agent compose.NormalizedAgentSpec) (Loader, error) {
-	return projects.NewManagedLoaderFromScheduler(project, scheduler, agent)
+	return projectSchedulerBuildsFromProjects(builds), nil
 }
 
 func projectManagedLoaderTriggersAndScript(projectID, agentName, schedulerName string, scheduler *compose.NormalizedSchedulerSpec) ([]LoaderTrigger, string, error) {
