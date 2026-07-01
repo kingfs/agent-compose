@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	projectpkg "agent-compose/pkg/agentcompose/project"
 )
 
 type ProjectSessionRelationFilter struct {
@@ -115,34 +117,9 @@ func ListProjectSessionStatuses(ctx context.Context, configDB *ConfigStore, stor
 }
 
 func normalizeProjectRunStatusFilter(statuses []string) []string {
-	seen := make(map[string]struct{}, len(statuses))
-	normalized := make([]string, 0, len(statuses))
-	for _, status := range statuses {
-		status = strings.ToLower(strings.TrimSpace(status))
-		if status == "" {
-			continue
-		}
-		switch status {
-		case ProjectRunStatusPending, ProjectRunStatusRunning, ProjectRunStatusSucceeded, ProjectRunStatusFailed, ProjectRunStatusCanceled:
-		default:
-			continue
-		}
-		if _, ok := seen[status]; ok {
-			continue
-		}
-		seen[status] = struct{}{}
-		normalized = append(normalized, status)
-	}
-	return normalized
+	return projectpkg.NormalizeRunStatusFilter(statuses)
 }
 
 func placeholders(count int) string {
-	if count <= 0 {
-		return ""
-	}
-	values := make([]string, count)
-	for i := range values {
-		values[i] = "?"
-	}
-	return strings.Join(values, ",")
+	return projectpkg.Placeholders(count)
 }
