@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	transporthttp "agent-compose/pkg/agentcompose/transport/http"
 	webhookhandler "agent-compose/pkg/agentcompose/webhook"
 
 	"github.com/labstack/echo/v4"
@@ -101,7 +102,15 @@ type topicEventJSON struct {
 }
 
 func registerWebhookRoutes(app *echo.Echo, service *Service) {
-	webhookhandler.RegisterRoutes(app, webhookhandler.NewHandler(service.config.WebhookBodyLimitBytes, service.configDB))
+	transporthttp.RegisterWebhookRoutes(app, service)
+}
+
+func (s *Service) WebhookBodyLimitBytes() int64 {
+	return s.config.WebhookBodyLimitBytes
+}
+
+func (s *Service) WebhookStore() webhookhandler.Store {
+	return s.configDB
 }
 
 func webhookTokenHash(token string) string {

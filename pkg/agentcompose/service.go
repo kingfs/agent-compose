@@ -2,12 +2,10 @@ package agentcompose
 
 import (
 	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,15 +15,13 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
 	"github.com/samber/do/v2"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	transportapp "agent-compose/pkg/agentcompose/app"
 	"agent-compose/pkg/capproxy"
 	"agent-compose/pkg/imagecache"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
-	"agent-compose/proto/agentcompose/v1/agentcomposev1connect"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 type Service struct {
@@ -49,19 +45,6 @@ type Service struct {
 	startedAt  time.Time
 	startOnce  sync.Once
 	startErr   error
-	agentcomposev1connect.UnimplementedSessionServiceHandler
-	agentcomposev1connect.UnimplementedKernelServiceHandler
-	agentcomposev1connect.UnimplementedAgentServiceHandler
-	agentcomposev1connect.UnimplementedAgentDefinitionServiceHandler
-	agentcomposev1connect.UnimplementedLLMServiceHandler
-	agentcomposev1connect.UnimplementedConfigServiceHandler
-	agentcomposev1connect.UnimplementedLoaderServiceHandler
-	agentcomposev1connect.UnimplementedDashboardServiceHandler
-	agentcomposev1connect.UnimplementedCapabilityServiceHandler
-	agentcomposev2connect.UnimplementedProjectServiceHandler
-	agentcomposev2connect.UnimplementedRunServiceHandler
-	agentcomposev2connect.UnimplementedExecServiceHandler
-	agentcomposev2connect.UnimplementedImageServiceHandler
 }
 
 func NewService(di do.Injector) (*Service, error) {
@@ -138,41 +121,7 @@ func Register(di do.Injector) {
 	do.Provide(di, NewLoaderManager)
 	do.Provide(di, NewService)
 
-	app := do.MustInvoke[*echo.Echo](di)
-	service := do.MustInvoke[*Service](di)
-
-	path, handler := agentcomposev1connect.NewSessionServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewKernelServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewAgentServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewAgentDefinitionServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewLLMServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewConfigServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewLoaderServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewDashboardServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewCapabilityServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-
-	path, handler = agentcomposev2connect.NewProjectServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev2connect.NewRunServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev2connect.NewExecServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev2connect.NewImageServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-
-	registerWebhookRoutes(app, service)
-	registerRuntimeLLMFacadeRoutes(app, service)
-	registerProxyRoutes(app, service)
-	registerWorkspaceRoutes(app, service)
+	transportapp.RegisterRoutes(di, do.MustInvoke[*Service](di))
 }
 
 func StartBackground(di do.Injector) error {
@@ -521,19 +470,6 @@ func (s *Service) GetSession(ctx context.Context, req *connect.Request[agentcomp
 
 func (s *Service) ListSessions(ctx context.Context, req *connect.Request[agentcomposev1.ListSessionsRequest]) (*connect.Response[agentcomposev1.ListSessionsResponse], error) {
 	return s.sessions.ListSessions(ctx, req)
-}
-
-func jupyterTargetReachable(proxyState ProxyState, timeout time.Duration) bool {
-	_, port := driverpkg.JupyterConnectTarget(toDriverProxyState(proxyState))
-	if port <= 0 {
-		return false
-	}
-	conn, err := net.DialTimeout("tcp", driverpkg.JupyterConnectAddress(toDriverProxyState(proxyState)), timeout)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
 }
 
 func (s *Service) ensureSessionProxyReady(ctx context.Context, sessionID string) (*Session, ProxyState, error) {

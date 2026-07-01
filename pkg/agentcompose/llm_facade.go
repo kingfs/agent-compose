@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	transporthttp "agent-compose/pkg/agentcompose/transport/http"
 	runtimellm "agent-compose/pkg/agentcompose/transport/http/runtimellm"
 	protocolbridge "github.com/chaitin/ai-api-protocol-bridge"
 	"github.com/labstack/echo/v4"
@@ -24,9 +25,19 @@ func IsRuntimeLLMFacadeRequest(r *http.Request) bool {
 }
 
 func registerRuntimeLLMFacadeRoutes(app *echo.Echo, service *Service) {
-	app.POST("/api/runtime/sessions/:session_id/llm/openai/v1/responses", service.handleRuntimeLLMResponses)
-	app.POST("/api/runtime/sessions/:session_id/llm/openai/v1/chat/completions", service.handleRuntimeLLMChatCompletions)
-	app.POST("/api/runtime/sessions/:session_id/llm/anthropic/v1/messages", service.handleRuntimeLLMAnthropicMessages)
+	transporthttp.RegisterRuntimeLLMFacadeRoutes(app, service)
+}
+
+func (s *Service) HandleRuntimeLLMResponses(c echo.Context) error {
+	return s.handleRuntimeLLMResponses(c)
+}
+
+func (s *Service) HandleRuntimeLLMChatCompletions(c echo.Context) error {
+	return s.handleRuntimeLLMChatCompletions(c)
+}
+
+func (s *Service) HandleRuntimeLLMAnthropicMessages(c echo.Context) error {
+	return s.handleRuntimeLLMAnthropicMessages(c)
 }
 
 func (s *Service) handleRuntimeLLMResponses(c echo.Context) error {
