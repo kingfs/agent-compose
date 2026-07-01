@@ -1,6 +1,7 @@
 package agentcompose
 
 import (
+	"agent-compose/pkg/agentcompose/configsvc"
 	appconfig "agent-compose/pkg/config"
 	"context"
 	"database/sql"
@@ -13,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
 	"github.com/samber/do/v2"
@@ -697,31 +697,7 @@ func (s *ConfigStore) ensureWorkspaceNotReferencedByAgent(ctx context.Context, w
 }
 
 func normalizeEnvItems(items []SessionEnvVar) []SessionEnvVar {
-	if len(items) == 0 {
-		return nil
-	}
-	merged := make(map[string]SessionEnvVar, len(items))
-	for _, item := range items {
-		name := strings.TrimSpace(item.Name)
-		if name == "" {
-			continue
-		}
-		item.Name = name
-		merged[name] = item
-	}
-	if len(merged) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(merged))
-	for key := range merged {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	result := make([]SessionEnvVar, 0, len(keys))
-	for _, key := range keys {
-		result = append(result, merged[key])
-	}
-	return result
+	return configsvc.NormalizeEnvItems(items)
 }
 
 func encodeAgentEnvJSON(items []SessionEnvVar) (string, error) {
@@ -813,30 +789,7 @@ func mergeEnvItems(globalItems, sessionItems []SessionEnvVar) []SessionEnvVar {
 }
 
 func normalizeWorkspaceConfig(item WorkspaceConfig, assignID bool) (WorkspaceConfig, error) {
-	item.ID = strings.TrimSpace(item.ID)
-	item.Name = strings.TrimSpace(item.Name)
-	item.Type = strings.ToLower(strings.TrimSpace(item.Type))
-	item.ConfigJSON = strings.TrimSpace(item.ConfigJSON)
-	item.Comment = strings.TrimSpace(item.Comment)
-	if assignID && item.ID == "" {
-		item.ID = uuid.NewString()
-	}
-	if item.ID == "" {
-		return WorkspaceConfig{}, fmt.Errorf("workspace config id is required")
-	}
-	if item.Name == "" {
-		return WorkspaceConfig{}, fmt.Errorf("workspace config name is required")
-	}
-	if item.Type == "" {
-		return WorkspaceConfig{}, fmt.Errorf("workspace config type is required")
-	}
-	if item.Type != "git" && item.Type != "file" {
-		return WorkspaceConfig{}, fmt.Errorf("unsupported workspace config type %q", item.Type)
-	}
-	if item.ConfigJSON == "" {
-		item.ConfigJSON = "{}"
-	}
-	return item, nil
+	return configsvc.NormalizeWorkspaceConfig(item, assignID)
 }
 
 func scanWorkspaceConfig(scan func(dest ...any) error) (WorkspaceConfig, error) {

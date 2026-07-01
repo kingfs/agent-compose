@@ -1,6 +1,7 @@
 package agentcompose
 
 import (
+	"agent-compose/pkg/agentcompose/configsvc"
 	"strings"
 	"time"
 )
@@ -20,11 +21,7 @@ type SessionTag struct {
 	Value string `json:"value"`
 }
 
-type SessionEnvVar struct {
-	Name   string `json:"name"`
-	Value  string `json:"value,omitempty"`
-	Secret bool   `json:"secret,omitempty"`
-}
+type SessionEnvVar = configsvc.EnvVar
 
 func sessionEnvMap(groups ...[]SessionEnvVar) map[string]string {
 	var merged []SessionEnvVar
@@ -116,15 +113,7 @@ func restoreSessionTransientFields(dst, src *Session) {
 	}
 }
 
-type WorkspaceConfig struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Type       string    `json:"type"`
-	ConfigJSON string    `json:"config_json"`
-	Comment    string    `json:"comment,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-}
+type WorkspaceConfig = configsvc.WorkspaceConfig
 
 type NotebookCell struct {
 	ID             string           `json:"id"`
