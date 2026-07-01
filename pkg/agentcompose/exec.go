@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -476,69 +475,19 @@ func normalizeCellType(cellType string) (string, error) {
 }
 
 func cellExecSpec(cellType, guestCellDir string) (scriptName, command string, args []string) {
-	switch cellType {
-	case CellTypeShell:
-		return "cell.sh", "bash", []string{filepath.Join(guestCellDir, "cell.sh")}
-	case CellTypePython:
-		return "cell.py", "python3", []string{"-u", filepath.Join(guestCellDir, "cell.py")}
-	default:
-		return "cell.js", "node", []string{filepath.Join(guestCellDir, "cell.js")}
-	}
+	return execution.CellExecSpec(cellType, guestCellDir)
 }
 
 func writeCellArtifacts(cellDir, source string, result ExecResult) error {
-	files := map[string]string{
-		"source.txt":   source,
-		"stdout.txt":   result.Stdout,
-		"stderr.txt":   result.Stderr,
-		"output.txt":   result.Output,
-		"exitcode.txt": fmt.Sprintf("%d\n", result.ExitCode),
-	}
-	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(cellDir, name), []byte(content), 0o644); err != nil {
-			return fmt.Errorf("write cell artifact %s: %w", name, err)
-		}
-	}
-	return nil
+	return execution.WriteCellArtifacts(cellDir, source, result)
 }
 
 func writeJSONArtifact(path string, value any) error {
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode json artifact: %w", err)
-	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		return fmt.Errorf("write json artifact: %w", err)
-	}
-	return nil
+	return execution.WriteJSONArtifact(path, value)
 }
 
 func recoverExecResultFromCellArtifacts(cellDir string, fallback ExecResult) ExecResult {
-	recovered := fallback
-	for _, item := range []struct {
-		name string
-		set  func(string)
-	}{
-		{name: "stdout.txt", set: func(value string) { recovered.Stdout = value }},
-		{name: "stderr.txt", set: func(value string) { recovered.Stderr = value }},
-		{name: "output.txt", set: func(value string) { recovered.Output = value }},
-	} {
-		data, err := os.ReadFile(filepath.Join(cellDir, item.name))
-		if err != nil {
-			continue
-		}
-		item.set(string(data))
-	}
-	if data, err := os.ReadFile(filepath.Join(cellDir, "exitcode.txt")); err == nil {
-		if exitCode, parseErr := strconv.Atoi(strings.TrimSpace(string(data))); parseErr == nil {
-			recovered.ExitCode = exitCode
-			recovered.Success = exitCode == 0
-		}
-	}
-	if strings.TrimSpace(recovered.Output) == "" {
-		recovered.Output = recovered.Stdout + recovered.Stderr
-	}
-	return recovered
+	return execution.RecoverExecResultFromCellArtifacts(cellDir, fallback)
 }
 
 func firstNonEmpty(values ...string) string {
@@ -579,12 +528,7 @@ func guestSessionHome(config *appconfig.Config) string {
 }
 
 func firstNonZeroInt(values ...int) int {
-	for _, value := range values {
-		if value != 0 {
-			return value
-		}
-	}
-	return 0
+	return execution.FirstNonZeroInt(values...)
 }
 
 func mergeExecResults(primary, fallback ExecResult) ExecResult {
