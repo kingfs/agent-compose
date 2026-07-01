@@ -3,6 +3,7 @@ package agentcompose
 import (
 	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/projects"
+	"agent-compose/pkg/agentcompose/runs"
 	"context"
 	"fmt"
 	"strings"
@@ -74,37 +75,7 @@ func (s *ConfigStore) ListProjectRunsForSession(ctx context.Context, sessionID s
 }
 
 func ListProjectSessionStatuses(ctx context.Context, configDB *ConfigStore, store *Store, filter ProjectSessionRelationFilter) ([]ProjectSessionStatus, error) {
-	if configDB == nil {
-		return nil, fmt.Errorf("config store is required")
-	}
-	if store == nil {
-		return nil, fmt.Errorf("session store is required")
-	}
-	runs, err := configDB.ListProjectSessionRuns(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	items := make([]ProjectSessionStatus, 0, len(runs))
-	seenSessions := make(map[string]struct{}, len(runs))
-	for _, run := range runs {
-		sessionID := strings.TrimSpace(run.SessionID)
-		if sessionID == "" {
-			continue
-		}
-		if _, ok := seenSessions[sessionID]; ok {
-			continue
-		}
-		seenSessions[sessionID] = struct{}{}
-		item := ProjectSessionStatus{Run: run}
-		session, err := store.GetSession(ctx, sessionID)
-		if err != nil {
-			item.SessionMissing = true
-		} else {
-			item.Session = session
-		}
-		items = append(items, item)
-	}
-	return items, nil
+	return runs.ListProjectSessionStatuses(ctx, configDB, store, filter)
 }
 
 func normalizeProjectRunStatusFilter(statuses []string) []string {
