@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -471,13 +470,6 @@ type loaderTriggerEventMetadata struct {
 	Sequence      int64
 	CorrelationID string
 }
-
-type loaderRunOptions struct {
-	retryWhenBusy  bool
-	alreadyEntered bool
-}
-
-var errLoaderRunBusyForRetry = errors.New("loader is already running")
 
 func (m *LoaderManager) updateTriggerEventDelivery(ctx context.Context, run LoaderRunSummary) {
 	if m == nil || m.configDB == nil {
