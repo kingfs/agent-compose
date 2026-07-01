@@ -44,8 +44,8 @@ Use only these status values:
 | 5 | LLM | `refactor/llm-module` | removed | Faraday (`019f1e08-16b2-74e1-b1b7-fa3e37fca0ba`) | `cleaned` | `go test ./pkg/agentcompose -run 'LLM|Facade'`; integration combo test passed | Merged into integration as `8085896`; worktree cleaned. |
 | 6 | Image | `refactor/image-module` | removed | Newton (`019f1e08-1689-78e2-b0aa-67f0d03450d2`) | `cleaned` | `go test ./pkg/agentcompose -run 'Image'`; `go test ./pkg/imagecache`; integration combo test passed | Merged into integration as `bb23ed3`; worktree cleaned. |
 | 7 | Workspace, Config, Agent Definition | `refactor/workspace-config-module` | removed | Raman (`019f1e19-8510-7890-aef0-bddfc55556af`) | `cleaned` | `go test ./pkg/agentcompose -run 'Workspace|Config|AgentDefinition|Agent'`; new package compile tests passed | Merged into integration; worktree cleaned. |
-| 8 | Transport | `refactor/transport-module` | `../agent-compose-refactor-transport` | unassigned | `not_started` | `go test ./pkg/agentcompose ./cmd/agent-compose` | Start after Phase 1 merges. |
-| 9 | SQLite Store | `refactor/sqlite-store-module` | `../agent-compose-refactor-sqlite-store` | unassigned | `not_started` | `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'` | Start after Phase 1 merges. |
+| 8 | Transport | `refactor/transport-module` | `../agent-compose-refactor-transport` | pending launch | `assigned` | `go test ./pkg/agentcompose ./cmd/agent-compose` | Wave 3 task; preserve API routes and response behavior. |
+| 9 | SQLite Store | `refactor/sqlite-store-module` | `../agent-compose-refactor-sqlite-store` | pending launch | `assigned` | `go test ./pkg/agentcompose -run 'Store|Migration|Loader|Project|Event|LLM'` | Wave 3 task; preserve DB schema and repository behavior. |
 | 10 | CLI and Daemon | `refactor/cli-daemon-module` | `../agent-compose-refactor-cli-daemon` | unassigned | `not_started` | `go test ./cmd/agent-compose` and `go test ./internal/...` | Start after app/transport structure settles. |
 | 11 | Compatibility Cleanup | `refactor/module-split-cleanup` | `../agent-compose-refactor-cleanup` | owner | `not_started` | `task test` | Remove wrappers after all splits merge. |
 
@@ -60,8 +60,8 @@ Use only these status values:
 | 5 | `refactor/session-module` | `merged` | Merged into integration. |
 | 6 | `refactor/loader-module` | `merged` | Merged into integration. |
 | 7 | `refactor/project-run-module` | `merged` | Merged into integration. |
-| 8 | `refactor/transport-module` | `not_started` | Should follow module service extraction. |
-| 9 | `refactor/sqlite-store-module` | `not_started` | Should follow repository interface stabilization. |
+| 8 | `refactor/transport-module` | `assigned` | Wave 3; should follow module service extraction. |
+| 9 | `refactor/sqlite-store-module` | `assigned` | Wave 3; should follow repository interface stabilization. |
 | 10 | `refactor/cli-daemon-module` | `not_started` | Should follow app/transport stabilization. |
 | 11 | `refactor/module-split-cleanup` | `not_started` | Final wrapper cleanup. |
 
@@ -76,6 +76,8 @@ Use only these status values:
 | `/data/src/github.com/kingfs/agent-compose-refactor-loader` | `refactor/loader-module` | Boyle (`019f1e19-8589-7983-8896-efede4bb245e`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-refactor-project-run` | `refactor/project-run-module` | Fermat (`019f1e19-85be-7961-b584-4b70a44c9afb`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-refactor-workspace-config` | `refactor/workspace-config-module` | Raman (`019f1e19-8510-7890-aef0-bddfc55556af`) | `cleaned` | No |
+| `/data/src/github.com/kingfs/agent-compose-refactor-transport` | `refactor/transport-module` | pending launch | `assigned` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-refactor-sqlite-store` | `refactor/sqlite-store-module` | pending launch | `assigned` | Yes |
 
 ## Integration Log
 
@@ -100,6 +102,7 @@ Use only these status values:
 | 2026-07-01 | Reviewed and merged project-run | `refactor/project-run-module` | passed | `go test ./pkg/agentcompose -run 'Project|Run|Compose'`; `go test ./pkg/agentcompose/project ./pkg/agentcompose/run`. |
 | 2026-07-01 | Ran Wave 2 integration tests | `refactor/module-split-integration` | passed | `go test ./pkg/agentcompose -run 'Workspace|Config|AgentDefinition|Agent|Project|Run|Compose|Loader|Webhook|Event'`; `go test ./pkg/agentcompose ./pkg/driver`; new package compile tests. |
 | 2026-07-01 | Cleaned remaining Wave 2 worktrees | session, loader, project-run | done | Removed worktrees after confirming clean status. |
+| 2026-07-01 | Prepared Wave 3 assignments | transport, sqlite-store | in progress | Owner will create worktrees from latest integration and launch workers. |
 
 ## Current Owner Decisions
 
@@ -110,6 +113,7 @@ Use only these status values:
 - Avoid API, schema, runtime, and CLI behavior changes during this refactor.
 - Wave 1 assignments are image, LLM, and event/webhook.
 - Wave 2 assignments are workspace/config/agent definition, session, loader, and project/run.
+- Wave 3 assignments are transport and SQLite store.
 
 ## Blockers
 
