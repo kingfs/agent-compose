@@ -552,75 +552,23 @@ func normalizeProjectRunStatus(status string) string {
 }
 
 func scanProject(scan func(dest ...any) error) (ProjectRecord, error) {
-	var item ProjectRecord
-	var createdAtRaw any
-	var updatedAtRaw any
-	var removedAtRaw any
-	if err := scan(&item.ID, &item.Name, &item.SourcePath, &item.SourceJSON, &item.CurrentRevision, &item.SpecHash, &createdAtRaw, &updatedAtRaw, &removedAtRaw); err != nil {
-		return ProjectRecord{}, fmt.Errorf("scan project: %w", err)
-	}
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
-	item.RemovedAt = parseStoredTime(removedAtRaw)
-	return item, nil
+	return projects.ScanProject(scan)
 }
 
 func scanProjectRevision(scan func(dest ...any) error) (ProjectRevisionRecord, error) {
-	var item ProjectRevisionRecord
-	var createdAtRaw any
-	if err := scan(&item.ProjectID, &item.Revision, &item.SpecHash, &item.SpecJSON, &createdAtRaw); err != nil {
-		return ProjectRevisionRecord{}, fmt.Errorf("scan project revision: %w", err)
-	}
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	return item, nil
+	return projects.ScanProjectRevision(scan)
 }
 
 func scanProjectAgent(scan func(dest ...any) error) (ProjectAgentRecord, error) {
-	var item ProjectAgentRecord
-	var schedulerEnabled int
-	var createdAtRaw any
-	var updatedAtRaw any
-	if err := scan(&item.ProjectID, &item.AgentName, &item.ManagedAgentID, &item.Revision, &item.Provider, &item.Model, &item.Image, &item.Driver, &schedulerEnabled, &item.SpecJSON, &createdAtRaw, &updatedAtRaw); err != nil {
-		return ProjectAgentRecord{}, fmt.Errorf("scan project agent: %w", err)
-	}
-	item.SchedulerEnabled = schedulerEnabled != 0
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
-	return item, nil
+	return projects.ScanProjectAgent(scan)
 }
 
 func scanProjectScheduler(scan func(dest ...any) error) (ProjectSchedulerRecord, error) {
-	var item ProjectSchedulerRecord
-	var enabled int
-	var createdAtRaw any
-	var updatedAtRaw any
-	if err := scan(&item.ProjectID, &item.SchedulerID, &item.AgentName, &item.ManagedLoaderID, &item.Revision, &enabled, &item.TriggerCount, &item.SpecJSON, &createdAtRaw, &updatedAtRaw); err != nil {
-		return ProjectSchedulerRecord{}, fmt.Errorf("scan project scheduler: %w", err)
-	}
-	item.Enabled = enabled != 0
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
-	return item, nil
+	return projects.ScanProjectScheduler(scan)
 }
 
 func scanProjectRun(scan func(dest ...any) error) (ProjectRunRecord, error) {
-	var item ProjectRunRecord
-	var startedAtRaw any
-	var completedAtRaw any
-	var createdAtRaw any
-	var updatedAtRaw any
-	if err := scan(
-		&item.RunID, &item.ProjectID, &item.ProjectName, &item.ProjectRevision, &item.AgentName, &item.ManagedAgentID, &item.Source, &item.SchedulerID, &item.TriggerID, &item.Status,
-		&item.SessionID, &item.ExitCode, &item.Error, &item.Prompt, &item.Output, &item.ResultJSON, &item.LogsPath, &item.ArtifactsDir, &item.CleanupError, &item.Driver, &item.ImageRef,
-		&startedAtRaw, &completedAtRaw, &item.DurationMs, &createdAtRaw, &updatedAtRaw,
-	); err != nil {
-		return ProjectRunRecord{}, fmt.Errorf("scan project run: %w", err)
-	}
-	item.StartedAt = parseStoredUnixTimeAuto(asInt64Time(startedAtRaw))
-	item.CompletedAt = parseStoredUnixTimeAuto(asInt64Time(completedAtRaw))
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
-	return item, nil
+	return projects.ScanProjectRun(scan)
 }
 
 func selectProjectRunSQL() string {
@@ -654,36 +602,9 @@ func isProjectStableIdentifier(value string) bool {
 }
 
 func asInt64Time(value any) int64 {
-	switch typed := value.(type) {
-	case nil:
-		return 0
-	case int64:
-		return typed
-	case int:
-		return int64(typed)
-	case float64:
-		return int64(typed)
-	case []byte:
-		return asInt64Time(string(typed))
-	case string:
-		parsed, _ := parseInt64String(typed)
-		return parsed
-	default:
-		return 0
-	}
+	return projects.AsInt64Time(value)
 }
 
 func parseInt64String(value string) (int64, bool) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return 0, false
-	}
-	var parsed int64
-	for _, r := range value {
-		if r < '0' || r > '9' {
-			return 0, false
-		}
-		parsed = parsed*10 + int64(r-'0')
-	}
-	return parsed, true
+	return projects.ParseInt64String(value)
 }
