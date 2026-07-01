@@ -8,10 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
+	projectpkg "agent-compose/pkg/agentcompose/project"
 	"agent-compose/pkg/compose"
 )
 
@@ -130,185 +130,42 @@ type ProjectListResult struct {
 }
 
 func StableProjectID(name, sourcePath string) (string, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "", fmt.Errorf("project name is required")
-	}
-	if !isProjectStableIdentifier(name) {
-		return "", fmt.Errorf("project name %q is not a stable identifier", name)
-	}
-	return stableReadableID("project", name, name+"|"+normalizeProjectSourcePath(sourcePath)), nil
+	return projectpkg.StableProjectID(name, sourcePath)
 }
 
 func StableManagedAgentID(projectID, agentName string) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	if projectID == "" || agentName == "" {
-		return "", fmt.Errorf("project id and agent name are required")
-	}
-	if !isProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	return stableReadableID("agent", agentName, projectID+"|"+agentName), nil
+	return projectpkg.StableManagedAgentID(projectID, agentName)
 }
 
 func StableProjectSchedulerID(projectID, agentName, schedulerName string) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	schedulerName = strings.TrimSpace(schedulerName)
-	if schedulerName == "" {
-		schedulerName = "default"
-	}
-	if projectID == "" || agentName == "" {
-		return "", fmt.Errorf("project id and agent name are required")
-	}
-	if !isProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	if !isProjectStableIdentifier(schedulerName) {
-		return "", fmt.Errorf("scheduler name %q is not a stable identifier", schedulerName)
-	}
-	return stableReadableID("scheduler", agentName+"-"+schedulerName, projectID+"|"+agentName+"|"+schedulerName), nil
+	return projectpkg.StableSchedulerID(projectID, agentName, schedulerName)
 }
 
 func StableManagedLoaderID(projectID, agentName, schedulerName string) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	schedulerName = strings.TrimSpace(schedulerName)
-	if schedulerName == "" {
-		schedulerName = "default"
-	}
-	if projectID == "" || agentName == "" {
-		return "", fmt.Errorf("project id and agent name are required")
-	}
-	if !isProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	if !isProjectStableIdentifier(schedulerName) {
-		return "", fmt.Errorf("scheduler name %q is not a stable identifier", schedulerName)
-	}
-	return stableReadableID("loader", agentName+"-"+schedulerName, projectID+"|"+agentName+"|"+schedulerName), nil
+	return projectpkg.StableManagedLoaderID(projectID, agentName, schedulerName)
 }
 
 func StableManagedTriggerID(projectID, agentName, schedulerName, triggerName string, triggerIndex int) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	schedulerName = strings.TrimSpace(schedulerName)
-	triggerName = strings.TrimSpace(triggerName)
-	if schedulerName == "" {
-		schedulerName = "default"
-	}
-	if projectID == "" || agentName == "" || triggerIndex < 0 {
-		return "", fmt.Errorf("project id, agent name, and trigger index are required")
-	}
-	if !isProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	if !isProjectStableIdentifier(schedulerName) {
-		return "", fmt.Errorf("scheduler name %q is not a stable identifier", schedulerName)
-	}
-	readable := triggerName
-	seedPart := "name:" + triggerName
-	if readable == "" {
-		readable = fmt.Sprintf("trigger-%d", triggerIndex+1)
-		seedPart = fmt.Sprintf("path:triggers[%d]", triggerIndex)
-	}
-	return stableReadableID("trigger", readable, projectID+"|"+agentName+"|"+schedulerName+"|"+seedPart), nil
+	return projectpkg.StableManagedTriggerID(projectID, agentName, schedulerName, triggerName, triggerIndex)
 }
 
 func StableProjectRunID(projectID, agentName, source, idempotencyKey string) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	source = strings.TrimSpace(source)
-	idempotencyKey = strings.TrimSpace(idempotencyKey)
-	if projectID == "" || agentName == "" || source == "" || idempotencyKey == "" {
-		return "", fmt.Errorf("project id, agent name, source, and idempotency key are required")
-	}
-	if !isProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	return stableReadableID("run", agentName, projectID+"|"+agentName+"|"+source+"|"+idempotencyKey), nil
+	return projectpkg.StableRunID(projectID, agentName, source, idempotencyKey)
 }
 
 func NewProjectRecordFromSpec(spec *compose.NormalizedProjectSpec, sourcePath string) (ProjectRecord, error) {
-	if spec == nil {
-		return ProjectRecord{}, fmt.Errorf("project spec is required")
-	}
-	sourcePath = normalizeProjectSourcePath(sourcePath)
-	projectID, err := StableProjectID(spec.Name, sourcePath)
-	if err != nil {
-		return ProjectRecord{}, err
-	}
-	specHash, err := spec.Hash()
-	if err != nil {
-		return ProjectRecord{}, fmt.Errorf("hash project spec: %w", err)
-	}
-	sourceJSON, err := encodeProjectSourceJSON(sourcePath)
-	if err != nil {
-		return ProjectRecord{}, err
-	}
-	return ProjectRecord{
-		ID:         projectID,
-		Name:       strings.TrimSpace(spec.Name),
-		SourcePath: sourcePath,
-		SourceJSON: sourceJSON,
-		SpecHash:   specHash,
-	}, nil
+	record, err := projectpkg.NewRecordFromSpec(spec, sourcePath)
+	return ProjectRecord(record), err
 }
 
 func NewProjectAgentRecordFromSpec(projectID string, revision int64, agent compose.NormalizedAgentSpec) (ProjectAgentRecord, error) {
-	managedAgentID, err := StableManagedAgentID(projectID, agent.Name)
-	if err != nil {
-		return ProjectAgentRecord{}, err
-	}
-	specJSON, err := marshalCanonicalProjectJSON(agent)
-	if err != nil {
-		return ProjectAgentRecord{}, fmt.Errorf("marshal project agent %s spec: %w", agent.Name, err)
-	}
-	driver := ""
-	if agent.Driver != nil {
-		driver = agent.Driver.Name
-	}
-	return ProjectAgentRecord{
-		ProjectID:        strings.TrimSpace(projectID),
-		AgentName:        strings.TrimSpace(agent.Name),
-		ManagedAgentID:   managedAgentID,
-		Revision:         revision,
-		Provider:         strings.TrimSpace(agent.Provider),
-		Model:            strings.TrimSpace(agent.Model),
-		Image:            strings.TrimSpace(agent.Image),
-		Driver:           strings.TrimSpace(driver),
-		SchedulerEnabled: agent.Scheduler != nil && agent.Scheduler.Enabled,
-		SpecJSON:         string(specJSON),
-	}, nil
+	record, err := projectpkg.NewAgentRecordFromSpec(projectID, revision, agent)
+	return ProjectAgentRecord(record), err
 }
 
 func NewProjectSchedulerRecordFromSpec(projectID string, revision int64, agent compose.NormalizedAgentSpec) (ProjectSchedulerRecord, bool, error) {
-	if agent.Scheduler == nil {
-		return ProjectSchedulerRecord{}, false, nil
-	}
-	schedulerID, err := StableProjectSchedulerID(projectID, agent.Name, "")
-	if err != nil {
-		return ProjectSchedulerRecord{}, false, err
-	}
-	loaderID, err := StableManagedLoaderID(projectID, agent.Name, "")
-	if err != nil {
-		return ProjectSchedulerRecord{}, false, err
-	}
-	specJSON, err := marshalCanonicalProjectJSON(agent.Scheduler)
-	if err != nil {
-		return ProjectSchedulerRecord{}, false, fmt.Errorf("marshal project scheduler %s spec: %w", agent.Name, err)
-	}
-	return ProjectSchedulerRecord{
-		ProjectID:       strings.TrimSpace(projectID),
-		SchedulerID:     schedulerID,
-		AgentName:       strings.TrimSpace(agent.Name),
-		ManagedLoaderID: loaderID,
-		Revision:        revision,
-		Enabled:         agent.Scheduler.Enabled,
-		TriggerCount:    len(agent.Scheduler.Triggers),
-		SpecJSON:        string(specJSON),
-	}, true, nil
+	record, ok, err := projectpkg.NewSchedulerRecordFromSpec(projectID, revision, agent)
+	return ProjectSchedulerRecord(record), ok, err
 }
 
 func (s *ConfigStore) UpsertProject(ctx context.Context, project ProjectRecord) (ProjectRecord, error) {
@@ -898,20 +755,7 @@ func normalizeProjectRunRecord(run ProjectRunRecord) (ProjectRunRecord, error) {
 }
 
 func normalizeProjectRunStatus(status string) string {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case ProjectRunStatusPending:
-		return ProjectRunStatusPending
-	case ProjectRunStatusRunning:
-		return ProjectRunStatusRunning
-	case ProjectRunStatusSucceeded:
-		return ProjectRunStatusSucceeded
-	case ProjectRunStatusFailed:
-		return ProjectRunStatusFailed
-	case ProjectRunStatusCanceled:
-		return ProjectRunStatusCanceled
-	default:
-		return ProjectRunStatusPending
-	}
+	return projectpkg.NormalizeRunStatus(status)
 }
 
 func scanProject(scan func(dest ...any) error) (ProjectRecord, error) {
@@ -999,32 +843,15 @@ func projectMatchesQuery(item ProjectRecord, query string) bool {
 }
 
 func normalizeProjectSourcePath(sourcePath string) string {
-	sourcePath = strings.TrimSpace(sourcePath)
-	if sourcePath == "" {
-		return ""
-	}
-	if abs, err := filepath.Abs(sourcePath); err == nil {
-		sourcePath = abs
-	}
-	return filepath.Clean(sourcePath)
+	return projectpkg.NormalizeSourcePath(sourcePath)
 }
 
 func encodeProjectSourceJSON(sourcePath string) (string, error) {
-	data, err := json.Marshal(struct {
-		ComposePath string `json:"compose_path,omitempty"`
-	}{ComposePath: normalizeProjectSourcePath(sourcePath)})
-	if err != nil {
-		return "", fmt.Errorf("marshal project source: %w", err)
-	}
-	return string(data), nil
+	return projectpkg.EncodeSourceJSON(sourcePath)
 }
 
 func marshalCanonicalProjectJSON(value any) ([]byte, error) {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+	return projectpkg.MarshalCanonicalJSON(value)
 }
 
 func stableReadableID(prefix, readable, seed string) string {
@@ -1054,21 +881,7 @@ func stableReadableID(prefix, readable, seed string) string {
 }
 
 func isProjectStableIdentifier(value string) bool {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return false
-	}
-	for i, r := range value {
-		switch {
-		case i == 0 && r >= 'a' && r <= 'z':
-		case i > 0 && r >= 'a' && r <= 'z':
-		case i > 0 && r >= '0' && r <= '9':
-		case i > 0 && (r == '-' || r == '_'):
-		default:
-			return false
-		}
-	}
-	return true
+	return projectpkg.IsStableIdentifier(value)
 }
 
 func asInt64Time(value any) int64 {

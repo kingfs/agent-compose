@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	projectpkg "agent-compose/pkg/agentcompose/project"
+	runpkg "agent-compose/pkg/agentcompose/run"
 	driverpkg "agent-compose/pkg/driver"
 
 	"github.com/google/uuid"
@@ -152,48 +154,29 @@ func (s *Service) publishProjectRunSessionStarted(ctx context.Context, session *
 }
 
 func projectRunSessionTitle(run ProjectRunRecord) string {
-	project := strings.TrimSpace(run.ProjectName)
-	if project == "" {
-		project = strings.TrimSpace(run.ProjectID)
-	}
-	agent := strings.TrimSpace(run.AgentName)
-	if agent == "" {
-		agent = "agent"
-	}
-	return strings.TrimSpace(fmt.Sprintf("%s/%s run", project, agent))
+	return runpkg.SessionTitle(projectpkg.RunRecord(run))
 }
 
 func projectRunSessionTags(run ProjectRunRecord) []SessionTag {
-	tags := []SessionTag{
-		{Name: "project", Value: strings.TrimSpace(run.ProjectID)},
-		{Name: "agent", Value: strings.TrimSpace(run.AgentName)},
-		{Name: "run_id", Value: strings.TrimSpace(run.RunID)},
-		{Name: "source", Value: normalizeProjectRunSource(run.Source)},
-	}
-	if schedulerID := strings.TrimSpace(run.SchedulerID); schedulerID != "" {
-		tags = append(tags, SessionTag{Name: "scheduler_id", Value: schedulerID})
-	}
-	return tags
+	return sessionTagsFromRun(runpkg.SessionTags(projectpkg.RunRecord(run)))
 }
 
 func mergeSessionTags(existing, additions []SessionTag) []SessionTag {
-	result := append([]SessionTag(nil), existing...)
-	for _, addition := range additions {
-		addition.Name = strings.TrimSpace(addition.Name)
-		addition.Value = strings.TrimSpace(addition.Value)
-		if addition.Name == "" {
-			continue
-		}
-		found := false
-		for _, current := range result {
-			if strings.TrimSpace(current.Name) == addition.Name && strings.TrimSpace(current.Value) == addition.Value {
-				found = true
-				break
-			}
-		}
-		if !found {
-			result = append(result, addition)
-		}
+	return sessionTagsFromRun(runpkg.MergeSessionTags(runSessionTagsFromRoot(existing), runSessionTagsFromRoot(additions)))
+}
+
+func runSessionTagsFromRoot(tags []SessionTag) []runpkg.SessionTag {
+	converted := make([]runpkg.SessionTag, 0, len(tags))
+	for _, tag := range tags {
+		converted = append(converted, runpkg.SessionTag{Name: tag.Name, Value: tag.Value})
 	}
-	return result
+	return converted
+}
+
+func sessionTagsFromRun(tags []runpkg.SessionTag) []SessionTag {
+	converted := make([]SessionTag, 0, len(tags))
+	for _, tag := range tags {
+		converted = append(converted, SessionTag{Name: tag.Name, Value: tag.Value})
+	}
+	return converted
 }

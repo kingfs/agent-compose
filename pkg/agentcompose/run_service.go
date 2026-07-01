@@ -13,6 +13,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	projectpkg "agent-compose/pkg/agentcompose/project"
+	runpkg "agent-compose/pkg/agentcompose/run"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -256,7 +258,7 @@ func (s *Service) cleanupProjectRunSession(ctx context.Context, coordinator *Run
 }
 
 func projectRunCleanupPolicyStopsSession(policy agentcomposev2.RunSessionCleanupPolicy) bool {
-	return policy != agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_KEEP_RUNNING
+	return runpkg.CleanupPolicyStopsSession(policy)
 }
 
 func (s *Service) stopProjectRunSession(ctx context.Context, session *Session) error {
@@ -374,111 +376,29 @@ func (s *Service) StopRun(ctx context.Context, req *connect.Request[agentcompose
 }
 
 func runDetailResponse(run ProjectRunRecord) *agentcomposev2.RunDetail {
-	return &agentcomposev2.RunDetail{
-		Summary:      runSummaryResponse(run),
-		Prompt:       run.Prompt,
-		Output:       run.Output,
-		ResultJson:   run.ResultJSON,
-		LogsPath:     run.LogsPath,
-		ArtifactsDir: run.ArtifactsDir,
-		CleanupError: run.CleanupError,
-		Driver:       run.Driver,
-		ImageRef:     run.ImageRef,
-	}
+	return runpkg.DetailResponse(projectpkg.RunRecord(run))
 }
 
 func runSummaryResponse(run ProjectRunRecord) *agentcomposev2.RunSummary {
-	return &agentcomposev2.RunSummary{
-		RunId:           run.RunID,
-		ProjectId:       run.ProjectID,
-		ProjectName:     run.ProjectName,
-		ProjectRevision: uint64(run.ProjectRevision),
-		AgentId:         run.ManagedAgentID,
-		AgentName:       run.AgentName,
-		Source:          projectRunSourceResponse(run.Source),
-		SchedulerId:     run.SchedulerID,
-		TriggerId:       run.TriggerID,
-		Status:          projectRunStatusResponse(run.Status),
-		SessionId:       run.SessionID,
-		ExitCode:        int32(run.ExitCode),
-		Error:           run.Error,
-		StartedAt:       formatProjectTime(run.StartedAt),
-		CompletedAt:     formatProjectTime(run.CompletedAt),
-		DurationMs:      run.DurationMs,
-		CreatedAt:       formatProjectTime(run.CreatedAt),
-		UpdatedAt:       formatProjectTime(run.UpdatedAt),
-	}
+	return runpkg.SummaryResponse(projectpkg.RunRecord(run))
 }
 
 func projectRunStatusResponse(status string) agentcomposev2.RunStatus {
-	switch normalizeProjectRunStatus(status) {
-	case ProjectRunStatusPending:
-		return agentcomposev2.RunStatus_RUN_STATUS_PENDING
-	case ProjectRunStatusRunning:
-		return agentcomposev2.RunStatus_RUN_STATUS_RUNNING
-	case ProjectRunStatusSucceeded:
-		return agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED
-	case ProjectRunStatusFailed:
-		return agentcomposev2.RunStatus_RUN_STATUS_FAILED
-	case ProjectRunStatusCanceled:
-		return agentcomposev2.RunStatus_RUN_STATUS_CANCELED
-	default:
-		return agentcomposev2.RunStatus_RUN_STATUS_UNSPECIFIED
-	}
+	return runpkg.StatusResponse(status)
 }
 
 func projectRunStatusFromProto(status agentcomposev2.RunStatus) string {
-	switch status {
-	case agentcomposev2.RunStatus_RUN_STATUS_PENDING:
-		return ProjectRunStatusPending
-	case agentcomposev2.RunStatus_RUN_STATUS_RUNNING:
-		return ProjectRunStatusRunning
-	case agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED:
-		return ProjectRunStatusSucceeded
-	case agentcomposev2.RunStatus_RUN_STATUS_FAILED:
-		return ProjectRunStatusFailed
-	case agentcomposev2.RunStatus_RUN_STATUS_CANCELED:
-		return ProjectRunStatusCanceled
-	default:
-		return ""
-	}
+	return runpkg.StatusFromProto(status)
 }
 
 func projectRunSourceResponse(source string) agentcomposev2.RunSource {
-	switch normalizeProjectRunSource(source) {
-	case ProjectRunSourceScheduler:
-		return agentcomposev2.RunSource_RUN_SOURCE_SCHEDULER
-	case ProjectRunSourceAPI:
-		return agentcomposev2.RunSource_RUN_SOURCE_API
-	case ProjectRunSourceManual:
-		return agentcomposev2.RunSource_RUN_SOURCE_MANUAL
-	default:
-		return agentcomposev2.RunSource_RUN_SOURCE_UNSPECIFIED
-	}
+	return runpkg.SourceResponse(source)
 }
 
 func projectRunSourceFromProto(source agentcomposev2.RunSource) string {
-	switch source {
-	case agentcomposev2.RunSource_RUN_SOURCE_SCHEDULER:
-		return ProjectRunSourceScheduler
-	case agentcomposev2.RunSource_RUN_SOURCE_API:
-		return ProjectRunSourceAPI
-	case agentcomposev2.RunSource_RUN_SOURCE_MANUAL:
-		return ProjectRunSourceManual
-	default:
-		return ProjectRunSourceManual
-	}
+	return runpkg.SourceFromProto(source)
 }
 
 func projectRunSourceFilterFromProto(source agentcomposev2.RunSource) string {
-	switch source {
-	case agentcomposev2.RunSource_RUN_SOURCE_SCHEDULER:
-		return ProjectRunSourceScheduler
-	case agentcomposev2.RunSource_RUN_SOURCE_API:
-		return ProjectRunSourceAPI
-	case agentcomposev2.RunSource_RUN_SOURCE_MANUAL:
-		return ProjectRunSourceManual
-	default:
-		return ""
-	}
+	return runpkg.SourceFilterFromProto(source)
 }
