@@ -312,6 +312,157 @@ func NormalizeRunSource(source string) string {
 	}
 }
 
+func NormalizeRecord(record ProjectRecord) (ProjectRecord, error) {
+	record.ID = strings.TrimSpace(record.ID)
+	record.Name = strings.TrimSpace(record.Name)
+	record.SourcePath = NormalizeSourcePath(record.SourcePath)
+	record.SourceJSON = strings.TrimSpace(record.SourceJSON)
+	record.SpecHash = strings.TrimSpace(record.SpecHash)
+	if record.ID == "" {
+		return ProjectRecord{}, fmt.Errorf("project id is required")
+	}
+	if record.Name == "" {
+		return ProjectRecord{}, fmt.Errorf("project name is required")
+	}
+	if record.SourceJSON == "" {
+		sourceJSON, err := EncodeSourceJSON(record.SourcePath)
+		if err != nil {
+			return ProjectRecord{}, err
+		}
+		record.SourceJSON = sourceJSON
+	}
+	if !json.Valid([]byte(record.SourceJSON)) {
+		return ProjectRecord{}, fmt.Errorf("project source_json must be valid JSON")
+	}
+	if record.CurrentRevision < 0 {
+		return ProjectRecord{}, fmt.Errorf("project current revision cannot be negative")
+	}
+	return record, nil
+}
+
+func NormalizeRevisionRecord(revision RevisionRecord) (RevisionRecord, error) {
+	revision.ProjectID = strings.TrimSpace(revision.ProjectID)
+	revision.SpecHash = strings.TrimSpace(revision.SpecHash)
+	revision.SpecJSON = strings.TrimSpace(revision.SpecJSON)
+	if revision.ProjectID == "" || revision.SpecHash == "" || revision.SpecJSON == "" {
+		return RevisionRecord{}, fmt.Errorf("project id, spec hash, and spec json are required")
+	}
+	if !json.Valid([]byte(revision.SpecJSON)) {
+		return RevisionRecord{}, fmt.Errorf("project revision spec_json must be valid JSON")
+	}
+	return revision, nil
+}
+
+func NormalizeAgentRecord(agent AgentRecord) (AgentRecord, error) {
+	agent.ProjectID = strings.TrimSpace(agent.ProjectID)
+	agent.AgentName = strings.TrimSpace(agent.AgentName)
+	agent.ManagedAgentID = strings.TrimSpace(agent.ManagedAgentID)
+	agent.Provider = strings.TrimSpace(agent.Provider)
+	agent.Model = strings.TrimSpace(agent.Model)
+	agent.Image = strings.TrimSpace(agent.Image)
+	agent.Driver = strings.TrimSpace(agent.Driver)
+	agent.SpecJSON = strings.TrimSpace(agent.SpecJSON)
+	if agent.ProjectID == "" || agent.AgentName == "" {
+		return AgentRecord{}, fmt.Errorf("project id and agent name are required")
+	}
+	if agent.ManagedAgentID == "" {
+		managedAgentID, err := StableManagedAgentID(agent.ProjectID, agent.AgentName)
+		if err != nil {
+			return AgentRecord{}, err
+		}
+		agent.ManagedAgentID = managedAgentID
+	}
+	if agent.Revision < 0 {
+		return AgentRecord{}, fmt.Errorf("project agent revision cannot be negative")
+	}
+	if agent.SpecJSON == "" {
+		agent.SpecJSON = "{}"
+	}
+	if !json.Valid([]byte(agent.SpecJSON)) {
+		return AgentRecord{}, fmt.Errorf("project agent spec_json must be valid JSON")
+	}
+	return agent, nil
+}
+
+func NormalizeSchedulerRecord(scheduler SchedulerRecord) (SchedulerRecord, error) {
+	scheduler.ProjectID = strings.TrimSpace(scheduler.ProjectID)
+	scheduler.SchedulerID = strings.TrimSpace(scheduler.SchedulerID)
+	scheduler.AgentName = strings.TrimSpace(scheduler.AgentName)
+	scheduler.ManagedLoaderID = strings.TrimSpace(scheduler.ManagedLoaderID)
+	scheduler.SpecJSON = strings.TrimSpace(scheduler.SpecJSON)
+	if scheduler.ProjectID == "" || scheduler.AgentName == "" {
+		return SchedulerRecord{}, fmt.Errorf("project id and agent name are required")
+	}
+	if scheduler.SchedulerID == "" {
+		schedulerID, err := StableSchedulerID(scheduler.ProjectID, scheduler.AgentName, "")
+		if err != nil {
+			return SchedulerRecord{}, err
+		}
+		scheduler.SchedulerID = schedulerID
+	}
+	if scheduler.ManagedLoaderID == "" {
+		loaderID, err := StableManagedLoaderID(scheduler.ProjectID, scheduler.AgentName, "")
+		if err != nil {
+			return SchedulerRecord{}, err
+		}
+		scheduler.ManagedLoaderID = loaderID
+	}
+	if scheduler.Revision < 0 {
+		return SchedulerRecord{}, fmt.Errorf("project scheduler revision cannot be negative")
+	}
+	if scheduler.TriggerCount < 0 {
+		return SchedulerRecord{}, fmt.Errorf("project scheduler trigger count cannot be negative")
+	}
+	if scheduler.SpecJSON == "" {
+		scheduler.SpecJSON = "{}"
+	}
+	if !json.Valid([]byte(scheduler.SpecJSON)) {
+		return SchedulerRecord{}, fmt.Errorf("project scheduler spec_json must be valid JSON")
+	}
+	return scheduler, nil
+}
+
+func NormalizeRunRecord(run RunRecord) (RunRecord, error) {
+	run.RunID = strings.TrimSpace(run.RunID)
+	run.ProjectID = strings.TrimSpace(run.ProjectID)
+	run.ProjectName = strings.TrimSpace(run.ProjectName)
+	run.AgentName = strings.TrimSpace(run.AgentName)
+	run.ManagedAgentID = strings.TrimSpace(run.ManagedAgentID)
+	run.Source = strings.TrimSpace(run.Source)
+	run.SchedulerID = strings.TrimSpace(run.SchedulerID)
+	run.TriggerID = strings.TrimSpace(run.TriggerID)
+	run.Status = NormalizeRunStatus(run.Status)
+	run.SessionID = strings.TrimSpace(run.SessionID)
+	run.ResultJSON = strings.TrimSpace(run.ResultJSON)
+	run.LogsPath = strings.TrimSpace(run.LogsPath)
+	run.ArtifactsDir = strings.TrimSpace(run.ArtifactsDir)
+	run.Driver = strings.TrimSpace(run.Driver)
+	run.ImageRef = strings.TrimSpace(run.ImageRef)
+	if run.RunID == "" || run.ProjectID == "" {
+		return RunRecord{}, fmt.Errorf("project run id and project id are required")
+	}
+	if run.ProjectRevision < 0 {
+		return RunRecord{}, fmt.Errorf("project run revision cannot be negative")
+	}
+	if run.ResultJSON == "" {
+		run.ResultJSON = "{}"
+	}
+	if !json.Valid([]byte(run.ResultJSON)) {
+		return RunRecord{}, fmt.Errorf("project run result_json must be valid JSON")
+	}
+	return run, nil
+}
+
+func MatchesQuery(record ProjectRecord, query string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(record.ID), query) ||
+		strings.Contains(strings.ToLower(record.Name), query) ||
+		strings.Contains(strings.ToLower(record.SourcePath), query)
+}
+
 func NormalizeSourcePath(sourcePath string) string {
 	sourcePath = strings.TrimSpace(sourcePath)
 	if sourcePath == "" {
