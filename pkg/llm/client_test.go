@@ -21,7 +21,7 @@ func TestLLMClientResolveEndpointPrefersGlobalEnvThenProcessEnvThenDefault(t *te
 		t.Fatalf("resolveEndpoint from process env = %q, want %q", got, "https://env.example.invalid/v1/responses")
 	}
 
-	if _, err := store.ReplaceGlobalEnv(ctx, []SessionEnvVar{{Name: "LLM_API_ENDPOINT", Value: "https://db.example.invalid", Secret: false}}); err != nil {
+	if _, err := store.ReplaceGlobalEnv(ctx, []testSessionEnvVar{{Name: "LLM_API_ENDPOINT", Value: "https://db.example.invalid", Secret: false}}); err != nil {
 		t.Fatalf("ReplaceGlobalEnv returned error: %v", err)
 	}
 	if got := client.resolveEndpoint(ctx); got != "https://db.example.invalid/v1/responses" {
@@ -137,7 +137,7 @@ func TestLLMClientGenerateRefreshesDefaultEnvProviderFromGlobalEnv(t *testing.T)
 	}))
 	t.Cleanup(firstServer.Close)
 
-	if _, err := store.ReplaceGlobalEnv(ctx, []SessionEnvVar{
+	if _, err := store.ReplaceGlobalEnv(ctx, []testSessionEnvVar{
 		{Name: "LLM_API_ENDPOINT", Value: firstServer.URL, Secret: false},
 		{Name: "LLM_API_KEY", Value: "key-one", Secret: true},
 		{Name: "LLM_MODEL", Value: "model-one", Secret: false},
@@ -161,7 +161,7 @@ func TestLLMClientGenerateRefreshesDefaultEnvProviderFromGlobalEnv(t *testing.T)
 	}))
 	t.Cleanup(secondServer.Close)
 
-	if _, err := store.ReplaceGlobalEnv(ctx, []SessionEnvVar{
+	if _, err := store.ReplaceGlobalEnv(ctx, []testSessionEnvVar{
 		{Name: "LLM_API_ENDPOINT", Value: secondServer.URL, Secret: false},
 		{Name: "LLM_API_KEY", Value: "key-two", Secret: true},
 		{Name: "LLM_MODEL", Value: "model-two", Secret: false},
@@ -182,7 +182,7 @@ func testLLMClientGenerateHandlesSuccessAndFailures(t *testing.T) {
 	ctx := context.Background()
 	t.Setenv("LLM_API_ENDPOINT", "")
 	store := newTestConfigStore(t)
-	if _, err := store.ReplaceGlobalEnv(ctx, []SessionEnvVar{
+	if _, err := store.ReplaceGlobalEnv(ctx, []testSessionEnvVar{
 		{Name: "LLM_API_KEY", Value: "env-key", Secret: true},
 	}); err != nil {
 		t.Fatalf("ReplaceGlobalEnv returned error: %v", err)
@@ -294,7 +294,7 @@ func TestLLMClientResolveProtocol(t *testing.T) {
 		t.Fatalf("resolveProtocol alias chat = %q, want %q", got, llmAPIProtocolChatCompletions)
 	}
 
-	if _, err := store.ReplaceGlobalEnv(ctx, []SessionEnvVar{
+	if _, err := store.ReplaceGlobalEnv(ctx, []testSessionEnvVar{
 		{Name: "LLM_API_PROTOCOL", Value: llmAPIProtocolChatCompletions, Secret: false},
 	}); err != nil {
 		t.Fatalf("ReplaceGlobalEnv returned error: %v", err)
@@ -365,7 +365,7 @@ func TestLLMClientGenerateChatCompletionsPlainText(t *testing.T) {
 func TestLLMClientGenerateChatCompletions(t *testing.T) {
 	ctx := context.Background()
 	store := newTestConfigStore(t)
-	if _, err := store.ReplaceGlobalEnv(ctx, []SessionEnvVar{
+	if _, err := store.ReplaceGlobalEnv(ctx, []testSessionEnvVar{
 		{Name: "LLM_API_KEY", Value: "chat-key", Secret: true},
 	}); err != nil {
 		t.Fatalf("ReplaceGlobalEnv returned error: %v", err)
@@ -468,7 +468,7 @@ func TestLLMClientResolveSettingPrefersGlobalEnvThenProcessEnvThenConfig(t *test
 		t.Fatalf("resolveSetting from process env = %q, want %q", got, "env-model")
 	}
 
-	if _, err := store.ReplaceGlobalEnv(ctx, []SessionEnvVar{
+	if _, err := store.ReplaceGlobalEnv(ctx, []testSessionEnvVar{
 		{Name: "LLM_MODEL", Value: "db-model", Secret: false},
 	}); err != nil {
 		t.Fatalf("ReplaceGlobalEnv returned error: %v", err)

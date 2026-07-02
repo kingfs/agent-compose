@@ -42,12 +42,6 @@ type LLMResolvedTarget struct {
 	Headers  http.Header
 }
 
-type SessionEnvVar struct {
-	Name   string
-	Value  string
-	Secret bool
-}
-
 type LLMFacadeToken struct {
 	SessionID        string
 	TokenHash        string

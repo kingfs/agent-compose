@@ -9,23 +9,25 @@ import (
 const llmProviderFamilyOpenAI = "openai"
 
 type testConfigStore struct {
-	envItems  []SessionEnvVar
+	envItems  []testSessionEnvVar
 	providers []LLMProvider
 	models    []LLMModel
 	wireAPI   map[string]string
+}
+
+type testSessionEnvVar struct {
+	Name   string
+	Value  string
+	Secret bool
 }
 
 func newTestConfigStore(*testing.T) *testConfigStore {
 	return &testConfigStore{wireAPI: map[string]string{}}
 }
 
-func (s *testConfigStore) ReplaceGlobalEnv(_ context.Context, items []SessionEnvVar) ([]SessionEnvVar, error) {
-	s.envItems = append([]SessionEnvVar(nil), items...)
-	return append([]SessionEnvVar(nil), s.envItems...), nil
-}
-
-func (s *testConfigStore) ListGlobalEnv(context.Context) ([]SessionEnvVar, error) {
-	return append([]SessionEnvVar(nil), s.envItems...), nil
+func (s *testConfigStore) ReplaceGlobalEnv(_ context.Context, items []testSessionEnvVar) ([]testSessionEnvVar, error) {
+	s.envItems = append([]testSessionEnvVar(nil), items...)
+	return append([]testSessionEnvVar(nil), s.envItems...), nil
 }
 
 func (s *testConfigStore) ListGlobalEnvMap(context.Context) (map[string]string, error) {
@@ -67,7 +69,7 @@ func (s *testConfigStore) LLMProviderModelWireAPI(_ context.Context, providerID,
 	return value, ok, nil
 }
 
-func envMap(items []SessionEnvVar) map[string]string {
+func envMap(items []testSessionEnvVar) map[string]string {
 	result := map[string]string{}
 	for _, item := range items {
 		name := strings.ToUpper(strings.TrimSpace(item.Name))
