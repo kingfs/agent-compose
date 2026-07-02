@@ -44,7 +44,7 @@ Use only these values:
 | H4A | Test relocation | Loader and LLM tests | `refactor/hardening-tests-loader-llm` | removed | Ramanujan (`019f20ad-140c-7d73-933e-a3f6c7e06b51`) | `cleaned` | `go test ./pkg/agentcompose/loader/... ./pkg/agentcompose/llm/...`; loader/LLM root focused tests | Module-level tests added; root integration tests retained; worktree cleaned. |
 | H4B | Test relocation | Project and session tests | `refactor/hardening-tests-project-session` | removed | Heisenberg (`019f20ad-43b1-7c20-8901-5755f759e5ba`) | `cleaned` | `go test ./pkg/agentcompose/project ./pkg/agentcompose/session`; project/session root focused tests | Module-level tests added; root integration tests retained; worktree cleaned. |
 | H4C | Test relocation | Transport and store tests | `refactor/hardening-tests-transport-store` | removed | Copernicus (`019f20ad-769f-70a3-8bb2-6d6e9274c8ef`) | `cleaned` | `go test ./pkg/agentcompose/store/... ./pkg/agentcompose/transport/...`; store/transport root focused tests | Module-level tests added; root integration tests retained; worktree cleaned. |
-| H5 | Boundary checks | Dependency boundaries | `refactor/hardening-boundary-checks` | pending | pending | `not_started` | pending | Add repeatable import-boundary check. |
+| H5 | Boundary checks | Dependency boundaries | `refactor/hardening-boundary-checks` | removed | owner | `cleaned` | `task arch:boundaries`; `go test ./pkg/agentcompose/... ./cmd/agent-compose ./internal/...` | Import-boundary check added; worktree cleaned. |
 
 ## Planned Merge Order
 
@@ -61,7 +61,7 @@ Use only these values:
 | 9 | `refactor/hardening-tests-loader-llm` | `merged` | Loader/LLM module tests merged into integration. |
 | 10 | `refactor/hardening-tests-project-session` | `merged` | Project/session module tests merged into integration. |
 | 11 | `refactor/hardening-tests-transport-store` | `merged` | Store/transport module tests merged into integration. |
-| 12 | `refactor/hardening-boundary-checks` | `not_started` | Last, after imports settle. |
+| 12 | `refactor/hardening-boundary-checks` | `merged` | Boundary check merged into integration. |
 
 ## Worktree Registry
 
@@ -78,6 +78,7 @@ Use only these values:
 | `/data/src/github.com/kingfs/agent-compose-hardening-tests-loader-llm` | `refactor/hardening-tests-loader-llm` | Ramanujan (`019f20ad-140c-7d73-933e-a3f6c7e06b51`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-hardening-tests-project-session` | `refactor/hardening-tests-project-session` | Heisenberg (`019f20ad-43b1-7c20-8901-5755f759e5ba`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-hardening-tests-transport-store` | `refactor/hardening-tests-transport-store` | Copernicus (`019f20ad-769f-70a3-8bb2-6d6e9274c8ef`) | `cleaned` | No |
+| `/data/src/github.com/kingfs/agent-compose-hardening-boundary-checks` | `refactor/hardening-boundary-checks` | owner | `cleaned` | No |
 
 ## Integration Log
 
@@ -96,6 +97,8 @@ Use only these values:
 | 2026-07-02 | Merged and cleaned H4B project/session module tests | `refactor/hardening-tests-project-session` | passed | Focused module tests added without deleting root integration tests. |
 | 2026-07-02 | Merged and cleaned H4A loader/LLM module tests | `refactor/hardening-tests-loader-llm` | passed | Focused module tests added without deleting root integration tests. |
 | 2026-07-02 | Merged and cleaned H4C store/transport module tests | `refactor/hardening-tests-transport-store` | passed | Focused module tests added without deleting root integration tests. |
+| 2026-07-02 | Created H5 boundary check worktree | `refactor/hardening-boundary-checks` | in progress | Worktree created from latest integration. |
+| 2026-07-02 | Merged and cleaned H5 boundary checks | `refactor/hardening-boundary-checks` | passed | `task arch:boundaries` passed; Go package validation passed. |
 | 2026-07-02 | Merged and cleaned H3B Loader QJS split | `refactor/hardening-loader-qjs` | passed | Mechanical same-package split; validation passed. |
 | 2026-07-02 | Merged and cleaned H3A CLI compose split | `refactor/hardening-cli-compose` | passed | Mechanical same-package split; CLI validation passed. |
 | 2026-07-02 | Merged and cleaned H3D LLM config split | `refactor/hardening-llm-config` | passed | Mechanical same-package split; LLM validation passed. |
