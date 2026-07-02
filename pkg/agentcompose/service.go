@@ -8,152 +8,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/samber/do/v2"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	agentworkspace "agent-compose/internal/agentcompose/workspace"
-	"agent-compose/internal/capproxy"
-	"agent-compose/internal/imagecache"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
-	"agent-compose/proto/agentcompose/v1/agentcomposev1connect"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
-
-type Service struct {
-	config     *appconfig.Config
-	store      *Store
-	configDB   *ConfigStore
-	driver     Driver
-	runtimes   RuntimeProvider
-	executor   *Executor
-	loaders    *LoaderManager
-	images     ImageBackend
-	ociImages  ImageBackend
-	autoImages ImageBackend
-	llm        *LLMClient
-	cap        CapabilityProvider
-	bus        *LoaderBus
-	streams    *SessionStreamBroker
-	dashboard  *DashboardOverviewHub
-	events     *EventDispatcher
-	sessions   *SessionRPCBridge
-	startedAt  time.Time
-	startOnce  sync.Once
-	startErr   error
-	agentcomposev1connect.UnimplementedSessionServiceHandler
-	agentcomposev1connect.UnimplementedKernelServiceHandler
-	agentcomposev1connect.UnimplementedAgentServiceHandler
-	agentcomposev1connect.UnimplementedAgentDefinitionServiceHandler
-	agentcomposev1connect.UnimplementedLLMServiceHandler
-	agentcomposev1connect.UnimplementedConfigServiceHandler
-	agentcomposev1connect.UnimplementedLoaderServiceHandler
-	agentcomposev1connect.UnimplementedDashboardServiceHandler
-	agentcomposev1connect.UnimplementedCapabilityServiceHandler
-	agentcomposev2connect.UnimplementedProjectServiceHandler
-	agentcomposev2connect.UnimplementedRunServiceHandler
-	agentcomposev2connect.UnimplementedExecServiceHandler
-	agentcomposev2connect.UnimplementedImageServiceHandler
-}
-
-func NewService(di do.Injector) (*Service, error) {
-	config := do.MustInvoke[*appconfig.Config](di)
-	dashboard, _ := do.Invoke[*DashboardOverviewHub](di)
-	if dashboard == nil {
-		rootCtx, _ := do.Invoke[context.Context](di)
-		if rootCtx == nil {
-			rootCtx = context.Background()
-		}
-		dashboard = newDashboardOverviewHub(rootCtx, newDashboardOverviewAggregator(do.MustInvoke[*Store](di), do.MustInvoke[*ConfigStore](di)), 250*time.Millisecond)
-	}
-	imageCacheRoot := strings.TrimSpace(config.ImageCacheRoot)
-	if imageCacheRoot == "" {
-		imageCacheRoot = filepath.Join(config.DataRoot, "images")
-		config.ImageCacheRoot = imageCacheRoot
-	}
-	dockerImages := NewDockerImageBackend()
-	ociCache, err := imagecache.New(imagecache.Config{
-		Root:               imageCacheRoot,
-		DefaultRegistry:    config.ImageRegistry,
-		InsecureRegistries: config.ImageInsecureRegistries,
-	})
-	if err != nil {
-		return nil, err
-	}
-	config.ImageCacheRoot = ociCache.Root()
-	ociImages := NewOCIImageBackend(ociCache)
-	autoImages := NewAutoImageBackend(config.ImageStoreMode, dockerImages, ociImages)
-	return &Service{
-		config:     config,
-		store:      do.MustInvoke[*Store](di),
-		configDB:   do.MustInvoke[*ConfigStore](di),
-		driver:     do.MustInvoke[Driver](di),
-		runtimes:   do.MustInvoke[RuntimeProvider](di),
-		executor:   do.MustInvoke[*Executor](di),
-		loaders:    do.MustInvoke[*LoaderManager](di),
-		images:     dockerImages,
-		ociImages:  ociImages,
-		autoImages: autoImages,
-		llm:        do.MustInvoke[*LLMClient](di),
-		cap:        do.MustInvoke[capabilityIntegration](di),
-		bus:        do.MustInvoke[*LoaderBus](di),
-		streams:    do.MustInvoke[*SessionStreamBroker](di),
-		dashboard:  dashboard,
-		events:     NewEventDispatcher(do.MustInvoke[context.Context](di), do.MustInvoke[*ConfigStore](di), do.MustInvoke[*LoaderBus](di)),
-		sessions:   do.MustInvoke[*SessionRPCBridge](di),
-		startedAt:  time.Now().UTC(),
-	}, nil
-}
-
-func Setup(di do.Injector) {
-	bootstrapSetup(di)
-}
-
-func Register(di do.Injector) {
-	bootstrapRegister(di)
-}
-
-func StartBackground(di do.Injector) error {
-	return bootstrapStartBackground(di)
-}
-
-func (s *Service) StartBackground(ctx context.Context, capProxy *capproxy.Server) error {
-	s.startOnce.Do(func() {
-		reconcileCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := s.reconcilePersistedSessions(reconcileCtx); err != nil {
-			slog.Warn("failed to reconcile persisted session state on startup", "error", err)
-		}
-		s.loaders.Start()
-		s.events.Start()
-		s.startErr = startCapabilityProxy(ctx, capProxy)
-	})
-	return s.startErr
-}
-
-func startCapabilityProxy(ctx context.Context, capProxy *capproxy.Server) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if capProxy.Configured() {
-		go func() {
-			if err := capProxy.Serve(ctx); err != nil {
-				slog.Error("agent compose capability grpc proxy stopped", "error", err)
-			}
-		}()
-	}
-	return nil
-}
 
 func (s *Service) CreateSession(ctx context.Context, req *connect.Request[agentcomposev1.CreateSessionRequest]) (*connect.Response[agentcomposev1.SessionResponse], error) {
 	return s.sessions.CreateSession(ctx, req)
