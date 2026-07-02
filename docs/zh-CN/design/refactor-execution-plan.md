@@ -71,12 +71,15 @@ refactor/domain-project
   - `internal/agentcompose/events` 已建立，topic event 模型、状态归一化、topic 校验、payload hash、record normalize、webhook topic match 和 dispatcher 核心逻辑已迁入域包；`pkg/agentcompose` 保留 ConfigStore 持久化和 LoaderBus 适配。
   - `internal/agentcompose/exec` 已建立，exec 纯模型、cell 类型规范化、artifact helper、stream accumulator、agent result summarizer 和 trace event 解析已迁入域包；`pkg/agentcompose` 保留 Executor、runtime 编排、Connect glue 和兼容 alias。
   - `internal/agentcompose/workspace` 已建立，workspace 模型、file/git config、路径 normalize、file workspace content root、文件列表、复制、tar 解包和 git helper 已迁入域包；`pkg/agentcompose` 保留 HTTP routes、Service/ConfigStore/Session 适配和兼容 alias。
+- T4 已开始：
+  - `internal/agentcompose/loader` 已建立，loader 模型、调度规则、cron 解析、bus publish 规则和 topic payload helper 已迁入域包；`pkg/agentcompose` 保留 Manager/Engine/Store/Connect glue 和兼容 alias。
+  - `internal/agentcompose/project` 已建立，project normalize、proto response mapper、managed scheduler trigger/script build helper 已迁入域包；`pkg/agentcompose` 保留 Service 编排、ConfigStore/SQL 和兼容 wrapper。
 - 当前验证：`refactor/architecture-main` 上 `go test ./pkg/agentcompose ./cmd/agent-compose` 通过，`task build` 通过。
 
 下一批优先级：
 
 - T3 低耦合域包种子基本完成。后续不建议继续拆 `config_store.go` 这类横跨多域的持久化文件，避免提前混入 T5。
-- T4 开始前先收敛 `project` 与 `loader` 的边界，避免同时移动高耦合 service、store 和 runtime 调用。
+- T4 下一步继续细分 `project` 与 `loader`，但仍应先迁移模型/纯规则/mapper，再迁 service 编排；暂不移动 `project_store.go`、`loader_store.go` 和复杂 runtime 执行路径。
 - 暂不执行 T6 全量 `pkg/agentcompose` 到 `internal/agentcompose` 迁移，直到 T3/T4 的域边界更稳定。
 
 ## 任务依赖图
