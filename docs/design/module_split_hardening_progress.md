@@ -34,7 +34,7 @@ Use only these values:
 | Task | Phase | Module | Branch | Worktree | Assignee | Status | Validation | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | H1 | Metrics baseline | Architecture metrics | `refactor/hardening-metrics` | removed | owner | `cleaned` | `task arch:metrics`; `task test` | Merged into integration; worktree cleaned. |
-| H2A | Root slimming | Project/store root logic | `refactor/hardening-root-project-store` | `/data/src/github.com/kingfs/agent-compose-hardening-root-project-store` | pending | `assigned` | pending | Keep wrappers and schema compatibility. |
+| H2A | Root slimming | Project/store root logic | `refactor/hardening-root-project-store` | removed | Chandrasekhar (`019f2088-ac94-7002-8c57-c1a532c6e6c7`) | `cleaned` | project/run tests; project/store/sqlite tests; CLI tests | Project SQLite repository moved under `store/sqlite`; root wrappers preserved; worktree cleaned. |
 | H2B | Root slimming | Exec/session root logic | `refactor/hardening-root-exec-service` | pending | pending | `not_started` | pending | Keep runtime/session behavior compatible. |
 | H2C | Root slimming | Compatibility facade audit | `refactor/hardening-root-compat` | pending | pending | `not_started` | pending | Remove only proven-redundant wrappers. |
 | H3A | Large file split | CLI compose | `refactor/hardening-cli-compose` | removed | Kuhn (`019f2088-e166-75b1-b757-d5e8804963fd`) | `cleaned` | `go test ./internal/cli/... ./cmd/agent-compose`; `go test ./cmd/agent-compose -run 'Test.*CLI|Test.*Status|Test.*Host|Test.*Socket'` | Merged into integration; worktree cleaned. |
@@ -51,7 +51,7 @@ Use only these values:
 | Order | Branch | Status | Merge Notes |
 | --- | --- | --- | --- |
 | 1 | `refactor/hardening-metrics` | `merged` | Baseline metrics merged into integration. |
-| 2 | `refactor/hardening-root-project-store` | `assigned` | Merge after metrics baseline. |
+| 2 | `refactor/hardening-root-project-store` | `merged` | Project SQLite repository split merged into integration. |
 | 3 | `refactor/hardening-root-exec-service` | `not_started` | Merge after project/store or in parallel if no conflict. |
 | 4 | `refactor/hardening-root-compat` | `not_started` | Merge after root movement branches. |
 | 5 | `refactor/hardening-cli-compose` | `merged` | CLI compose split merged into integration. |
@@ -68,7 +68,7 @@ Use only these values:
 | Worktree Path | Branch | Owner | Status | Cleanup Required |
 | --- | --- | --- | --- | --- |
 | `/data/src/github.com/kingfs/agent-compose-hardening-metrics` | `refactor/hardening-metrics` | owner | `cleaned` | No |
-| `/data/src/github.com/kingfs/agent-compose-hardening-root-project-store` | `refactor/hardening-root-project-store` | pending | `assigned` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-hardening-root-project-store` | `refactor/hardening-root-project-store` | Chandrasekhar (`019f2088-ac94-7002-8c57-c1a532c6e6c7`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-hardening-cli-compose` | `refactor/hardening-cli-compose` | Kuhn (`019f2088-e166-75b1-b757-d5e8804963fd`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-hardening-loader-qjs` | `refactor/hardening-loader-qjs` | Hilbert (`019f2089-1427-7ac2-8dcf-61015134082a`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-hardening-llm-config` | `refactor/hardening-llm-config` | Bacon (`019f2089-5434-7b72-b1f7-a7be35416fae`) | `cleaned` | No |
@@ -83,6 +83,7 @@ Use only these values:
 | 2026-07-02 | Merged H1 metrics baseline | `refactor/hardening-metrics` | passed | `task arch:metrics`; `task test` passed after installing JS runtime dependencies from lockfiles. |
 | 2026-07-02 | Cleaned H1 metrics worktree | `refactor/hardening-metrics` | done | Removed worktree after merge. |
 | 2026-07-02 | Created H2A/H3A/H3B/H3D worktrees | multiple | in progress | Worktrees created from latest integration for parallel work. |
+| 2026-07-02 | Merged and cleaned H2A project SQLite repository split | `refactor/hardening-root-project-store` | passed | Root project store now delegates to `store/sqlite`; compatibility wrappers preserved. |
 | 2026-07-02 | Merged and cleaned H3B Loader QJS split | `refactor/hardening-loader-qjs` | passed | Mechanical same-package split; validation passed. |
 | 2026-07-02 | Merged and cleaned H3A CLI compose split | `refactor/hardening-cli-compose` | passed | Mechanical same-package split; CLI validation passed. |
 | 2026-07-02 | Merged and cleaned H3D LLM config split | `refactor/hardening-llm-config` | passed | Mechanical same-package split; LLM validation passed. |
