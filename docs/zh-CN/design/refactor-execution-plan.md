@@ -331,3 +331,54 @@ worktree：
 4. Transport worker 先做 route/handler 清单核对，等待 T1 合入后开始 T2。
 
 第一批不同时修改 `project_service.go` 和 `loader_manager.go`，避免过早冲突。
+
+## 第一批调研结论
+
+### Domain 第一批边界
+
+Domain 第一批只抽纯规则、常量和稳定 ID helper，不搬 SQL/proto DTO。
+
+优先移动：
+
+- Project run status/source 常量。
+- Project run 状态 normalize 与 transition 规则。
+- Project 稳定 ID 生成 helper。
+- Loader runtime/trigger/session policy/concurrency policy/run status 常量。
+- Loader 规则 helper，例如 trigger kind normalize、source hash、topic match、schedule 判断。
+
+暂缓移动：
+
+- `ProjectRecord`、`ProjectRevisionRecord`、`ProjectAgentRecord`、`ProjectSchedulerRecord`、`ProjectRunRecord`。
+- `LoaderSummary`、`Loader`、`LoaderTrigger`、`LoaderRunSummary`、`LoaderEvent`、`LoaderBinding`。
+- `Session`、`SessionSummary`、`NotebookCell`、`SessionEvent`、`WorkspaceConfig`。
+
+原因：
+
+- 这些 record/model 当前同时承担 SQL DTO、proto response 输入和业务模型职责。
+- 第一批强行移动会扩大 import 修改范围，并把旧耦合带入新包。
+- 更稳妥的做法是在旧 package 保留 alias/wrapper，逐步把调用点迁到 domain。
+
+### Transport 第一批边界
+
+Transport 第一批只拆轻 handler 外壳，不抽重业务逻辑。
+
+优先拆：
+
+- v2 `ImageService`。
+- v1 `LoaderService`，业务主体仍委托现有 `LoaderManager`。
+- v1 `CapabilityService`。
+- v1 `DashboardService`。
+- v2 `ExecService` 外壳，重逻辑暂留原位置。
+- v2 `RunService` 外壳，`runProjectAgent` 暂不移动。
+
+暂缓拆：
+
+- v2 `ProjectService`，因为 `project_service.go` 同时包含 validate/apply/reconcile/dry-run。
+- v1 `AgentDefinitionService` 中 create session/delete 相关逻辑。
+- v1 `ConfigService` 中 workspace config 创建、更新、删除逻辑。
+- HTTP `llm_facade`、`proxy`、`workspace_routes`、`webhook`。
+
+原因：
+
+- T2 的目标是打破 “一个 `Service` 实现所有 Connect service” 的结构，不顺手重写业务。
+- `project_service.go`、workspace 和 LLM facade 的业务/安全边界较重，应等 application 层稳定后再拆。
