@@ -33,7 +33,7 @@ Use only these values:
 
 | Task | Phase | Module | Branch | Worktree | Assignee | Status | Validation | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| H1 | Metrics baseline | Architecture metrics | `refactor/hardening-metrics` | pending | owner/agent | `not_started` | pending | No production logic movement. |
+| H1 | Metrics baseline | Architecture metrics | `refactor/hardening-metrics` | removed | owner | `cleaned` | `task arch:metrics`; `task test` | Merged into integration; worktree cleaned. |
 | H2A | Root slimming | Project/store root logic | `refactor/hardening-root-project-store` | pending | pending | `not_started` | pending | Keep wrappers and schema compatibility. |
 | H2B | Root slimming | Exec/session root logic | `refactor/hardening-root-exec-service` | pending | pending | `not_started` | pending | Keep runtime/session behavior compatible. |
 | H2C | Root slimming | Compatibility facade audit | `refactor/hardening-root-compat` | pending | pending | `not_started` | pending | Remove only proven-redundant wrappers. |
@@ -50,7 +50,7 @@ Use only these values:
 
 | Order | Branch | Status | Merge Notes |
 | --- | --- | --- | --- |
-| 1 | `refactor/hardening-metrics` | `not_started` | Establish baseline before code movement. |
+| 1 | `refactor/hardening-metrics` | `merged` | Baseline metrics merged into integration. |
 | 2 | `refactor/hardening-root-project-store` | `not_started` | Merge after metrics baseline. |
 | 3 | `refactor/hardening-root-exec-service` | `not_started` | Merge after project/store or in parallel if no conflict. |
 | 4 | `refactor/hardening-root-compat` | `not_started` | Merge after root movement branches. |
@@ -67,13 +67,16 @@ Use only these values:
 
 | Worktree Path | Branch | Owner | Status | Cleanup Required |
 | --- | --- | --- | --- | --- |
-| pending | pending | pending | `not_started` | pending |
+| `/data/src/github.com/kingfs/agent-compose-hardening-metrics` | `refactor/hardening-metrics` | owner | `cleaned` | No |
 
 ## Integration Log
 
 | Date | Action | Branch | Result | Notes |
 | --- | --- | --- | --- | --- |
 | 2026-07-02 | Created hardening plan and progress tracker | `refactor/module-split-integration` | in progress | No production code moved. |
+| 2026-07-02 | Created H1 metrics worktree | `refactor/hardening-metrics` | in progress | Worktree `/data/src/github.com/kingfs/agent-compose-hardening-metrics`. |
+| 2026-07-02 | Merged H1 metrics baseline | `refactor/hardening-metrics` | passed | `task arch:metrics`; `task test` passed after installing JS runtime dependencies from lockfiles. |
+| 2026-07-02 | Cleaned H1 metrics worktree | `refactor/hardening-metrics` | done | Removed worktree after merge. |
 
 ## Current Owner Decisions
 
