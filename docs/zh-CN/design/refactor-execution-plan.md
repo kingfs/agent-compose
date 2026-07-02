@@ -92,6 +92,12 @@ refactor/domain-project
   - `refactor/domain-transport-connect-full` 已合入：已建立 `transport/connectv1` 与 `transport/connectv2`，Connect handler wrapper 已收口。
   - `refactor/pkg-internalize-full` 已合入：`auth/config/dbo/health/driver/capproxy/imagecache/fxgo` 已从 `pkg/*` 迁入 `internal/*`；`pkg/compose` 与 `pkg/capability` 暂保留为潜在公共 API。
 - 本批次仍不以测试作为合入门槛；待结构归类完成后统一做编译、测试、路径/import 修复。
+- 下一批进入 `pkg/agentcompose` 主实现退出阶段：
+  - `refactor/pkg-agentcompose-service-shell`：迁移 `service.go` 中 daemon app composition 与 background startup。
+  - `refactor/pkg-agentcompose-llm-webhook`：迁移 LLM facade、webhook、workspace/proxy HTTP 真实实现。
+  - `refactor/pkg-agentcompose-exec-agent`：迁移 exec、agent definition、runtime provider 真实实现。
+  - `refactor/pkg-agentcompose-tests`：按域迁移 `pkg/agentcompose` 下的大型测试文件，减少旧包视觉和维护负担。
+- 本阶段目标是让 `pkg/agentcompose` 从主实现包变为兼容壳；仍按激进策略跳过完整测试，集中阶段统一修复。
 
 ## 任务依赖图
 
