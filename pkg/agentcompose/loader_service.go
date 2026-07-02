@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -23,7 +22,7 @@ func (s *Service) ValidateLoader(ctx context.Context, req *connect.Request[agent
 	}
 	resp := &agentcomposev1.ValidateLoaderResponse{Warnings: append([]string(nil), result.Warnings...)}
 	for _, trigger := range result.Triggers {
-		resp.Triggers = append(resp.Triggers, toProtoLoaderTrigger(trigger))
+		resp.Triggers = append(resp.Triggers, api.LoaderTriggerToProto(trigger))
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -36,7 +35,7 @@ func (s *Service) ListLoaders(ctx context.Context, req *connect.Request[emptypb.
 	}
 	resp := &agentcomposev1.ListLoadersResponse{}
 	for _, item := range items {
-		resp.Loaders = append(resp.Loaders, toProtoLoaderSummary(item))
+		resp.Loaders = append(resp.Loaders, api.LoaderSummaryToProto(item))
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -46,7 +45,7 @@ func (s *Service) GetLoader(ctx context.Context, req *connect.Request[agentcompo
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	return connect.NewResponse(&agentcomposev1.LoaderResponse{Loader: toProtoLoaderDetail(item)}), nil
+	return connect.NewResponse(&agentcomposev1.LoaderResponse{Loader: api.LoaderDetailToProto(item)}), nil
 }
 
 func (s *Service) CreateLoader(ctx context.Context, req *connect.Request[agentcomposev1.CreateLoaderRequest]) (*connect.Response[agentcomposev1.LoaderResponse], error) {
@@ -75,7 +74,7 @@ func (s *Service) CreateLoader(ctx context.Context, req *connect.Request[agentco
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return connect.NewResponse(&agentcomposev1.LoaderResponse{Loader: toProtoLoaderDetail(item)}), nil
+	return connect.NewResponse(&agentcomposev1.LoaderResponse{Loader: api.LoaderDetailToProto(item)}), nil
 }
 
 func (s *Service) UpdateLoader(ctx context.Context, req *connect.Request[agentcomposev1.UpdateLoaderRequest]) (*connect.Response[agentcomposev1.LoaderResponse], error) {
@@ -105,7 +104,7 @@ func (s *Service) UpdateLoader(ctx context.Context, req *connect.Request[agentco
 	if err != nil {
 		return nil, loaderServiceConnectError(err)
 	}
-	return connect.NewResponse(&agentcomposev1.LoaderResponse{Loader: toProtoLoaderDetail(item)}), nil
+	return connect.NewResponse(&agentcomposev1.LoaderResponse{Loader: api.LoaderDetailToProto(item)}), nil
 }
 
 func (s *Service) resolveLoaderDefaultAgent(ctx context.Context, agentID, provider string) (string, error) {
@@ -138,7 +137,7 @@ func (s *Service) SetLoaderEnabled(ctx context.Context, req *connect.Request[age
 	if err != nil {
 		return nil, loaderServiceConnectError(err)
 	}
-	return connect.NewResponse(&agentcomposev1.LoaderResponse{Loader: toProtoLoaderDetail(item)}), nil
+	return connect.NewResponse(&agentcomposev1.LoaderResponse{Loader: api.LoaderDetailToProto(item)}), nil
 }
 
 func (s *Service) SetLoaderTriggerEnabled(ctx context.Context, req *connect.Request[agentcomposev1.SetLoaderTriggerEnabledRequest]) (*connect.Response[agentcomposev1.LoaderResponse], error) {
@@ -146,11 +145,11 @@ func (s *Service) SetLoaderTriggerEnabled(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, loaderServiceConnectError(err)
 	}
-	return connect.NewResponse(&agentcomposev1.LoaderResponse{Loader: toProtoLoaderDetail(item)}), nil
+	return connect.NewResponse(&agentcomposev1.LoaderResponse{Loader: api.LoaderDetailToProto(item)}), nil
 }
 
 func (s *Service) RunLoaderNow(ctx context.Context, req *connect.Request[agentcomposev1.RunLoaderNowRequest]) (*connect.Response[agentcomposev1.LoaderRunResponse], error) {
-	timeout, err := parseLoaderRunTimeout(req.Msg.GetTimeout())
+	timeout, err := loaders.ParseRunTimeout(req.Msg.GetTimeout())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -158,7 +157,7 @@ func (s *Service) RunLoaderNow(ctx context.Context, req *connect.Request[agentco
 	if err != nil {
 		return nil, loaderServiceConnectError(err)
 	}
-	return connect.NewResponse(&agentcomposev1.LoaderRunResponse{Run: toProtoLoaderRunDetail(run)}), nil
+	return connect.NewResponse(&agentcomposev1.LoaderRunResponse{Run: api.LoaderRunDetailToProto(run)}), nil
 }
 
 func loaderServiceConnectError(err error) error {
@@ -168,10 +167,6 @@ func loaderServiceConnectError(err error) error {
 	return connect.NewError(connect.CodeInvalidArgument, err)
 }
 
-func parseLoaderRunTimeout(raw string) (time.Duration, error) {
-	return loaders.ParseRunTimeout(raw)
-}
-
 func (s *Service) ListLoaderRuns(ctx context.Context, req *connect.Request[agentcomposev1.ListLoaderRunsRequest]) (*connect.Response[agentcomposev1.ListLoaderRunsResponse], error) {
 	runs, err := s.configDB.ListLoaderRuns(ctx, req.Msg.GetLoaderId(), int(req.Msg.GetLimit()))
 	if err != nil {
@@ -179,7 +174,7 @@ func (s *Service) ListLoaderRuns(ctx context.Context, req *connect.Request[agent
 	}
 	resp := &agentcomposev1.ListLoaderRunsResponse{}
 	for _, item := range runs {
-		resp.Runs = append(resp.Runs, toProtoLoaderRunSummary(item))
+		resp.Runs = append(resp.Runs, api.LoaderRunSummaryToProto(item))
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -189,7 +184,7 @@ func (s *Service) GetLoaderRun(ctx context.Context, req *connect.Request[agentco
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	return connect.NewResponse(&agentcomposev1.LoaderRunResponse{Run: toProtoLoaderRunDetail(run)}), nil
+	return connect.NewResponse(&agentcomposev1.LoaderRunResponse{Run: api.LoaderRunDetailToProto(run)}), nil
 }
 
 func (s *Service) ListLoaderEvents(ctx context.Context, req *connect.Request[agentcomposev1.ListLoaderEventsRequest]) (*connect.Response[agentcomposev1.ListLoaderEventsResponse], error) {
@@ -199,7 +194,7 @@ func (s *Service) ListLoaderEvents(ctx context.Context, req *connect.Request[age
 	}
 	resp := &agentcomposev1.ListLoaderEventsResponse{}
 	for _, item := range events {
-		resp.Events = append(resp.Events, toProtoLoaderEvent(item))
+		resp.Events = append(resp.Events, api.LoaderEventToProto(item))
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -213,28 +208,4 @@ func protoEnvItemsToModel(items []*agentcomposev1.SessionEnvVar) []SessionEnvVar
 		result = append(result, SessionEnvVar{Name: item.GetName(), Value: item.GetValue(), Secret: item.GetSecret()})
 	}
 	return domain.NormalizeEnvItems(result)
-}
-
-func toProtoLoaderSummary(item LoaderSummary) *agentcomposev1.LoaderSummary {
-	return api.LoaderSummaryToProto(item)
-}
-
-func toProtoLoaderDetail(item Loader) *agentcomposev1.LoaderDetail {
-	return api.LoaderDetailToProto(item)
-}
-
-func toProtoLoaderTrigger(item LoaderTrigger) *agentcomposev1.LoaderTrigger {
-	return api.LoaderTriggerToProto(item)
-}
-
-func toProtoLoaderRunSummary(item LoaderRunSummary) *agentcomposev1.LoaderRunSummary {
-	return api.LoaderRunSummaryToProto(item)
-}
-
-func toProtoLoaderRunDetail(item LoaderRunSummary) *agentcomposev1.LoaderRunDetail {
-	return api.LoaderRunDetailToProto(item)
-}
-
-func toProtoLoaderEvent(item LoaderEvent) *agentcomposev1.LoaderEvent {
-	return api.LoaderEventToProto(item)
 }

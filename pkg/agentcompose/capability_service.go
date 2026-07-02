@@ -68,7 +68,7 @@ func (s *Service) GetCapabilityCatalog(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, capabilityConnectError(err)
 	}
-	return connect.NewResponse(toProtoCapabilityCatalog(catalog)), nil
+	return connect.NewResponse(api.CapabilityCatalogToProto(catalog)), nil
 }
 
 func (s *Service) GetCapabilityGatewayConfig(ctx context.Context, req *connect.Request[emptypb.Empty]) (*connect.Response[agentcomposev1.CapabilityGatewayConfig], error) {
@@ -77,7 +77,7 @@ func (s *Service) GetCapabilityGatewayConfig(ctx context.Context, req *connect.R
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(toProtoCapabilityGatewayConfig(settings)), nil
+	return connect.NewResponse(api.CapabilityGatewayConfigToProto(settings)), nil
 }
 
 func (s *Service) UpdateCapabilityGatewayConfig(ctx context.Context, req *connect.Request[agentcomposev1.UpdateCapabilityGatewayConfigRequest]) (*connect.Response[agentcomposev1.CapabilityGatewayConfig], error) {
@@ -89,11 +89,7 @@ func (s *Service) UpdateCapabilityGatewayConfig(ctx context.Context, req *connec
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(toProtoCapabilityGatewayConfig(saved)), nil
-}
-
-func toProtoCapabilityGatewayConfig(settings CapabilityGatewaySettings) *agentcomposev1.CapabilityGatewayConfig {
-	return api.CapabilityGatewayConfigToProto(settings)
+	return connect.NewResponse(api.CapabilityGatewayConfigToProto(saved)), nil
 }
 
 func capabilityConnectError(err error) error {
@@ -105,8 +101,4 @@ func capabilityConnectError(err error) error {
 	default:
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
-}
-
-func toProtoCapabilityCatalog(item capability.Catalog) *agentcomposev1.GetCapabilityCatalogResponse {
-	return api.CapabilityCatalogToProto(item)
 }

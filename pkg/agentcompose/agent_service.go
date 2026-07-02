@@ -75,7 +75,7 @@ func (s *Service) CreateAgentDefinition(ctx context.Context, req *connect.Reques
 		Driver:       req.Msg.GetDriver(),
 		GuestImage:   req.Msg.GetGuestImage(),
 		WorkspaceID:  req.Msg.GetWorkspaceId(),
-		EnvItems:     envItemsFromProto(req.Msg.GetEnvItems()),
+		EnvItems:     api.EnvItemsFromProto(req.Msg.GetEnvItems()),
 		ConfigJSON:   req.Msg.GetConfigJson(),
 		CapsetIDs:    req.Msg.GetCapsetIds(),
 	}
@@ -112,7 +112,7 @@ func (s *Service) UpdateAgentDefinition(ctx context.Context, req *connect.Reques
 		Driver:       req.Msg.GetDriver(),
 		GuestImage:   req.Msg.GetGuestImage(),
 		WorkspaceID:  req.Msg.GetWorkspaceId(),
-		EnvItems:     envItemsFromProto(req.Msg.GetEnvItems()),
+		EnvItems:     api.EnvItemsFromProto(req.Msg.GetEnvItems()),
 		ConfigJSON:   req.Msg.GetConfigJson(),
 		CapsetIDs:    req.Msg.GetCapsetIds(),
 	}
@@ -239,7 +239,7 @@ func (s *Service) ValidateAgentDefinition(ctx context.Context, req *connect.Requ
 		Driver:       req.Msg.GetDriver(),
 		GuestImage:   req.Msg.GetGuestImage(),
 		WorkspaceID:  req.Msg.GetWorkspaceId(),
-		EnvItems:     envItemsFromProto(req.Msg.GetEnvItems()),
+		EnvItems:     api.EnvItemsFromProto(req.Msg.GetEnvItems()),
 		ConfigJSON:   req.Msg.GetConfigJson(),
 		Enabled:      true,
 	}
@@ -283,7 +283,7 @@ func (s *Service) CreateAgentSession(ctx context.Context, req *connect.Request[a
 	if title == "" {
 		title = agent.Name + " 工作会话"
 	}
-	envItems := domain.MergeEnvItems(agent.EnvItems, envItemsFromProto(req.Msg.GetEnvItems()))
+	envItems := domain.MergeEnvItems(agent.EnvItems, api.EnvItemsFromProto(req.Msg.GetEnvItems()))
 	createReq := &agentcomposev1.CreateSessionRequest{
 		Title:       title,
 		Tags:        api.AgentDefinitionTagsToProto(agent),
@@ -329,7 +329,7 @@ func (s *Service) validateAgentDefinitionWithWorkspace(item AgentDefinition, run
 			result.Errors = append(result.Errors, driverErr.Error())
 		}
 	}
-	if wsErr := validateAgentWorkspaceValue(item.WorkspaceID, workspace, workspaceLookupErr); wsErr != nil {
+	if wsErr := domain.ValidateAgentWorkspaceValue(item.WorkspaceID, workspace, workspaceLookupErr); wsErr != nil {
 		result.Errors = append(result.Errors, wsErr.Error())
 	}
 	if len(result.Errors) > 0 {
@@ -344,11 +344,7 @@ func (s *Service) validateAgentDefinitionWithWorkspace(item AgentDefinition, run
 
 func (s *Service) validateAgentWorkspace(ctx context.Context, workspaceID string) error {
 	workspace, err := s.agentWorkspace(ctx, workspaceID)
-	return validateAgentWorkspaceValue(workspaceID, workspace, err)
-}
-
-func validateAgentWorkspaceValue(workspaceID string, workspace *WorkspaceConfig, lookupErr error) error {
-	return domain.ValidateAgentWorkspaceValue(workspaceID, workspace, lookupErr)
+	return domain.ValidateAgentWorkspaceValue(workspaceID, workspace, err)
 }
 
 func (s *Service) agentDefinitionToProto(ctx context.Context, item AgentDefinition) (*agentcomposev1.AgentDefinition, error) {
@@ -394,8 +390,4 @@ func (s *Service) listAllSessions(ctx context.Context) ([]*Session, error) {
 		return nil, err
 	}
 	return result.Sessions, nil
-}
-
-func envItemsFromProto(items []*agentcomposev1.SessionEnvVar) []SessionEnvVar {
-	return api.EnvItemsFromProto(items)
 }
