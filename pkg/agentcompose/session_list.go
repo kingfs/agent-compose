@@ -2,7 +2,6 @@ package agentcompose
 
 import (
 	sessionmodel "agent-compose/pkg/agentcompose/session"
-	"time"
 )
 
 const defaultSessionListLimit = 50
@@ -25,8 +24,4 @@ func paginateSessions(items []*Session, offset, limit int) []*Session {
 
 func sessionMatchesListOptions(session *Session, options SessionListOptions) bool {
 	return sessionmodel.MatchesListOptions(session, options)
-}
-
-func matchesTimeRange(value, from, to time.Time) bool {
-	return sessionmodel.MatchesTimeRange(value, from, to)
 }

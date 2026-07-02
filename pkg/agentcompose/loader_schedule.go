@@ -6,14 +6,6 @@ import (
 	"agent-compose/pkg/agentcompose/loader"
 )
 
-const loaderDefaultCronTimezone = "UTC"
-
-type loaderCronSpec struct {
-	Kind     string `json:"kind,omitempty"`
-	Expr     string `json:"expr"`
-	Timezone string `json:"timezone,omitempty"`
-}
-
 func loaderTriggerNextFireAt(now time.Time, trigger LoaderTrigger, fired bool) (time.Time, error) {
 	return loader.TriggerNextFireAt(now, trigger, fired)
 }
