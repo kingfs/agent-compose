@@ -14,6 +14,7 @@ import (
 	"time"
 
 	appconfig "agent-compose/pkg/config"
+	llmdomain "agent-compose/pkg/llm"
 	"github.com/samber/do/v2"
 )
 
@@ -45,7 +46,7 @@ func newTestLLMClient(t *testing.T, configDB *ConfigStore, text string) *LLMClie
 		_, _ = fmt.Fprintf(w, `{"id":"resp-loader","model":"model-a","status":"completed","output_text":%q}`, text)
 	}))
 	t.Cleanup(server.Close)
-	return NewLLMClientWithHTTPClient(&appconfig.Config{LLMAPIEndpoint: server.URL, LLMModel: "model-a"}, configDB, server.Client())
+	return llmdomain.NewClientWithHTTPClient(&appconfig.Config{LLMAPIEndpoint: server.URL, LLMModel: "model-a"}, configDB, server.Client())
 }
 
 func readRequestBodyForTest(t *testing.T, r *http.Request) string {

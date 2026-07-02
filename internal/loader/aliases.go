@@ -108,7 +108,6 @@ var NewStoreForConfig = filestore.NewStoreForConfig
 var NewExecutorForTest = execdomain.NewExecutorForTest
 var mirrorRuntimeCommandArtifacts = execdomain.MirrorRuntimeCommandArtifacts
 var NewEventDispatcher = eventdomain.NewEventDispatcher
-var NewLLMClientWithHTTPClient = llmdomain.NewClientWithHTTPClient
 var hostSessionDir = execdomain.HostSessionDir
 var writeJSONArtifact = execdomain.WriteJSONArtifact
 var firstNonZeroInt = execdomain.FirstNonZeroInt

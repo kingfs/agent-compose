@@ -1,8 +1,12 @@
 package app
 
 import (
+	execdomain "agent-compose/internal/exec"
+	loaderdomain "agent-compose/internal/loader"
+	sessiondomain "agent-compose/internal/session"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
+	llmdomain "agent-compose/pkg/llm"
 	"context"
 	"fmt"
 	"net/http"
@@ -96,7 +100,7 @@ func TestServiceGenerateLLMChatCompletionsProtocol(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	service := &Service{
-		llm: NewLLMClientWithHTTPClient(
+		llm: llmdomain.NewClientWithHTTPClient(
 			&appconfig.Config{
 				LLMAPIEndpoint: server.URL,
 				LLMAPIProtocol: llmAPIProtocolChatCompletions,
@@ -762,9 +766,9 @@ func newTestServiceAPIHarness(t *testing.T) (*Service, *fakeLoaderAgentRuntime, 
 	runtime := &fakeLoaderAgentRuntime{}
 	runtimes := fixedRuntimeProvider{runtime: runtime}
 	driver := &fakeSessionDriver{}
-	streams := NewSessionStreamBrokerForTest()
-	executor := NewExecutorForTest(config, store, configDB, runtimes, streams)
-	bus := NewLoaderBusForTest(256)
+	streams := sessiondomain.NewSessionStreamBrokerForTest()
+	executor := execdomain.NewExecutorForTest(config, store, configDB, runtimes, streams)
+	bus := loaderdomain.NewLoaderBusForTest(256)
 	aggregator := &DashboardOverviewAggregator{
 		store:    store,
 		configDB: configDB,
@@ -779,7 +783,7 @@ func newTestServiceAPIHarness(t *testing.T) (*Service, *fakeLoaderAgentRuntime, 
 		subscribers: make(map[chan DashboardOverviewEvent]struct{}),
 	}
 	go dashboard.run()
-	manager := NewLoaderManagerForTest(config, configDB, &QJSLoaderEngine{})
+	manager := loaderdomain.NewLoaderManagerForTest(config, configDB, &loaderdomain.QJSLoaderEngine{})
 	sessions := &SessionRPCBridge{config: config, store: store, configDB: configDB, driver: driver, bus: bus, streams: streams, dashboard: dashboard}
 	service := &Service{
 		config:    config,
@@ -789,7 +793,7 @@ func newTestServiceAPIHarness(t *testing.T) (*Service, *fakeLoaderAgentRuntime, 
 		runtimes:  runtimes,
 		executor:  executor,
 		loaders:   manager,
-		llm:       NewLLMClientWithHTTPClient(config, configDB, llmServer.Client()),
+		llm:       llmdomain.NewClientWithHTTPClient(config, configDB, llmServer.Client()),
 		bus:       bus,
 		streams:   streams,
 		dashboard: dashboard,
@@ -813,10 +817,10 @@ func testServiceConfigAndLoaderAPIs(t *testing.T) {
 	}
 	configDB := newTestConfigStore(t)
 	store := NewStoreForConfig(config)
-	manager := NewLoaderManagerForTest(config, configDB, &QJSLoaderEngine{})
+	manager := loaderdomain.NewLoaderManagerForTest(config, configDB, &loaderdomain.QJSLoaderEngine{})
 	manager.SetStoreForTest(store)
 	manager.SetLLMClientForTest(newTestLLMClient(t, configDB, "loader llm text"))
-	manager.SetBusForTest(NewLoaderBusForTest(4))
+	manager.SetBusForTest(loaderdomain.NewLoaderBusForTest(4))
 	service := &Service{
 		config:   config,
 		store:    store,

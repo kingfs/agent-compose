@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	workspacedomain "agent-compose/internal/workspace"
 	appconfig "agent-compose/pkg/config"
 )
 
@@ -68,7 +69,7 @@ func TestPrepareFileWorkspaceRejectsSymlinkContent(t *testing.T) {
 		Type:       "file",
 		ConfigJSON: encodeFileWorkspaceConfigForTest(t, contentRoot),
 	}
-	if err := prepareFileWorkspace(config, session, workspace); err == nil {
+	if err := workspacedomain.PrepareFileWorkspace(config, session, workspace); err == nil {
 		t.Fatalf("expected file workspace symlink content to be rejected")
 	}
 }

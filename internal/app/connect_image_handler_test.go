@@ -14,6 +14,7 @@ import (
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	imagedomain "agent-compose/internal/image"
 	"agent-compose/pkg/imagecache"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
@@ -88,8 +89,8 @@ func TestE2EImageServiceDockerUnavailableErrorIncludesEndpointAndImage(t *testin
 func testImageServiceDockerUnavailableErrorIncludesEndpointAndImage(t *testing.T) {
 	t.Helper()
 	t.Setenv("DOCKER_HOST", "tcp://docker.example:2375")
-	service := &Service{images: NewDockerImageBackendForTest(
-		func() (dockerImageClient, error) {
+	service := &Service{images: imagedomain.NewDockerImageBackendForTest(
+		func() (imagedomain.DockerImageClient, error) {
 			return nil, errors.New("docker daemon unavailable")
 		},
 		nil,
@@ -145,8 +146,8 @@ func testDockerImageBackendListPullInspectRemove(t *testing.T) {
 		},
 		removeResponse: []typesimage.DeleteResponse{{Untagged: "agent:latest"}, {Deleted: "sha256:inspect"}},
 	}
-	backend := NewDockerImageBackendForTest(
-		func() (dockerImageClient, error) { return fake, nil },
+	backend := imagedomain.NewDockerImageBackendForTest(
+		func() (imagedomain.DockerImageClient, error) { return fake, nil },
 		func() time.Time { return time.Date(2026, 6, 11, 1, 2, 3, 0, time.UTC) },
 	)
 	ctx := context.Background()
@@ -259,25 +260,25 @@ func testDockerImageBackendOperationErrorsIncludeEndpointAndImage(t *testing.T) 
 	t.Helper()
 	for _, tc := range []struct {
 		name string
-		run  func(*DockerImageBackend) error
+		run  func(*imagedomain.DockerImageBackend) error
 	}{
 		{
 			name: "pull",
-			run: func(backend *DockerImageBackend) error {
+			run: func(backend *imagedomain.DockerImageBackend) error {
 				_, err := backend.PullImage(context.Background(), ImagePullRequest{ImageRef: "broken:pull"})
 				return err
 			},
 		},
 		{
 			name: "inspect",
-			run: func(backend *DockerImageBackend) error {
+			run: func(backend *imagedomain.DockerImageBackend) error {
 				_, err := backend.InspectImage(context.Background(), ImageInspectRequest{ImageRef: "broken:inspect"})
 				return err
 			},
 		},
 		{
 			name: "remove",
-			run: func(backend *DockerImageBackend) error {
+			run: func(backend *imagedomain.DockerImageBackend) error {
 				_, err := backend.RemoveImage(context.Background(), ImageRemoveRequest{ImageRef: "broken:remove"})
 				return err
 			},
@@ -292,7 +293,7 @@ func testDockerImageBackendOperationErrorsIncludeEndpointAndImage(t *testing.T) 
 				pullReader:   io.NopCloser(strings.NewReader(`{}`)),
 				inspectImage: typesimage.InspectResponse{ID: "sha256:unused"},
 			}
-			backend := NewDockerImageBackendForTest(func() (dockerImageClient, error) { return fake, nil }, nil)
+			backend := imagedomain.NewDockerImageBackendForTest(func() (imagedomain.DockerImageClient, error) { return fake, nil }, nil)
 			err := tc.run(backend)
 			if err == nil {
 				t.Fatal("operation returned nil error")

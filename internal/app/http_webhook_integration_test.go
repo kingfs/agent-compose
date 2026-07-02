@@ -1,6 +1,7 @@
 package app
 
 import (
+	loaderdomain "agent-compose/internal/loader"
 	appconfig "agent-compose/pkg/config"
 	"context"
 	"path/filepath"
@@ -17,8 +18,8 @@ func testWebhookIntegrationEventDispatchRunsMatchingLoader(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
 	store := newTopicEventTestConfigStore(t)
-	manager := NewLoaderManagerForTest(&appconfig.Config{DataRoot: filepath.Join(t.TempDir(), "data")}, store, &QJSLoaderEngine{})
-	bus := NewLoaderBusForTest(8)
+	manager := loaderdomain.NewLoaderManagerForTest(&appconfig.Config{DataRoot: filepath.Join(t.TempDir(), "data")}, store, &loaderdomain.QJSLoaderEngine{})
+	bus := loaderdomain.NewLoaderBusForTest(8)
 	manager.SetBusForTest(bus)
 	loader, err := manager.CreateLoader(ctx, Loader{
 		Summary: LoaderSummary{

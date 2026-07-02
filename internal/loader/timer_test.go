@@ -4,6 +4,7 @@ import (
 	sqlitestore "agent-compose/internal/persistence/sqlite"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
+	llmdomain "agent-compose/pkg/llm"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -1977,7 +1978,7 @@ func newTestLLMClient(t *testing.T, configDB LLMConfigStore, text string) *LLMCl
 		_, _ = fmt.Fprintf(w, `{"id":"resp-loader","model":"model-a","status":"completed","output_text":%q}`, text)
 	}))
 	t.Cleanup(server.Close)
-	return NewLLMClientWithHTTPClient(&appconfig.Config{LLMAPIEndpoint: server.URL, LLMModel: "model-a"}, configDB, server.Client())
+	return llmdomain.NewClientWithHTTPClient(&appconfig.Config{LLMAPIEndpoint: server.URL, LLMModel: "model-a"}, configDB, server.Client())
 }
 
 type fixedRuntimeProvider struct {

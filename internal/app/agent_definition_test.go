@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	loaderdomain "agent-compose/internal/loader"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
@@ -146,7 +147,7 @@ func testLoaderCreateBindsAgentDefinitionProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateAgentDefinition returned error: %v", err)
 	}
-	manager := NewLoaderManagerForTest(nil, store, &QJSLoaderEngine{})
+	manager := loaderdomain.NewLoaderManagerForTest(nil, store, &loaderdomain.QJSLoaderEngine{})
 	service := &Service{configDB: store, loaders: manager}
 	created, err := service.CreateLoader(ctx, connect.NewRequest(&agentcomposev1.CreateLoaderRequest{
 		Name:              "Bound Loader",

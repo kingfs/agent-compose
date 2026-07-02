@@ -15,6 +15,9 @@ import (
 
 	"connectrpc.com/connect"
 
+	execdomain "agent-compose/internal/exec"
+	loaderdomain "agent-compose/internal/loader"
+	sessiondomain "agent-compose/internal/session"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
@@ -740,7 +743,7 @@ func testManagedSchedulerAgentUsesProjectRunPipeline(t *testing.T) {
 	if len(loader.Triggers) == 0 {
 		t.Fatalf("managed loader has no triggers: %#v", loader)
 	}
-	host := NewLoaderRunHostForTest(manager, loader, &LoaderRunSummary{ID: "loader-run-managed-project", LoaderID: loader.Summary.ID, TriggerID: loader.Triggers[0].ID})
+	host := loaderdomain.NewLoaderRunHostForTest(manager, loader, &LoaderRunSummary{ID: "loader-run-managed-project", LoaderID: loader.Summary.ID, TriggerID: loader.Triggers[0].ID})
 	result, err := host.Agent(ctx, "scheduled project prompt", LoaderAgentRequest{})
 	if err != nil {
 		t.Fatalf("managed scheduler Agent returned error: %v", err)
@@ -1113,10 +1116,10 @@ func setupRunPreparationProject(t *testing.T, spec *agentcomposev2.ProjectSpec, 
 	service.driver = &fakeSessionDriver{}
 	runtime := &fakeLoaderAgentRuntime{}
 	runtimes := fixedRuntimeProvider{runtime: runtime}
-	streams := NewSessionStreamBrokerForTest()
+	streams := sessiondomain.NewSessionStreamBrokerForTest()
 	service.runtimes = runtimes
 	service.streams = streams
-	service.executor = NewExecutorForTest(service.config, service.store, store, runtimes, streams)
+	service.executor = execdomain.NewExecutorForTest(service.config, service.store, store, runtimes, streams)
 	ctx := context.Background()
 	composePath := filepath.Join(projectDir, "agent-compose.yml")
 	resp, err := service.ApplyProject(ctx, connect.NewRequest(&agentcomposev2.ApplyProjectRequest{
@@ -1176,12 +1179,12 @@ func runServiceFakeRuntime(t *testing.T, service *Service) *fakeLoaderAgentRunti
 }
 
 func newRunServiceLoaderManager(service *Service) *LoaderManager {
-	manager := NewLoaderManagerForTest(service.config, service.configDB, &QJSLoaderEngine{})
+	manager := loaderdomain.NewLoaderManagerForTest(service.config, service.configDB, &loaderdomain.QJSLoaderEngine{})
 	manager.SetStoreForTest(service.store)
 	manager.SetDriverForTest(service.driver)
 	manager.SetExecutorForTest(service.executor)
 	manager.SetSessionStreamBrokerForTest(service.streams)
-	manager.SetBusForTest(NewLoaderBusForTest(16))
+	manager.SetBusForTest(loaderdomain.NewLoaderBusForTest(16))
 	manager.SetProjectAgentRunner(serviceProjectAgentRunner{service: service})
 	return manager
 }

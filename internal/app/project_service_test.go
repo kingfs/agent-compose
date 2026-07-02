@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	loaderdomain "agent-compose/internal/loader"
 	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
@@ -1002,7 +1003,7 @@ func newProjectServiceTestService(t *testing.T, store *ConfigStore) *Service {
 	return &Service{
 		config:   config,
 		configDB: store,
-		loaders:  NewLoaderManagerForTest(config, store, &QJSLoaderEngine{}),
+		loaders:  loaderdomain.NewLoaderManagerForTest(config, store, &loaderdomain.QJSLoaderEngine{}),
 		images: &fakeImageBackend{
 			inspectImage: func(context.Context, ImageInspectRequest) (ImageInspectResult, error) {
 				return ImageInspectResult{}, nil
