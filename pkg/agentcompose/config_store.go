@@ -1,6 +1,7 @@
 package agentcompose
 
 import (
+	configdomain "agent-compose/internal/agentcompose/config"
 	appconfig "agent-compose/pkg/config"
 	"context"
 	"database/sql"
@@ -9,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,8 +18,6 @@ import (
 
 	"github.com/samber/do/v2"
 )
-
-const storedUnixMillisecondThreshold int64 = 10_000_000_000
 
 type ConfigStore struct {
 	db *sql.DB
@@ -697,31 +695,7 @@ func (s *ConfigStore) ensureWorkspaceNotReferencedByAgent(ctx context.Context, w
 }
 
 func normalizeEnvItems(items []SessionEnvVar) []SessionEnvVar {
-	if len(items) == 0 {
-		return nil
-	}
-	merged := make(map[string]SessionEnvVar, len(items))
-	for _, item := range items {
-		name := strings.TrimSpace(item.Name)
-		if name == "" {
-			continue
-		}
-		item.Name = name
-		merged[name] = item
-	}
-	if len(merged) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(merged))
-	for key := range merged {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	result := make([]SessionEnvVar, 0, len(keys))
-	for _, key := range keys {
-		result = append(result, merged[key])
-	}
-	return result
+	return configEnvVarsToSession(configdomain.NormalizeEnvItems(sessionEnvVarsToConfig(items)))
 }
 
 func encodeAgentEnvJSON(items []SessionEnvVar) (string, error) {
@@ -852,76 +826,19 @@ func scanWorkspaceConfig(scan func(dest ...any) error) (WorkspaceConfig, error) 
 }
 
 func parseStoredUnixTimeAuto(value int64) time.Time {
-	if value <= 0 {
-		return time.Time{}
-	}
-	if value >= storedUnixMillisecondThreshold {
-		return time.UnixMilli(value).UTC()
-	}
-	return time.Unix(value, 0).UTC()
+	return configdomain.ParseStoredUnixTimeAuto(value)
 }
 
 func parseStoredLoaderTriggerTime(value any) time.Time {
-	switch typed := value.(type) {
-	case nil:
-		return time.Time{}
-	case int64:
-		return parseStoredUnixTimeAuto(typed)
-	case int:
-		return parseStoredUnixTimeAuto(int64(typed))
-	case float64:
-		return parseStoredUnixTimeAuto(int64(typed))
-	case []byte:
-		return parseStoredLoaderTriggerTime(string(typed))
-	case string:
-		trimmed := strings.TrimSpace(typed)
-		if trimmed == "" {
-			return time.Time{}
-		}
-		if unixValue, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
-			return parseStoredUnixTimeAuto(unixValue)
-		}
-		return parseStoredTime(trimmed)
-	default:
-		return parseStoredTime(value)
-	}
+	return configdomain.ParseStoredLoaderTriggerTime(value)
 }
 
 func parseStoredTime(value any) time.Time {
-	switch typed := value.(type) {
-	case nil:
-		return time.Time{}
-	case int64:
-		return parseStoredUnixTimeAuto(typed)
-	case int:
-		return parseStoredUnixTimeAuto(int64(typed))
-	case float64:
-		return parseStoredUnixTimeAuto(int64(typed))
-	case []byte:
-		return parseStoredTime(string(typed))
-	case string:
-		trimmed := strings.TrimSpace(typed)
-		if trimmed == "" {
-			return time.Time{}
-		}
-		if unixValue, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
-			return parseStoredUnixTimeAuto(unixValue)
-		}
-		for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05.000Z"} {
-			if parsed, err := time.Parse(layout, trimmed); err == nil {
-				return parsed.UTC()
-			}
-		}
-	}
-	return time.Time{}
+	return configdomain.ParseStoredTime(value)
 }
 
 func normalizeSQLiteTimestampExpr(columnName string) string {
-	return fmt.Sprintf(`CASE
-		WHEN trim(COALESCE(%[1]s, '')) = '' THEN CAST(strftime('%%s','now') AS INTEGER)
-		WHEN trim(COALESCE(%[1]s, '')) NOT GLOB '*[^0-9]*' THEN CAST(%[1]s AS INTEGER)
-		ELSE COALESCE(CAST(strftime('%%s', %[1]s) AS INTEGER), CAST(strftime('%%s','now') AS INTEGER))
-	END`, columnName)
+	return configdomain.NormalizeSQLiteTimestampExpr(columnName)
 }
 
 func isIntegerColumnType(columnType string) bool {
@@ -929,8 +846,27 @@ func isIntegerColumnType(columnType string) bool {
 }
 
 func boolToInt(value bool) int {
-	if value {
-		return 1
+	return configdomain.BoolToInt(value)
+}
+
+func sessionEnvVarsToConfig(items []SessionEnvVar) []configdomain.EnvVar {
+	if len(items) == 0 {
+		return nil
 	}
-	return 0
+	result := make([]configdomain.EnvVar, 0, len(items))
+	for _, item := range items {
+		result = append(result, configdomain.EnvVar{Name: item.Name, Value: item.Value, Secret: item.Secret})
+	}
+	return result
+}
+
+func configEnvVarsToSession(items []configdomain.EnvVar) []SessionEnvVar {
+	if len(items) == 0 {
+		return nil
+	}
+	result := make([]SessionEnvVar, 0, len(items))
+	for _, item := range items {
+		result = append(result, SessionEnvVar{Name: item.Name, Value: item.Value, Secret: item.Secret})
+	}
+	return result
 }
