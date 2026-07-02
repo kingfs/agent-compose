@@ -39,7 +39,7 @@ Use only these values:
 | H2C | Root slimming | Compatibility facade audit | `refactor/hardening-root-compat` | pending | pending | `not_started` | pending | Remove only proven-redundant wrappers. |
 | H3A | Large file split | CLI compose | `refactor/hardening-cli-compose` | removed | Kuhn (`019f2088-e166-75b1-b757-d5e8804963fd`) | `cleaned` | `go test ./internal/cli/... ./cmd/agent-compose`; `go test ./cmd/agent-compose -run 'Test.*CLI|Test.*Status|Test.*Host|Test.*Socket'` | Merged into integration; worktree cleaned. |
 | H3B | Large file split | Loader QJS engine | `refactor/hardening-loader-qjs` | removed | Hilbert (`019f2089-1427-7ac2-8dcf-61015134082a`) | `cleaned` | `go test ./pkg/agentcompose/loader/qjs ./pkg/agentcompose/loader ./pkg/agentcompose -run 'Loader|QJS|Webhook|Event'` | Merged into integration; worktree cleaned. |
-| H3C | Large file split | Loader store | `refactor/hardening-loader-store` | `/data/src/github.com/kingfs/agent-compose-hardening-loader-store` | pending | `assigned` | pending | Preserve loader DB behavior. |
+| H3C | Large file split | Loader store | `refactor/hardening-loader-store` | removed | Descartes (`019f2093-86db-72e1-932f-857925b0de6d`) | `cleaned` | loader timestamp/schema tests; `go test ./pkg/agentcompose -run 'TestConfigStore.*Migration|Test.*Loader|Test.*Webhook|Test.*Project'`; `go test ./pkg/agentcompose/loader/...` | Merged into integration; worktree cleaned. |
 | H3D | Large file split | LLM config | `refactor/hardening-llm-config` | removed | Bacon (`019f2089-5434-7b72-b1f7-a7be35416fae`) | `cleaned` | `go test ./pkg/agentcompose/llm ./pkg/agentcompose -run 'LLM|Facade|RuntimeConfig|Config'` | Merged into integration; worktree cleaned. |
 | H4A | Test relocation | Loader and LLM tests | `refactor/hardening-tests-loader-llm` | pending | pending | `not_started` | pending | Move focused tests near modules. |
 | H4B | Test relocation | Project and session tests | `refactor/hardening-tests-project-session` | pending | pending | `not_started` | pending | Keep root integration coverage. |
@@ -56,7 +56,7 @@ Use only these values:
 | 4 | `refactor/hardening-root-compat` | `not_started` | Merge after root movement branches. |
 | 5 | `refactor/hardening-cli-compose` | `merged` | CLI compose split merged into integration. |
 | 6 | `refactor/hardening-loader-qjs` | `merged` | QJS engine split merged into integration. |
-| 7 | `refactor/hardening-loader-store` | `assigned` | Same-package loader store split. |
+| 7 | `refactor/hardening-loader-store` | `merged` | Loader store split merged into integration. |
 | 8 | `refactor/hardening-llm-config` | `merged` | LLM config split merged into integration. |
 | 9 | `refactor/hardening-tests-loader-llm` | `not_started` | After related package splits. |
 | 10 | `refactor/hardening-tests-project-session` | `not_started` | After root package slimming. |
@@ -72,7 +72,7 @@ Use only these values:
 | `/data/src/github.com/kingfs/agent-compose-hardening-cli-compose` | `refactor/hardening-cli-compose` | Kuhn (`019f2088-e166-75b1-b757-d5e8804963fd`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-hardening-loader-qjs` | `refactor/hardening-loader-qjs` | Hilbert (`019f2089-1427-7ac2-8dcf-61015134082a`) | `cleaned` | No |
 | `/data/src/github.com/kingfs/agent-compose-hardening-llm-config` | `refactor/hardening-llm-config` | Bacon (`019f2089-5434-7b72-b1f7-a7be35416fae`) | `cleaned` | No |
-| `/data/src/github.com/kingfs/agent-compose-hardening-loader-store` | `refactor/hardening-loader-store` | pending | `assigned` | Yes |
+| `/data/src/github.com/kingfs/agent-compose-hardening-loader-store` | `refactor/hardening-loader-store` | Descartes (`019f2093-86db-72e1-932f-857925b0de6d`) | `cleaned` | No |
 
 ## Integration Log
 
@@ -87,6 +87,7 @@ Use only these values:
 | 2026-07-02 | Merged and cleaned H3A CLI compose split | `refactor/hardening-cli-compose` | passed | Mechanical same-package split; CLI validation passed. |
 | 2026-07-02 | Merged and cleaned H3D LLM config split | `refactor/hardening-llm-config` | passed | Mechanical same-package split; LLM validation passed. |
 | 2026-07-02 | Created H3C loader store worktree | `refactor/hardening-loader-store` | in progress | Worktree created from latest integration. |
+| 2026-07-02 | Merged and cleaned H3C loader store split | `refactor/hardening-loader-store` | passed | Mechanical same-package split; loader store validation passed. |
 
 ## Current Owner Decisions
 
