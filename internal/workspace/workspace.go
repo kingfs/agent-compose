@@ -104,7 +104,7 @@ func prepareFileWorkspace(config *appconfig.Config, session *Session, workspace 
 	return nil
 }
 
-func PrepareFileWorkspaceForTest(config *appconfig.Config, session *Session, workspace WorkspaceConfig) error {
+func PrepareFileWorkspace(config *appconfig.Config, session *Session, workspace WorkspaceConfig) error {
 	return prepareFileWorkspace(config, session, workspace)
 }
 

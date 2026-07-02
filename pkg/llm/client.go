@@ -122,11 +122,11 @@ func NewLLMClient(di do.Injector) (*LLMClient, error) {
 	}, nil
 }
 
-func NewClientForTest(config *appconfig.Config, configDB ConfigStore, client *http.Client) *LLMClient {
+func NewClientWithHTTPClient(config *appconfig.Config, configDB ConfigStore, client *http.Client) *LLMClient {
 	return &LLMClient{config: config, configDB: configDB, client: client}
 }
 
-func (c *LLMClient) SetHTTPClientForTest(client *http.Client) {
+func (c *LLMClient) SetHTTPClient(client *http.Client) {
 	c.client = client
 }
 

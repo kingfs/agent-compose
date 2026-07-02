@@ -96,7 +96,7 @@ func TestServiceGenerateLLMChatCompletionsProtocol(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	service := &Service{
-		llm: NewLLMClientForTest(
+		llm: NewLLMClientWithHTTPClient(
 			&appconfig.Config{
 				LLMAPIEndpoint: server.URL,
 				LLMAPIProtocol: llmAPIProtocolChatCompletions,
@@ -789,7 +789,7 @@ func newTestServiceAPIHarness(t *testing.T) (*Service, *fakeLoaderAgentRuntime, 
 		runtimes:  runtimes,
 		executor:  executor,
 		loaders:   manager,
-		llm:       NewLLMClientForTest(config, configDB, llmServer.Client()),
+		llm:       NewLLMClientWithHTTPClient(config, configDB, llmServer.Client()),
 		bus:       bus,
 		streams:   streams,
 		dashboard: dashboard,

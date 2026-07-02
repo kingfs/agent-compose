@@ -1977,7 +1977,7 @@ func newTestLLMClient(t *testing.T, configDB LLMConfigStore, text string) *LLMCl
 		_, _ = fmt.Fprintf(w, `{"id":"resp-loader","model":"model-a","status":"completed","output_text":%q}`, text)
 	}))
 	t.Cleanup(server.Close)
-	return NewLLMClientForTest(&appconfig.Config{LLMAPIEndpoint: server.URL, LLMModel: "model-a"}, configDB, server.Client())
+	return NewLLMClientWithHTTPClient(&appconfig.Config{LLMAPIEndpoint: server.URL, LLMModel: "model-a"}, configDB, server.Client())
 }
 
 type fixedRuntimeProvider struct {
