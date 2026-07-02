@@ -1038,3 +1038,15 @@ func BoolToInt(value bool) int {
 	}
 	return 0
 }
+
+func NormalizeProjectRunStatus(status string) string {
+	return normalizeProjectRunStatus(status)
+}
+
+func ScanProjectRun(scan func(dest ...any) error) (ProjectRunRecord, error) {
+	return scanProjectRun(scan)
+}
+
+func SelectProjectRunSQL() string {
+	return selectProjectRunSQL()
+}
