@@ -4,11 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	modeldomain "agent-compose/internal/model"
 )
-
-type SessionEnvVar = modeldomain.SessionEnvVar
 
 const llmProviderFamilyOpenAI = "openai"
 
@@ -30,6 +26,10 @@ func (s *testConfigStore) ReplaceGlobalEnv(_ context.Context, items []SessionEnv
 
 func (s *testConfigStore) ListGlobalEnv(context.Context) ([]SessionEnvVar, error) {
 	return append([]SessionEnvVar(nil), s.envItems...), nil
+}
+
+func (s *testConfigStore) ListGlobalEnvMap(context.Context) (map[string]string, error) {
+	return envMap(s.envItems), nil
 }
 
 func (s *testConfigStore) ListEnabledLLMProviders(context.Context) ([]LLMProvider, error) {

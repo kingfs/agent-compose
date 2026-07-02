@@ -1,7 +1,6 @@
 package llm
 
 import (
-	modeldomain "agent-compose/internal/model"
 	appconfig "agent-compose/pkg/config"
 	"context"
 	"encoding/json"
@@ -11,7 +10,7 @@ import (
 )
 
 type ConfigStore interface {
-	ListGlobalEnv(context.Context) ([]modeldomain.SessionEnvVar, error)
+	ListGlobalEnvMap(context.Context) (map[string]string, error)
 	ListEnabledLLMProviders(context.Context) ([]LLMProvider, error)
 	ListEnabledLLMModels(context.Context) ([]LLMModel, error)
 	LLMProviderModelWireAPI(context.Context, string, string) (string, bool, error)
@@ -43,13 +42,7 @@ func resolveLLMTarget(ctx context.Context, config *appconfig.Config, store Confi
 	}
 	env := map[string]string{}
 	if store != nil {
-		items, _ := store.ListGlobalEnv(ctx)
-		for _, item := range items {
-			name := strings.ToUpper(strings.TrimSpace(item.Name))
-			if name != "" {
-				env[name] = item.Value
-			}
-		}
+		env, _ = store.ListGlobalEnvMap(ctx)
 	}
 	endpoint := firstNonEmpty(env["LLM_API_ENDPOINT"], config.LLMAPIEndpoint)
 	apiKey := firstNonEmpty(env["LLM_API_KEY"], env["OPENAI_API_KEY"], config.LLMAPIKey)

@@ -11,8 +11,8 @@ results are returned to the host.
 
 Related code:
 
-- Host agent calls: `pkg/agentcompose/service.go`
-- Host execution and persistence: `pkg/agentcompose/exec.go`
+- Host agent calls: `internal/app/service.go`
+- Host execution and persistence: `internal/exec/executor.go`
 - Runtime CLI source: `runtime/javascript/src/cli.ts`
 - Runtime provider adapters: `runtime/javascript/src/runners/`
 - Guest SDK: `runtime/agent-compose-runtime-sdk/`

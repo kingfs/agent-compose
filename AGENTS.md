@@ -6,7 +6,11 @@ This repo contains the agent-compose session control plane. It creates, resumes,
 
 Main entrypoints:
 - `cmd/agent-compose/main.go`: starts the HTTP/Connect service, registers agent-compose routes, and handles graceful shutdown.
-- `pkg/agentcompose/`: session lifecycle, runtime drivers, Jupyter proxying, loader scheduling, config persistence, LLM client, and service setup.
+- `internal/app/`: service graph, Connect handlers, project/session orchestration, and application workflows.
+- `internal/{agent,loader,run,session,workspace,event,...}/`: domain packages split from the former monolithic service package.
+- `internal/persistence/`: file and SQLite persistence adapters.
+- `internal/transport/`: HTTP and Connect route adapters, including Jupyter proxy routes.
+- `pkg/{driver,llm,...}/`: reusable runtime driver, LLM, config, auth, and support packages.
 - `proto/agentcompose/v1/`: agent-compose Connect API definitions and generated Go code.
 - `proto/agentcompose/v2/`: agent-compose v2 Connect API definitions and generated Go code.
 - `proto/health/v1/`: health Connect API definitions and generated Go code.
@@ -21,10 +25,10 @@ Main entrypoints:
 - serves `/api/version`
 - registers API, Connect, and Jupyter proxy routes
 - optionally enables global BasicAuth from base64-decoded `HTTP_BASIC_AUTH`
-- calls `agentcompose.Setup(di)` to register Connect handlers and background managers
+- calls `app.Setup(di)` to register Connect handlers and background managers
 - gracefully shuts down Echo on process exit
 
-`pkg/agentcompose.Setup(di)` owns the agent-compose service graph and background runtime components.
+`internal/app.Setup(di)` owns the agent-compose service graph and background runtime components.
 
 ## Core Services
 
@@ -36,7 +40,7 @@ The active Connect services are:
 - `ConfigService`
 - `LoaderService`
 
-Jupyter proxying is handled by HTTP routes in `pkg/agentcompose/proxy.go` under `/agent-compose/session/<session_id>`.
+Jupyter proxying is handled by HTTP routes in `internal/transport/http/proxy.go` under `/agent-compose/session/<session_id>`.
 
 ## Runtime Drivers
 

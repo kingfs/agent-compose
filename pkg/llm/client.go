@@ -355,22 +355,17 @@ func (c *LLMClient) lookupGlobalEnv(ctx context.Context, keys ...string) string 
 	if c == nil || c.configDB == nil || len(keys) == 0 {
 		return ""
 	}
-	items, err := c.configDB.ListGlobalEnv(ctx)
+	items, err := c.configDB.ListGlobalEnvMap(ctx)
 	if err != nil {
 		return ""
 	}
 	for _, key := range keys {
-		key = strings.TrimSpace(key)
+		key = strings.ToUpper(strings.TrimSpace(key))
 		if key == "" {
 			continue
 		}
-		for _, item := range items {
-			if !strings.EqualFold(strings.TrimSpace(item.Name), key) {
-				continue
-			}
-			if value := strings.TrimSpace(item.Value); value != "" {
-				return value
-			}
+		if value := strings.TrimSpace(items[key]); value != "" {
+			return value
 		}
 	}
 	return ""

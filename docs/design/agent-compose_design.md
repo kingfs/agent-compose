@@ -10,15 +10,15 @@ kept as design documents.
 The current code facts are anchored by these entry points:
 
 - CLI and daemon entrypoint: `cmd/agent-compose/main.go`
-- Daemon service registration: `pkg/agentcompose/service.go`
+- Daemon service registration: `internal/app/service.go`
 - Compose parsing and normalization: `pkg/compose/`
 - v1 API: `proto/agentcompose/v1/agentcompose.proto`
 - v2 API: `proto/agentcompose/v2/agentcompose.proto`
-- Project/run persistence: `pkg/agentcompose/project_schema.go` and
-  `pkg/agentcompose/project_store.go`
-- Jupyter proxy: `pkg/agentcompose/proxy.go`
-- Loader runtime and scheduling: `pkg/agentcompose/loader_engine.go` and
-  `pkg/agentcompose/loader_manager.go`
+- Project/run persistence: `internal/persistence/sqlite/project_schema.go` and
+  `internal/persistence/sqlite/project_store.go`
+- Jupyter proxy: `internal/transport/http/proxy.go`
+- Loader runtime and scheduling: `internal/loader/engine.go` and
+  `internal/loader/manager.go`
 - Standalone frontend image: `nginx/Dockerfile`
 
 ## Architecture Goals
@@ -77,9 +77,9 @@ Daemon construction has been split into testable app construction:
 - Register `/api/version`, v1/v2 Connect handlers, webhook/event routes,
   workspace HTTP routes, and Jupyter proxy routes.
 - Inject optional global BasicAuth from `HTTP_BASIC_AUTH`.
-- Register the service graph through `agentcompose.Register(di)`.
+- Register the service graph through `app.Register(di)`.
 - Start the loader manager, event dispatcher, capability proxy, and startup
-  session reconciliation through `agentcompose.StartBackground(di)`.
+  session reconciliation through `app.StartBackground(di)`.
 - On graceful shutdown, close all listeners and remove the Unix socket file.
 
 The daemon listens on a Unix socket by default:
@@ -297,7 +297,7 @@ Besides Connect APIs, the daemon registers these HTTP routes:
 - Jupyter proxy: `<JupyterProxyBasePath>/:sessionID` and
   `<JupyterProxyBasePath>/:sessionID/*`. The default base path is `/jupyter`.
 
-The Jupyter proxy implementation lives in `pkg/agentcompose/proxy.go`.
+The Jupyter proxy implementation lives in `internal/transport/http/proxy.go`.
 `GetSessionProxy` returns only proxy entry information; actual HTTP/WebSocket
 forwarding is handled by the HTTP routes above. When a session is created,
 `Config.JupyterProxyBasePath` is written into `proxyPath`; the current code

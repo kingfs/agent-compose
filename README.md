@@ -40,8 +40,12 @@ proxy assumptions.
 
 ```text
 cmd/agent-compose/             daemon and CLI entrypoint
-pkg/agentcompose/              sessions, projects, loaders, proxy, stores, APIs
+internal/app/                  service graph, Connect handlers, project/session orchestration
+internal/{agent,loader,...}/   domain packages for agent, loader, runtime, workspace, events
+internal/persistence/          file and SQLite persistence adapters
+internal/transport/            HTTP and Connect route adapters
 pkg/driver/                    Docker, BoxLite, and Microsandbox runtime drivers
+pkg/llm/                       reusable daemon LLM client
 pkg/auth/                      authentication middleware and login flows
 pkg/config/                    environment configuration
 pkg/imagecache/                OCI image cache helpers

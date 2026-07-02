@@ -292,6 +292,21 @@ func (s *ConfigStore) ListGlobalEnv(ctx context.Context) ([]SessionEnvVar, error
 	return items, nil
 }
 
+func (s *ConfigStore) ListGlobalEnvMap(ctx context.Context) (map[string]string, error) {
+	items, err := s.ListGlobalEnv(ctx)
+	if err != nil {
+		return nil, err
+	}
+	env := make(map[string]string, len(items))
+	for _, item := range items {
+		name := strings.ToUpper(strings.TrimSpace(item.Name))
+		if name != "" {
+			env[name] = item.Value
+		}
+	}
+	return env, nil
+}
+
 func (s *ConfigStore) ReplaceGlobalEnv(ctx context.Context, items []SessionEnvVar) ([]SessionEnvVar, error) {
 	normalized := normalizeEnvItems(items)
 	tx, err := s.db.BeginTx(ctx, nil)

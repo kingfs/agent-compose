@@ -155,6 +155,7 @@ type ConfigStore interface {
 	GetLoaderBinding(context.Context, string) (LoaderBinding, bool, error)
 	UpsertLoaderBinding(context.Context, LoaderBinding) error
 	ListGlobalEnv(context.Context) ([]SessionEnvVar, error)
+	ListGlobalEnvMap(context.Context) (map[string]string, error)
 	ReplaceGlobalEnv(context.Context, []SessionEnvVar) ([]SessionEnvVar, error)
 	GetLLMFacadeToken(context.Context, string) (LLMFacadeToken, error)
 	ListPendingEvents(context.Context, int) ([]TopicEventRecord, error)

@@ -143,8 +143,8 @@ guest: /data/state/agents/system-prompts/system-prompt.txt
 
 ## Host（Go）实现
 
-主要文件：`pkg/agentcompose/service.go`、`pkg/agentcompose/exec.go`、
-`pkg/agentcompose/loader_manager.go`、`pkg/agentcompose/run_service.go`。
+主要文件：`internal/app/service.go`、`internal/exec/executor.go`、
+`internal/loader/manager.go`、`internal/app/run_handler.go`。
 
 ### 解析 agent system prompt
 
@@ -279,7 +279,7 @@ Phase 1 不改变 Gemini trust 或 permission 参数；这些内容不属于 sys
 
 ## 测试
 
-### Go（`pkg/agentcompose/agent_system_prompt_test.go`）
+### Go（`internal/exec/system_prompt_test.go`）
 
 - 空 `system_prompt` 解析为 `""`
 - 带 session 标签的 agent 解析出 trim 后的 prompt 文本
@@ -316,11 +316,11 @@ Runner 测试（`runners.test.ts`、`runner-execution.test.ts`）已更新为使
 
 | 文件 | 变更 |
 | --- | --- |
-| `pkg/agentcompose/service.go` | `resolveAgentSystemPrompt`、`writeAgentSystemPromptFile`、`executeAgentRun` |
-| `pkg/agentcompose/exec.go` | `ExecuteAgentRequest` 新增 `AgentDefinitionID`；`Executor` 注入 `configDB` |
-| `pkg/agentcompose/loader_manager.go` | 向 agent 执行传递 agent definition id |
-| `pkg/agentcompose/run_service.go` | 向 agent 执行传递 `ManagedAgentID` |
-| `pkg/agentcompose/agent_system_prompt_test.go` | **新增** — host 解析、固定路径写入/删除测试 |
+| `internal/app/service.go` | `resolveAgentSystemPrompt`、`writeAgentSystemPromptFile`、`executeAgentRun` |
+| `internal/exec/executor.go` | `ExecuteAgentRequest` 新增 `AgentDefinitionID`；`Executor` 注入 `configDB` |
+| `internal/loader/manager.go` | 向 agent 执行传递 agent definition id |
+| `internal/app/run_handler.go` | 向 agent 执行传递 `ManagedAgentID` |
+| `internal/exec/system_prompt_test.go` | **新增** — host 解析、固定路径写入/删除测试 |
 | `runtime/javascript/src/system-context.ts` | **新增** — `agentSystemPromptPath`、组合与文件读取 |
 | `runtime/javascript/src/prompt.ts` | 约定路径读取；runner 分发前组合 `systemContext` |
 | `runtime/javascript/src/types.ts` | `RunnerOptions` 使用 `systemContext` |

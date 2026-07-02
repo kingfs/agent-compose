@@ -13,7 +13,6 @@ import (
 	"github.com/samber/do/v2"
 )
 
-// refactor aliases
 type SessionEnvVar = drivertypes.SessionEnvVar
 type SessionSummary = drivertypes.SessionSummary
 type Session = drivertypes.Session
