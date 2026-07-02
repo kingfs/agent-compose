@@ -1,13 +1,10 @@
 package agentcompose
 
 import (
+	llmdomain "agent-compose/internal/agentcompose/llm"
 	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,65 +18,19 @@ import (
 )
 
 const (
-	llmProviderFamilyOpenAI       = "openai"
-	llmProviderFamilyAnthropic    = "anthropic"
-	llmProviderScopeSystem        = "system"
-	llmProviderScopeEnvDefault    = "env_default"
-	llmProviderScopeSessionEnv    = "session_env"
+	llmProviderFamilyOpenAI       = llmdomain.ProviderFamilyOpenAI
+	llmProviderFamilyAnthropic    = llmdomain.ProviderFamilyAnthropic
+	llmProviderScopeSystem        = llmdomain.ProviderScopeSystem
+	llmProviderScopeEnvDefault    = llmdomain.ProviderScopeEnvDefault
+	llmProviderScopeSessionEnv    = llmdomain.ProviderScopeSessionEnv
 	llmProviderIDDefaultOpenAI    = "default"
 	llmProviderIDDefaultAnthropic = "anthropic"
 )
 
-type LLMProvider struct {
-	ID                           string
-	Name                         string
-	ProviderType                 string
-	DefaultWireAPI               string
-	BaseURL                      string
-	APIKey                       string
-	AuthHeader                   string
-	AuthScheme                   string
-	HeadersJSON                  string
-	UseGenericResponsesTextParts bool
-	Weight                       int
-	Enabled                      bool
-	Scope                        string
-	CreatedAt                    time.Time
-	UpdatedAt                    time.Time
-}
-
-type LLMModel struct {
-	ID           string
-	Name         string
-	Description  string
-	DefaultModel bool
-	Enabled      bool
-	Scope        string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-}
-
-type LLMResolvedTarget struct {
-	Provider LLMProvider
-	Model    LLMModel
-	WireAPI  string
-	Endpoint string
-	Headers  http.Header
-}
-
-type LLMFacadeToken struct {
-	SessionID        string
-	TokenHash        string
-	TokenFingerprint string
-	Model            string
-	ProviderID       string
-	WireAPI          string
-	Source           string
-	RunID            string
-	IssuedAt         time.Time
-	ExpiresAt        time.Time
-	RevokedAt        time.Time
-}
+type LLMProvider = llmdomain.Provider
+type LLMModel = llmdomain.Model
+type LLMResolvedTarget = llmdomain.ResolvedTarget
+type LLMFacadeToken = llmdomain.FacadeToken
 
 func (s *ConfigStore) ensureLLMSchema(ctx context.Context) error {
 	statements := []string{
@@ -729,12 +680,7 @@ func hasConfiguredLLMProviderForFamily(ctx context.Context, store *ConfigStore, 
 }
 
 func llmProviderScopeIsConfigured(scope string) bool {
-	switch strings.TrimSpace(scope) {
-	case llmProviderScopeEnvDefault, llmProviderScopeSessionEnv:
-		return false
-	default:
-		return true
-	}
+	return llmdomain.ProviderScopeIsConfigured(scope)
 }
 
 func hasOpenAIEnvProviderInput(envItems []SessionEnvVar) bool {
@@ -948,143 +894,35 @@ func llmProviderSelectionPriority(scope string) int {
 }
 
 func providerForwardHeaders(provider LLMProvider) (http.Header, error) {
-	headers := http.Header{}
-	if raw := strings.TrimSpace(provider.HeadersJSON); raw != "" && raw != "{}" {
-		custom := map[string]string{}
-		if err := json.Unmarshal([]byte(raw), &custom); err != nil {
-			return nil, fmt.Errorf("decode llm provider headers: %w", err)
-		}
-		for key, value := range custom {
-			if forbiddenProviderHeader(key, provider.AuthHeader) {
-				continue
-			}
-			headers.Set(strings.TrimSpace(key), value)
-		}
-	}
-	authHeader := firstNonEmpty(strings.TrimSpace(provider.AuthHeader), "Authorization")
-	apiKey := strings.TrimSpace(provider.APIKey)
-	if apiKey != "" {
-		if scheme := strings.TrimSpace(provider.AuthScheme); scheme != "" {
-			headers.Set(authHeader, scheme+" "+apiKey)
-		} else {
-			headers.Set(authHeader, apiKey)
-		}
-	}
-	return headers, nil
+	return llmdomain.ProviderForwardHeaders(provider)
 }
 
 func forbiddenProviderHeader(name, authHeader string) bool {
-	canonical := strings.ToLower(strings.TrimSpace(name))
-	if canonical == "" || canonical == strings.ToLower(strings.TrimSpace(authHeader)) {
-		return true
-	}
-	switch canonical {
-	case "authorization", "proxy-authorization", "host", "content-length", "content-type", "cookie", "set-cookie":
-		return true
-	default:
-		return false
-	}
+	return llmdomain.ForbiddenProviderHeader(name, authHeader)
 }
 
 func normalizeLLMWireAPI(value string) string {
-	switch strings.ReplaceAll(strings.ToLower(strings.TrimSpace(value)), "-", "_") {
-	case "", llmAPIProtocolResponses:
-		return llmAPIProtocolResponses
-	case "chat", "chat_completion", llmAPIProtocolChatCompletions:
-		return llmAPIProtocolChatCompletions
-	case "message", llmAPIProtocolMessages:
-		return llmAPIProtocolMessages
-	default:
-		return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(value)), "-", "_")
-	}
+	return llmdomain.NormalizeWireAPI(value)
 }
 
 func normalizeLLMProviderType(value string) string {
-	switch strings.ReplaceAll(strings.ToLower(strings.TrimSpace(value)), "-", "_") {
-	case "", "openai", "openai_compatible":
-		return llmProviderFamilyOpenAI
-	case "anthropic", "claude", "anthropic_messages":
-		return llmProviderFamilyAnthropic
-	default:
-		return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(value)), "-", "_")
-	}
+	return llmdomain.NormalizeProviderType(value)
 }
 
 func normalizeOptionalLLMProviderType(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return ""
-	}
-	return normalizeLLMProviderType(value)
+	return llmdomain.NormalizeOptionalProviderType(value)
 }
 
 func normalizeLLMAPIBaseURL(raw, wireAPI string) string {
-	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
-	if raw == "" {
-		return ""
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return raw
-	}
-	cleanPath := strings.TrimRight(parsed.Path, "/")
-	switch {
-	case strings.HasSuffix(cleanPath, "/responses"):
-		parsed.Path = strings.TrimSuffix(cleanPath, "/responses")
-	case strings.HasSuffix(cleanPath, "/chat/completions"):
-		parsed.Path = strings.TrimSuffix(cleanPath, "/chat/completions")
-	default:
-		parsed.Path = cleanPath
-	}
-	return strings.TrimRight(parsed.String(), "/")
+	return llmdomain.NormalizeAPIBaseURL(raw, wireAPI)
 }
 
 func llmEndpointForProvider(provider LLMProvider, wireAPI string) string {
-	if normalizeLLMProviderType(provider.ProviderType) == llmProviderFamilyAnthropic {
-		baseURL := normalizeAnthropicAPIBaseURL(provider.BaseURL)
-		parsed, err := url.Parse(baseURL)
-		if err != nil {
-			return strings.TrimRight(baseURL, "/") + "/messages"
-		}
-		parsed.Path = pathpkg.Join(parsed.Path, "messages")
-		return parsed.String()
-	}
-	baseURL := normalizeLLMAPIBaseURL(provider.BaseURL, wireAPI)
-	if !llmProviderScopeIsConfigured(provider.Scope) {
-		return normalizeLLMAPIEndpointForProtocol(baseURL, wireAPI)
-	}
-	return appendLLMAPIEndpointToBaseURL(baseURL, wireAPI)
+	return llmdomain.EndpointForProvider(provider, wireAPI)
 }
 
 func appendLLMAPIEndpointToBaseURL(baseURL, wireAPI string) string {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if baseURL == "" {
-		return ""
-	}
-	parsed, err := url.Parse(baseURL)
-	if err != nil {
-		switch normalizeLLMWireAPI(wireAPI) {
-		case llmAPIProtocolChatCompletions:
-			return baseURL + "/v1/chat/completions"
-		default:
-			return baseURL + "/v1/responses"
-		}
-	}
-	cleanPath := strings.TrimRight(parsed.Path, "/")
-	switch normalizeLLMWireAPI(wireAPI) {
-	case llmAPIProtocolChatCompletions:
-		if cleanPath == "/v1" || strings.HasSuffix(cleanPath, "/v1") {
-			joinLLMAPIBasePath(parsed, cleanPath, "chat/completions")
-		} else {
-			joinLLMAPIBasePath(parsed, cleanPath, "v1/chat/completions")
-		}
-	default:
-		if cleanPath == "/v1" || strings.HasSuffix(cleanPath, "/v1") {
-			joinLLMAPIBasePath(parsed, cleanPath, "responses")
-		} else {
-			joinLLMAPIBasePath(parsed, cleanPath, "v1/responses")
-		}
-	}
-	return parsed.String()
+	return llmdomain.AppendAPIEndpointToBaseURL(baseURL, wireAPI)
 }
 
 func joinLLMAPIBasePath(parsed *url.URL, basePath, suffix string) {
@@ -1099,24 +937,7 @@ func joinLLMAPIBasePath(parsed *url.URL, basePath, suffix string) {
 }
 
 func normalizeAnthropicAPIBaseURL(raw string) string {
-	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
-	if raw == "" {
-		return ""
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return raw
-	}
-	cleanPath := strings.TrimRight(parsed.Path, "/")
-	switch {
-	case strings.HasSuffix(cleanPath, "/messages"):
-		parsed.Path = strings.TrimSuffix(cleanPath, "/messages")
-	case cleanPath == "":
-		parsed.Path = "/v1"
-	default:
-		parsed.Path = cleanPath
-	}
-	return strings.TrimRight(parsed.String(), "/")
+	return llmdomain.NormalizeAnthropicAPIBaseURL(raw)
 }
 
 func lookupEnvValue(ctx context.Context, store *ConfigStore, key string) string {
@@ -1136,92 +957,51 @@ func lookupEnvValue(ctx context.Context, store *ConfigStore, key string) string 
 }
 
 func lookupEnvItemValue(items []SessionEnvVar, key string) string {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return ""
-	}
-	for _, item := range normalizeEnvItems(items) {
-		if strings.EqualFold(strings.TrimSpace(item.Name), key) {
-			return strings.TrimSpace(item.Value)
-		}
-	}
-	return ""
+	return llmdomain.LookupEnvItemValue(envVarsToLLM(items), key)
 }
 
 func newLLMFacadeToken(sessionID, model, providerID, wireAPI, source, runID string) (string, LLMFacadeToken, error) {
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", LLMFacadeToken{}, err
-	}
-	tokenValue := "ac_llm_" + hex.EncodeToString(raw)
-	hash, fingerprint := hashLLMFacadeToken(tokenValue)
-	now := time.Now().UTC()
-	return tokenValue, LLMFacadeToken{
-		SessionID:        strings.TrimSpace(sessionID),
-		TokenHash:        hash,
-		TokenFingerprint: fingerprint,
-		Model:            strings.TrimSpace(model),
-		ProviderID:       strings.TrimSpace(providerID),
-		WireAPI:          normalizeLLMWireAPI(wireAPI),
-		Source:           strings.TrimSpace(source),
-		RunID:            strings.TrimSpace(runID),
-		IssuedAt:         now,
-	}, nil
+	return llmdomain.NewFacadeToken(sessionID, model, providerID, wireAPI, source, runID)
 }
 
 func hashLLMFacadeToken(value string) (string, string) {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(value)))
-	hash := hex.EncodeToString(sum[:])
-	if len(hash) < 12 {
-		return hash, hash
-	}
-	return hash, hash[:12]
+	return llmdomain.HashFacadeToken(value)
 }
 
 func llmProviderKeyName(name string) bool {
-	return driverpkg.LLMProviderKeyName(name)
+	return llmdomain.ProviderKeyName(name)
 }
 
 func filterPersistedRuntimeEnv(items []SessionEnvVar) []SessionEnvVar {
-	result := make([]SessionEnvVar, 0, len(items))
-	for _, item := range normalizeEnvItems(items) {
-		if llmProviderKeyName(item.Name) {
-			continue
-		}
-		result = append(result, item)
-	}
-	if len(result) == 0 {
+	return llmEnvVarsToSession(llmdomain.FilterPersistedRuntimeEnv(envVarsToLLM(items)))
+}
+
+func runtimeEnvMap(items []SessionEnvVar) map[string]string {
+	return llmdomain.RuntimeEnvMap(envVarsToLLM(items))
+}
+
+func managedRuntimeEnvMap(items []SessionEnvVar) map[string]string {
+	return llmdomain.ManagedRuntimeEnvMap(envVarsToLLM(items))
+}
+
+func envVarsToLLM(items []SessionEnvVar) []llmdomain.EnvVar {
+	if len(items) == 0 {
 		return nil
+	}
+	result := make([]llmdomain.EnvVar, 0, len(items))
+	for _, item := range items {
+		result = append(result, llmdomain.EnvVar{Name: item.Name, Value: item.Value, Secret: item.Secret})
 	}
 	return result
 }
 
-func runtimeEnvMap(items []SessionEnvVar) map[string]string {
-	env := make(map[string]string, len(items))
-	for _, item := range normalizeEnvItems(items) {
-		name := strings.TrimSpace(item.Name)
-		if name == "" || llmProviderKeyName(name) {
-			continue
-		}
-		env[name] = item.Value
-	}
-	if len(env) == 0 {
+func llmEnvVarsToSession(items []llmdomain.EnvVar) []SessionEnvVar {
+	if len(items) == 0 {
 		return nil
 	}
-	return env
-}
-
-func managedRuntimeEnvMap(items []SessionEnvVar) map[string]string {
-	env := make(map[string]string, len(items))
-	for _, item := range normalizeEnvItems(items) {
-		name := strings.TrimSpace(item.Name)
-		if name == "" {
-			continue
-		}
-		env[name] = item.Value
+	result := make([]SessionEnvVar, 0, len(items))
+	for _, item := range items {
+		result = append(result, SessionEnvVar{Name: item.Name, Value: item.Value, Secret: item.Secret})
 	}
-	if len(env) == 0 {
-		return nil
-	}
-	return env
+	return result
 }
