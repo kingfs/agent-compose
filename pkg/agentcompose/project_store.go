@@ -2,29 +2,27 @@ package agentcompose
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/compose"
 )
 
 const (
-	ProjectRunStatusPending   = "pending"
-	ProjectRunStatusRunning   = "running"
-	ProjectRunStatusSucceeded = "succeeded"
-	ProjectRunStatusFailed    = "failed"
-	ProjectRunStatusCanceled  = "canceled"
+	ProjectRunStatusPending   = domain.ProjectRunStatusPending
+	ProjectRunStatusRunning   = domain.ProjectRunStatusRunning
+	ProjectRunStatusSucceeded = domain.ProjectRunStatusSucceeded
+	ProjectRunStatusFailed    = domain.ProjectRunStatusFailed
+	ProjectRunStatusCanceled  = domain.ProjectRunStatusCanceled
 
-	ProjectRunSourceManual    = "manual"
-	ProjectRunSourceScheduler = "scheduler"
-	ProjectRunSourceAPI       = "api"
+	ProjectRunSourceManual    = domain.ProjectRunSourceManual
+	ProjectRunSourceScheduler = domain.ProjectRunSourceScheduler
+	ProjectRunSourceAPI       = domain.ProjectRunSourceAPI
 )
 
 type ProjectRecord struct {
@@ -130,104 +128,27 @@ type ProjectListResult struct {
 }
 
 func StableProjectID(name, sourcePath string) (string, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "", fmt.Errorf("project name is required")
-	}
-	if !isProjectStableIdentifier(name) {
-		return "", fmt.Errorf("project name %q is not a stable identifier", name)
-	}
-	return stableReadableID("project", name, name+"|"+normalizeProjectSourcePath(sourcePath)), nil
+	return domain.StableProjectID(name, sourcePath)
 }
 
 func StableManagedAgentID(projectID, agentName string) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	if projectID == "" || agentName == "" {
-		return "", fmt.Errorf("project id and agent name are required")
-	}
-	if !isProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	return stableReadableID("agent", agentName, projectID+"|"+agentName), nil
+	return domain.StableManagedAgentID(projectID, agentName)
 }
 
 func StableProjectSchedulerID(projectID, agentName, schedulerName string) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	schedulerName = strings.TrimSpace(schedulerName)
-	if schedulerName == "" {
-		schedulerName = "default"
-	}
-	if projectID == "" || agentName == "" {
-		return "", fmt.Errorf("project id and agent name are required")
-	}
-	if !isProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	if !isProjectStableIdentifier(schedulerName) {
-		return "", fmt.Errorf("scheduler name %q is not a stable identifier", schedulerName)
-	}
-	return stableReadableID("scheduler", agentName+"-"+schedulerName, projectID+"|"+agentName+"|"+schedulerName), nil
+	return domain.StableProjectSchedulerID(projectID, agentName, schedulerName)
 }
 
 func StableManagedLoaderID(projectID, agentName, schedulerName string) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	schedulerName = strings.TrimSpace(schedulerName)
-	if schedulerName == "" {
-		schedulerName = "default"
-	}
-	if projectID == "" || agentName == "" {
-		return "", fmt.Errorf("project id and agent name are required")
-	}
-	if !isProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	if !isProjectStableIdentifier(schedulerName) {
-		return "", fmt.Errorf("scheduler name %q is not a stable identifier", schedulerName)
-	}
-	return stableReadableID("loader", agentName+"-"+schedulerName, projectID+"|"+agentName+"|"+schedulerName), nil
+	return domain.StableManagedLoaderID(projectID, agentName, schedulerName)
 }
 
 func StableManagedTriggerID(projectID, agentName, schedulerName, triggerName string, triggerIndex int) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	schedulerName = strings.TrimSpace(schedulerName)
-	triggerName = strings.TrimSpace(triggerName)
-	if schedulerName == "" {
-		schedulerName = "default"
-	}
-	if projectID == "" || agentName == "" || triggerIndex < 0 {
-		return "", fmt.Errorf("project id, agent name, and trigger index are required")
-	}
-	if !isProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	if !isProjectStableIdentifier(schedulerName) {
-		return "", fmt.Errorf("scheduler name %q is not a stable identifier", schedulerName)
-	}
-	readable := triggerName
-	seedPart := "name:" + triggerName
-	if readable == "" {
-		readable = fmt.Sprintf("trigger-%d", triggerIndex+1)
-		seedPart = fmt.Sprintf("path:triggers[%d]", triggerIndex)
-	}
-	return stableReadableID("trigger", readable, projectID+"|"+agentName+"|"+schedulerName+"|"+seedPart), nil
+	return domain.StableManagedTriggerID(projectID, agentName, schedulerName, triggerName, triggerIndex)
 }
 
 func StableProjectRunID(projectID, agentName, source, idempotencyKey string) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	source = strings.TrimSpace(source)
-	idempotencyKey = strings.TrimSpace(idempotencyKey)
-	if projectID == "" || agentName == "" || source == "" || idempotencyKey == "" {
-		return "", fmt.Errorf("project id, agent name, source, and idempotency key are required")
-	}
-	if !isProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	return stableReadableID("run", agentName, projectID+"|"+agentName+"|"+source+"|"+idempotencyKey), nil
+	return domain.StableProjectRunID(projectID, agentName, source, idempotencyKey)
 }
 
 func NewProjectRecordFromSpec(spec *compose.NormalizedProjectSpec, sourcePath string) (ProjectRecord, error) {
@@ -898,20 +819,7 @@ func normalizeProjectRunRecord(run ProjectRunRecord) (ProjectRunRecord, error) {
 }
 
 func normalizeProjectRunStatus(status string) string {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case ProjectRunStatusPending:
-		return ProjectRunStatusPending
-	case ProjectRunStatusRunning:
-		return ProjectRunStatusRunning
-	case ProjectRunStatusSucceeded:
-		return ProjectRunStatusSucceeded
-	case ProjectRunStatusFailed:
-		return ProjectRunStatusFailed
-	case ProjectRunStatusCanceled:
-		return ProjectRunStatusCanceled
-	default:
-		return ProjectRunStatusPending
-	}
+	return domain.NormalizeProjectRunStatus(status)
 }
 
 func scanProject(scan func(dest ...any) error) (ProjectRecord, error) {
@@ -999,14 +907,7 @@ func projectMatchesQuery(item ProjectRecord, query string) bool {
 }
 
 func normalizeProjectSourcePath(sourcePath string) string {
-	sourcePath = strings.TrimSpace(sourcePath)
-	if sourcePath == "" {
-		return ""
-	}
-	if abs, err := filepath.Abs(sourcePath); err == nil {
-		sourcePath = abs
-	}
-	return filepath.Clean(sourcePath)
+	return domain.NormalizeProjectSourcePath(sourcePath)
 }
 
 func encodeProjectSourceJSON(sourcePath string) (string, error) {
@@ -1028,47 +929,11 @@ func marshalCanonicalProjectJSON(value any) ([]byte, error) {
 }
 
 func stableReadableID(prefix, readable, seed string) string {
-	readable = strings.ToLower(strings.TrimSpace(readable))
-	var b strings.Builder
-	for _, r := range readable {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
-		case r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case r == '-' || r == '_':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('-')
-		}
-	}
-	readable = strings.Trim(b.String(), "-_")
-	if readable == "" {
-		readable = "item"
-	}
-	if len(readable) > 48 {
-		readable = strings.Trim(readable[:48], "-_")
-	}
-	sum := sha256.Sum256([]byte(seed))
-	return prefix + "-" + readable + "-" + hex.EncodeToString(sum[:6])
+	return domain.StableReadableID(prefix, readable, seed)
 }
 
 func isProjectStableIdentifier(value string) bool {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return false
-	}
-	for i, r := range value {
-		switch {
-		case i == 0 && r >= 'a' && r <= 'z':
-		case i > 0 && r >= 'a' && r <= 'z':
-		case i > 0 && r >= '0' && r <= '9':
-		case i > 0 && (r == '-' || r == '_'):
-		default:
-			return false
-		}
-	}
-	return true
+	return domain.IsProjectStableIdentifier(value)
 }
 
 func asInt64Time(value any) int64 {

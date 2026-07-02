@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"agent-compose/pkg/agentcompose/domain"
+
 	"github.com/google/uuid"
 )
 
@@ -210,47 +212,13 @@ func applyProjectRunTransitionFields(run *ProjectRunRecord, req ProjectRunTransi
 }
 
 func validateProjectRunTransition(from, to string) error {
-	from = normalizeProjectRunStatus(from)
-	to = normalizeProjectRunStatus(to)
-	if from == to {
-		return nil
-	}
-	if projectRunStatusIsTerminal(from) {
-		return fmt.Errorf("project run transition %s -> %s is not allowed: run is already terminal", from, to)
-	}
-	switch from {
-	case ProjectRunStatusPending:
-		switch to {
-		case ProjectRunStatusRunning, ProjectRunStatusFailed, ProjectRunStatusCanceled:
-			return nil
-		}
-	case ProjectRunStatusRunning:
-		switch to {
-		case ProjectRunStatusSucceeded, ProjectRunStatusFailed, ProjectRunStatusCanceled:
-			return nil
-		}
-	}
-	return fmt.Errorf("project run transition %s -> %s is not allowed", from, to)
+	return domain.ValidateProjectRunTransition(from, to)
 }
 
 func projectRunStatusIsTerminal(status string) bool {
-	switch normalizeProjectRunStatus(status) {
-	case ProjectRunStatusSucceeded, ProjectRunStatusFailed, ProjectRunStatusCanceled:
-		return true
-	default:
-		return false
-	}
+	return domain.ProjectRunStatusIsTerminal(status)
 }
 
 func normalizeProjectRunSource(source string) string {
-	switch strings.ToLower(strings.TrimSpace(source)) {
-	case ProjectRunSourceScheduler:
-		return ProjectRunSourceScheduler
-	case ProjectRunSourceAPI:
-		return ProjectRunSourceAPI
-	case ProjectRunSourceManual:
-		return ProjectRunSourceManual
-	default:
-		return ProjectRunSourceManual
-	}
+	return domain.NormalizeProjectRunSource(source)
 }
