@@ -27,7 +27,7 @@ Use only these values:
 
 | Purpose | Branch | Status | Notes |
 | --- | --- | --- | --- |
-| Integration | `refactor/module-split-integration` | `in_progress` | Hardening work merges back here. |
+| Integration | `refactor/module-split-integration` | `cleaned` | Hardening work merged and final verification passed. |
 
 ## Task Board
 
@@ -99,6 +99,24 @@ Use only these values:
 | 2026-07-02 | Merged and cleaned H4C store/transport module tests | `refactor/hardening-tests-transport-store` | passed | Focused module tests added without deleting root integration tests. |
 | 2026-07-02 | Created H5 boundary check worktree | `refactor/hardening-boundary-checks` | in progress | Worktree created from latest integration. |
 | 2026-07-02 | Merged and cleaned H5 boundary checks | `refactor/hardening-boundary-checks` | passed | `task arch:boundaries` passed; Go package validation passed. |
+| 2026-07-02 | Ran final hardening verification | `refactor/module-split-integration` | passed | `task arch:metrics`; `task arch:boundaries`; `task test`. |
+
+## Final Result
+
+Hardening is complete on `refactor/module-split-integration`.
+
+Final validation:
+
+- `task arch:metrics`
+- `task arch:boundaries`
+- `task test`
+
+Final size signals:
+
+- Root `pkg/agentcompose` changed from 34543 LOC / 95 Go files to 33537 LOC / 95 Go files.
+- The largest remaining production files are compatibility/service files that need separate behavior-preserving follow-up work.
+- Module-level tests now exist for loader, LLM, project, session, store, and selected transport packages.
+- All hardening worktrees have been cleaned.
 | 2026-07-02 | Merged and cleaned H3B Loader QJS split | `refactor/hardening-loader-qjs` | passed | Mechanical same-package split; validation passed. |
 | 2026-07-02 | Merged and cleaned H3A CLI compose split | `refactor/hardening-cli-compose` | passed | Mechanical same-package split; CLI validation passed. |
 | 2026-07-02 | Merged and cleaned H3D LLM config split | `refactor/hardening-llm-config` | passed | Mechanical same-package split; LLM validation passed. |
