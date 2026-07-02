@@ -222,6 +222,12 @@ tasks:
     cmds:
       - ./scripts/architecture-metrics.sh
 
+  arch:boundaries:
+    desc: Check architecture import boundaries
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - ./scripts/check-architecture-boundaries.sh
+
   build:image:agent-compose:
     dir: '{{.TASKFILE_DIR}}'
     deps: ['prepare:agent-compose:boxlite-dev', 'prepare:agent-compose:microsandbox-dev']
