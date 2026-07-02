@@ -15,13 +15,6 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
-type normalizedV2Project struct {
-	spec       *compose.NormalizedProjectSpec
-	specProto  *agentcomposev2.ProjectSpec
-	specHash   string
-	sourcePath string
-}
-
 func (s *Service) ValidateProject(ctx context.Context, req *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error) {
 	normalized, issues, err := normalizeProjectServiceSpec(req.Msg.GetSpec(), req.Msg.GetSource(), req.Msg.GetExpectedSpecHash())
 	if err != nil {
