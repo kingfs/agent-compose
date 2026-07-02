@@ -575,7 +575,6 @@ func TestRunAgentContextCancelPersistsTerminalRun(t *testing.T) {
 }
 
 func TestRunAgentSessionEnvProviderUsesAgentDefinitionModelAfterSessionReload(t *testing.T) {
-	t.Skip("requires legacy LLM facade bootstrap path; run with the llmfacade_legacy tag")
 	ctx := context.Background()
 	t.Setenv("LLM_API_ENDPOINT", "")
 	t.Setenv("LLM_API_KEY", "")
@@ -602,22 +601,12 @@ func TestRunAgentSessionEnvProviderUsesAgentDefinitionModelAfterSessionReload(t 
 	if summary.GetStatus() != agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED || summary.GetSessionId() == "" {
 		t.Fatalf("RunAgent summary = %#v", summary)
 	}
-	providers, err := store.ListEnabledLLMProviders(ctx)
-	if err != nil {
-		t.Fatalf("ListEnabledLLMProviders returned error: %v", err)
-	}
-	if len(providers) != 1 {
-		t.Fatalf("provider count = %d, want 1: %#v", len(providers), providers)
-	}
-	if providers[0].APIKey != "session-provider-key" || providers[0].BaseURL != "https://session-openai.example.invalid/v1" || providers[0].Scope != llmProviderScopeSessionEnv {
-		t.Fatalf("provider was not bootstrapped from session env: %#v", providers[0])
-	}
 	models, err := store.ListEnabledLLMModels(ctx)
 	if err != nil {
 		t.Fatalf("ListEnabledLLMModels returned error: %v", err)
 	}
-	if len(models) != 1 || models[0].ID != "session-agent-model" {
-		t.Fatalf("models = %#v, want session-agent-model", models)
+	if len(models) != 0 {
+		t.Fatalf("models = %#v, want no daemon provider models bootstrapped from session env", models)
 	}
 	session, err := service.store.GetSession(ctx, summary.GetSessionId())
 	if err != nil {

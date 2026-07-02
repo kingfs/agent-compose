@@ -104,6 +104,10 @@ func prepareFileWorkspace(config *appconfig.Config, session *Session, workspace 
 	return nil
 }
 
+func PrepareFileWorkspaceForTest(config *appconfig.Config, session *Session, workspace WorkspaceConfig) error {
+	return prepareFileWorkspace(config, session, workspace)
+}
+
 func fileWorkspaceContentRoot(config *appconfig.Config, workspace WorkspaceConfig) (string, error) {
 	workspaceID := strings.TrimSpace(workspace.ID)
 	if workspaceID == "" {

@@ -190,6 +190,7 @@ var normalizeGitCloneTarget = workspacedomain.NormalizeGitCloneTarget
 var openFileWorkspaceDataRoot = workspacedomain.OpenFileWorkspaceDataRoot
 var ensureRootParentDir = workspacedomain.EnsureRootParentDir
 var extractWorkspaceTarArchive = workspacedomain.ExtractWorkspaceTarArchive
+var prepareFileWorkspace = workspacedomain.PrepareFileWorkspaceForTest
 var prepareSessionWorkspace = workspacedomain.PrepareSessionWorkspace
 var mergeEnvItems = modeldomain.MergeEnvItems
 var normalizeCapsetIDs = modeldomain.NormalizeCapsetIDs

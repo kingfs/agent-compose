@@ -7,6 +7,8 @@ import (
 )
 
 type Session = modeldomain.Session
+type SessionSummary = modeldomain.SessionSummary
+type SessionWorkspace = modeldomain.SessionWorkspace
 type WorkspaceConfig = modeldomain.WorkspaceConfig
 
 type ConfigStore interface {

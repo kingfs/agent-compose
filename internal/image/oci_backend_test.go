@@ -1,17 +1,13 @@
-//go:build image_app_legacy
-
 package image
 
 import (
 	"context"
-	"errors"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -55,74 +51,6 @@ func TestOCIImageBackendListInspectRemoveWithMetadata(t *testing.T) {
 	}
 	if remove.ImageRef != "team/app:latest" || len(remove.UntaggedRefs) != 1 || len(remove.DeletedIDs) != 1 || len(remove.Warnings) == 0 {
 		t.Fatalf("RemoveImage result = %#v", remove)
-	}
-}
-
-func TestImageServiceOCIStoreUsesOCIBackend(t *testing.T) {
-	called := false
-	service := &Service{
-		images: &fakeImageBackend{
-			listImages: func(ctx context.Context, req ImageListRequest) (ImageListResult, error) {
-				t.Fatalf("docker backend should not be used for explicit OCI store")
-				return ImageListResult{}, nil
-			},
-		},
-		ociImages: &fakeImageBackend{
-			listImages: func(ctx context.Context, req ImageListRequest) (ImageListResult, error) {
-				called = true
-				return ImageListResult{
-					Images: []*agentcomposev2.Image{{ImageId: "sha256:oci", ImageRef: "team/app:latest"}},
-					StoreStatus: &agentcomposev2.ImageStoreStatus{
-						Store:     agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_OCI_CACHE,
-						Available: true,
-						Endpoint:  "/cache/oci",
-					},
-				}, nil
-			},
-		},
-	}
-
-	resp, err := service.ListImages(context.Background(), connect.NewRequest(&agentcomposev2.ListImagesRequest{
-		Store: agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_OCI_CACHE,
-	}))
-	if err != nil {
-		t.Fatalf("ListImages returned error: %v", err)
-	}
-	if !called || len(resp.Msg.GetImages()) != 1 || resp.Msg.GetStoreStatus().GetStore() != agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_OCI_CACHE {
-		t.Fatalf("ListImages response = %#v called=%v", resp.Msg, called)
-	}
-}
-
-func TestImageServiceOCIStoreRequiresBackendWithoutUnimplemented(t *testing.T) {
-	service := &Service{images: &fakeImageBackend{}}
-	_, err := service.ListImages(context.Background(), connect.NewRequest(&agentcomposev2.ListImagesRequest{
-		Store: agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_OCI_CACHE,
-	}))
-	if connect.CodeOf(err) != connect.CodeInternal {
-		t.Fatalf("ListImages code = %s, want internal; err=%v", connect.CodeOf(err), err)
-	}
-	if strings.Contains(strings.ToLower(err.Error()), "unimplemented") {
-		t.Fatalf("ListImages returned unimplemented-style error: %v", err)
-	}
-}
-
-func TestImageServiceMapsOCIBackendErrors(t *testing.T) {
-	service := &Service{ociImages: &fakeImageBackend{
-		inspectImage: func(ctx context.Context, req ImageInspectRequest) (ImageInspectResult, error) {
-			return ImageInspectResult{}, imageBackendOpError{
-				Op:       "inspect image",
-				Endpoint: "/cache/oci",
-				ImageRef: req.ImageRef,
-				Err:      imagecache.NewError(imagecache.ErrorKindInvalidReference, "inspect", req.ImageRef, errors.New("bad ref")),
-			}
-		},
-	}}
-	_, err := service.InspectImage(context.Background(), connect.NewRequest(&agentcomposev2.InspectImageRequest{
-		Store:    agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_OCI_CACHE,
-		ImageRef: "bad ref",
-	}))
-	if connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("InspectImage code = %s, want invalid argument; err=%v", connect.CodeOf(err), err)
 	}
 }
 

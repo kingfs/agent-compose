@@ -1,6 +1,4 @@
-//go:build event_sqlite_legacy
-
-package event
+package loader
 
 import (
 	appconfig "agent-compose/pkg/config"
@@ -109,7 +107,7 @@ func TestWebhookQueueE2ERetriesWhenWebhookQueueFull(t *testing.T) {
 func testLoaderEventLoopRetriesWhenWebhookQueueFull(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	store := newTopicEventTestConfigStore(t)
+	store := newTestConfigStore(t)
 	manager := &LoaderManager{
 		rootCtx: ctx,
 		config: &appconfig.Config{
@@ -160,7 +158,7 @@ scheduler.on("webhook.queue.test", "on-webhook", function(event) {
 		t.Fatalf("CreateEvent returned error: %v", err)
 	}
 
-	dispatcher.dispatchOnce(ctx, 10)
+	dispatcher.DispatchOnceForTest(ctx, 10)
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		loaded, err := store.GetEvent(ctx, created.ID)
@@ -202,7 +200,7 @@ func TestWebhookQueueE2ERetriesWhenSkipPolicyLoaderBusy(t *testing.T) {
 func testLoaderEventLoopRetriesWhenSkipPolicyLoaderBusy(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	store := newTopicEventTestConfigStore(t)
+	store := newTestConfigStore(t)
 	manager := &LoaderManager{
 		rootCtx: ctx,
 		config: &appconfig.Config{
@@ -248,7 +246,7 @@ scheduler.on("webhook.busy.test", "on-webhook", function(event) {
 		t.Fatalf("CreateEvent returned error: %v", err)
 	}
 
-	dispatcher.dispatchOnce(ctx, 10)
+	dispatcher.DispatchOnceForTest(ctx, 10)
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		loaded, err := store.GetEvent(ctx, created.ID)
@@ -290,7 +288,7 @@ func TestWebhookQueueE2EDedupesWebhookTargetsByLoader(t *testing.T) {
 func testLoaderEventLoopDedupesWebhookTargetsByLoader(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	store := newTopicEventTestConfigStore(t)
+	store := newTestConfigStore(t)
 	manager := &LoaderManager{
 		rootCtx: ctx,
 		config: &appconfig.Config{
@@ -338,7 +336,7 @@ scheduler.on("webhook.dedupe.*", "wildcard", function(event) {
 		t.Fatalf("CreateEvent returned error: %v", err)
 	}
 
-	dispatcher.dispatchOnce(ctx, 10)
+	dispatcher.DispatchOnceForTest(ctx, 10)
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		runs, err := store.ListLoaderRuns(ctx, loader.Summary.ID, 10)
@@ -380,7 +378,7 @@ func TestWebhookQueueE2ERunsAllWebhookTargetLoaders(t *testing.T) {
 func testLoaderEventLoopRunsAllWebhookTargetLoaders(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	store := newTopicEventTestConfigStore(t)
+	store := newTestConfigStore(t)
 	manager := &LoaderManager{
 		rootCtx: ctx,
 		config: &appconfig.Config{
@@ -437,7 +435,7 @@ scheduler.on("webhook.multi.test", "on-webhook", function(event) {
 		t.Fatalf("CreateEvent returned error: %v", err)
 	}
 
-	dispatcher.dispatchOnce(ctx, 10)
+	dispatcher.DispatchOnceForTest(ctx, 10)
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		firstRuns, err := store.ListLoaderRuns(ctx, first.Summary.ID, 10)

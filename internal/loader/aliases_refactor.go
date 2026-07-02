@@ -95,6 +95,7 @@ const (
 	LoaderRunStatusSkipped           = loadertypes.LoaderRunStatusSkipped
 	CellTypeShell                    = execdomain.CellTypeShell
 	TopicEventDispatchPublishedToBus = eventdomain.TopicEventDispatchPublishedToBus
+	TopicEventDispatchRetrying       = eventdomain.TopicEventDispatchRetrying
 	ProjectRunStatusSucceeded        = projecttypes.ProjectRunStatusSucceeded
 	SessionTypeScript                = modeldomain.SessionTypeScript
 	VMStatusRunning                  = modeldomain.VMStatusRunning

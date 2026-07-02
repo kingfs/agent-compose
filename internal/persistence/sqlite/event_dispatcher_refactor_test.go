@@ -1,6 +1,4 @@
-//go:build event_sqlite_legacy
-
-package event
+package sqlite
 
 import (
 	"context"
@@ -8,10 +6,31 @@ import (
 	"time"
 )
 
+type testLoaderBus struct {
+	ch chan LoaderTopicEvent
+}
+
+func newTestLoaderBus(buffer int) *testLoaderBus {
+	return &testLoaderBus{ch: make(chan LoaderTopicEvent, buffer)}
+}
+
+func (b *testLoaderBus) Publish(event LoaderTopicEvent) bool {
+	select {
+	case b.ch <- event:
+		return true
+	default:
+		return false
+	}
+}
+
+func (b *testLoaderBus) Events() <-chan LoaderTopicEvent {
+	return b.ch
+}
+
 func TestEventDispatcherPublishesPendingEvents(t *testing.T) {
 	ctx := context.Background()
 	store := newTopicEventTestConfigStore(t)
-	bus := &LoaderBus{ch: make(chan LoaderTopicEvent, 4)}
+	bus := newTestLoaderBus(4)
 	dispatcher := NewEventDispatcher(ctx, store, bus)
 
 	created, err := store.CreateEvent(ctx, TopicEventRecord{
@@ -25,7 +44,7 @@ func TestEventDispatcherPublishesPendingEvents(t *testing.T) {
 		t.Fatalf("CreateEvent returned error: %v", err)
 	}
 
-	dispatcher.dispatchOnce(ctx, 10)
+	dispatcher.DispatchOnceForTest(ctx, 10)
 
 	loaded, err := store.GetEvent(ctx, created.ID)
 	if err != nil {
@@ -71,7 +90,7 @@ func TestEventDispatcherPublishesPendingEvents(t *testing.T) {
 func TestEventDispatcherKeepsPendingWhenBusFull(t *testing.T) {
 	ctx := context.Background()
 	store := newTopicEventTestConfigStore(t)
-	bus := &LoaderBus{ch: make(chan LoaderTopicEvent, 1)}
+	bus := newTestLoaderBus(1)
 	if !bus.Publish(LoaderTopicEvent{Topic: "preloaded", CreatedAt: time.Now().UTC()}) {
 		t.Fatalf("failed to preload bus")
 	}
@@ -86,7 +105,7 @@ func TestEventDispatcherKeepsPendingWhenBusFull(t *testing.T) {
 		t.Fatalf("CreateEvent returned error: %v", err)
 	}
 
-	dispatcher.dispatchOnce(ctx, 10)
+	dispatcher.DispatchOnceForTest(ctx, 10)
 
 	loaded, err := store.GetEvent(ctx, created.ID)
 	if err != nil {
@@ -103,7 +122,7 @@ func TestEventDispatcherKeepsPendingWhenBusFull(t *testing.T) {
 func TestEventDispatcherIgnoresStaleClaimAck(t *testing.T) {
 	ctx := context.Background()
 	store := newTopicEventTestConfigStore(t)
-	bus := &LoaderBus{ch: make(chan LoaderTopicEvent, 4)}
+	bus := newTestLoaderBus(4)
 	dispatcher := NewEventDispatcher(ctx, store, bus)
 
 	created, err := store.CreateEvent(ctx, TopicEventRecord{
@@ -117,7 +136,7 @@ func TestEventDispatcherIgnoresStaleClaimAck(t *testing.T) {
 		t.Fatalf("CreateEvent returned error: %v", err)
 	}
 
-	dispatcher.dispatchOnce(ctx, 10)
+	dispatcher.DispatchOnceForTest(ctx, 10)
 
 	var delivered LoaderTopicEvent
 	select {

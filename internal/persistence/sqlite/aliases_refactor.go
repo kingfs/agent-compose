@@ -35,6 +35,7 @@ type EventDelivery = eventdomain.EventDelivery
 type EventSessionLink = eventdomain.EventSessionLink
 type EventSessionTraceItem = eventdomain.EventSessionTraceItem
 type WebhookSource = eventdomain.WebhookSource
+type LoaderTopicEvent = eventdomain.LoaderTopicEvent
 
 type LLMProvider = llmdomain.LLMProvider
 type LLMModel = llmdomain.LLMModel
@@ -47,6 +48,7 @@ var normalizeTopicEventSource = eventdomain.NormalizeTopicEventSource
 var normalizeTopicEventDispatchStatus = eventdomain.NormalizeTopicEventDispatchStatus
 var normalizeEventDeliveryStatus = eventdomain.NormalizeEventDeliveryStatus
 var topicEventPayloadSHA256 = eventdomain.TopicEventPayloadSHA256
+var NewEventDispatcher = eventdomain.NewEventDispatcher
 
 const (
 	LoaderRuntimeScheduler    = loadertypes.LoaderRuntimeScheduler
@@ -59,6 +61,9 @@ const (
 	LoaderRunStatusFailed     = loadertypes.LoaderRunStatusFailed
 	LoaderRunStatusSkipped    = loadertypes.LoaderRunStatusSkipped
 
+	TopicEventSourceWebhook          = eventdomain.TopicEventSourceWebhook
+	TopicEventSourceLoader           = eventdomain.TopicEventSourceLoader
+	TopicEventSourceSystem           = eventdomain.TopicEventSourceSystem
 	TopicEventDispatchPending        = eventdomain.TopicEventDispatchPending
 	TopicEventDispatchPublishing     = eventdomain.TopicEventDispatchPublishing
 	TopicEventDispatchPublishedToBus = eventdomain.TopicEventDispatchPublishedToBus
@@ -66,4 +71,5 @@ const (
 	TopicEventDispatchRetrying       = eventdomain.TopicEventDispatchRetrying
 	TopicEventDispatchDeadLetter     = eventdomain.TopicEventDispatchDeadLetter
 	EventDeliveryStatusMatched       = eventdomain.EventDeliveryStatusMatched
+	EventDeliveryStatusRunSucceeded  = eventdomain.EventDeliveryStatusRunSucceeded
 )

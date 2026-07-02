@@ -1,5 +1,3 @@
-//go:build image_app_legacy
-
 package image
 
 import (
@@ -7,8 +5,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"connectrpc.com/connect"
 
 	appconfig "agent-compose/pkg/config"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -128,48 +124,5 @@ func TestAutoImageBackendForcedModesDoNotPing(t *testing.T) {
 				t.Fatalf("oci backend was not called")
 			}
 		})
-	}
-}
-
-func TestImageServiceStorePriorityWithAutoBackend(t *testing.T) {
-	calls := []string{}
-	service := &Service{
-		autoImages: &fakeImageBackend{listImages: func(ctx context.Context, req ImageListRequest) (ImageListResult, error) {
-			calls = append(calls, "auto")
-			return ImageListResult{}, nil
-		}},
-		images: &fakeImageBackend{pullImage: func(ctx context.Context, req ImagePullRequest) (ImagePullResult, error) {
-			calls = append(calls, "docker")
-			return ImagePullResult{}, nil
-		}},
-		ociImages: &fakeImageBackend{inspectImage: func(ctx context.Context, req ImageInspectRequest) (ImageInspectResult, error) {
-			calls = append(calls, "oci")
-			return ImageInspectResult{}, nil
-		}},
-	}
-
-	if _, err := service.ListImages(context.Background(), connect.NewRequest(&agentcomposev2.ListImagesRequest{})); err != nil {
-		t.Fatalf("ListImages returned error: %v", err)
-	}
-	if _, err := service.PullImage(context.Background(), connect.NewRequest(&agentcomposev2.PullImageRequest{
-		Store:    agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_DOCKER_DAEMON,
-		ImageRef: "team/app:latest",
-	})); err != nil {
-		t.Fatalf("PullImage returned error: %v", err)
-	}
-	if _, err := service.InspectImage(context.Background(), connect.NewRequest(&agentcomposev2.InspectImageRequest{
-		Store:    agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_OCI_CACHE,
-		ImageRef: "team/app:latest",
-	})); err != nil {
-		t.Fatalf("InspectImage returned error: %v", err)
-	}
-	want := []string{"auto", "docker", "oci"}
-	if len(calls) != len(want) {
-		t.Fatalf("calls = %#v, want %#v", calls, want)
-	}
-	for idx := range want {
-		if calls[idx] != want[idx] {
-			t.Fatalf("calls = %#v, want %#v", calls, want)
-		}
 	}
 }

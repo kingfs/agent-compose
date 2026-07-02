@@ -1,6 +1,4 @@
-//go:build image_app_legacy
-
-package image
+package app
 
 import (
 	"context"
