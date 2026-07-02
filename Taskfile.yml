@@ -216,6 +216,12 @@ tasks:
     cmds:
       - echo 'docs not configured'
 
+  arch:metrics:
+    desc: Generate architecture size metrics
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - ./scripts/architecture-metrics.sh
+
   build:image:agent-compose:
     dir: '{{.TASKFILE_DIR}}'
     deps: ['prepare:agent-compose:boxlite-dev', 'prepare:agent-compose:microsandbox-dev']
