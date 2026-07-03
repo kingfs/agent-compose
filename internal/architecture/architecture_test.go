@@ -264,9 +264,6 @@ func TestProjectFacadeGeneratedConnectOwnershipOnlyShrinks(t *testing.T) {
 	allowed := map[string]bool{
 		"ValidateProject": true,
 		"ApplyProject":    true,
-		"GetProject":      true,
-		"ListProjects":    true,
-		"RemoveProject":   true,
 		"WatchProject":    true,
 	}
 	for method := range methods {
@@ -278,10 +275,14 @@ func TestProjectFacadeGeneratedConnectOwnershipOnlyShrinks(t *testing.T) {
 		t.Fatalf("internal/app Project facade owns %d generated Connect handler methods, want no more than %d", len(methods), len(allowed))
 	}
 
-	queryPassthrough := projectTransportQueryPassthroughHandlers(t, root)
 	for _, method := range []string{"GetProject", "ListProjects", "RemoveProject"} {
-		if !queryPassthrough[method] && methods[method] {
-			t.Fatalf("internal/transport/connect no longer has query passthrough for %s, so internal/app Project facade must not keep owning its generated Connect handler signature", method)
+		if methods[method] {
+			t.Fatalf("internal/app Project facade still owns generated Connect handler signature for %s; query protocol mapping belongs in internal/transport/connect", method)
+		}
+	}
+	for method, passthrough := range projectTransportQueryPassthroughHandlers(t, root) {
+		if passthrough {
+			t.Fatalf("internal/transport/connect still passes generated %s request directly to app Project facade", method)
 		}
 	}
 }
