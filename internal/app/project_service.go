@@ -33,43 +33,11 @@ type projectManagedSchedulerBuild struct {
 }
 
 func (s *Service) ValidateProject(ctx context.Context, req *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error) {
-	normalized, issues, err := normalizeProjectServiceSpec(req.Msg.GetSpec(), req.Msg.GetSource(), req.Msg.GetExpectedSpecHash())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	if len(issues) > 0 {
-		return connect.NewResponse(&agentcomposev2.ValidateProjectResponse{
-			Valid:    false,
-			Issues:   issues,
-			SpecHash: specHashOrEmpty(normalized),
-		}), nil
-	}
-	if issues := s.validateProjectManagedAgentDefinitions(normalized); len(issues) > 0 {
-		return connect.NewResponse(&agentcomposev2.ValidateProjectResponse{
-			Valid:    false,
-			Issues:   issues,
-			SpecHash: normalized.specHash,
-		}), nil
-	}
-	if issues := s.validateProjectManagedSchedulers(ctx, normalized); len(issues) > 0 {
-		return connect.NewResponse(&agentcomposev2.ValidateProjectResponse{
-			Valid:    false,
-			Issues:   issues,
-			SpecHash: normalized.specHash,
-		}), nil
-	}
-	return connect.NewResponse(&agentcomposev2.ValidateProjectResponse{
-		Valid:    true,
-		SpecHash: normalized.specHash,
-	}), nil
+	return NewProjectServiceFromService(s).ValidateProject(ctx, req)
 }
 
 func (s *Service) ApplyProject(ctx context.Context, req *connect.Request[agentcomposev2.ApplyProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
-	result, err := s.applyProjectWorkflow(ctx, req.Msg)
-	if err != nil {
-		return nil, connect.NewError(projectApplyConnectCode(err), err)
-	}
-	return connect.NewResponse(projectApplyResponseFromResult(result)), nil
+	return NewProjectServiceFromService(s).ApplyProject(ctx, req)
 }
 
 func projectApplyConnectCode(err error) connect.Code {
@@ -88,108 +56,27 @@ func projectApplyConnectCode(err error) connect.Code {
 }
 
 func (s *Service) GetProject(ctx context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
-	if s.configDB == nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("config store is required"))
-	}
-	project, err := s.resolveProjectRef(ctx, req.Msg.GetProject())
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		if strings.Contains(err.Error(), "required") || strings.Contains(err.Error(), "ambiguous") {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	agents, err := s.configDB.ListProjectAgents(ctx, project.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	schedulers, err := s.configDB.ListProjectSchedulers(ctx, project.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	var spec *agentcomposev2.ProjectSpec
-	if req.Msg.GetIncludeSpec() && project.CurrentRevision > 0 {
-		revision, err := s.configDB.GetProjectRevision(ctx, project.ID, project.CurrentRevision)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
-		spec, err = decodeProjectRevisionSpec(revision.SpecJSON)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode project %s revision %d: %w", project.Name, project.CurrentRevision, err))
-		}
-	}
-	return connect.NewResponse(&agentcomposev2.GetProjectResponse{
-		Project: projectResponse(project, spec, agents, schedulers),
-	}), nil
+	return NewProjectServiceFromService(s).GetProject(ctx, req)
 }
 
 func (s *Service) ListProjects(ctx context.Context, req *connect.Request[agentcomposev2.ListProjectsRequest]) (*connect.Response[agentcomposev2.ListProjectsResponse], error) {
-	if s.configDB == nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("config store is required"))
-	}
-	result, err := s.configDB.ListProjects(ctx, ProjectListOptions{
-		Query:          req.Msg.GetQuery(),
-		IncludeRemoved: req.Msg.GetIncludeRemoved(),
-		Offset:         int(req.Msg.GetOffset()),
-		Limit:          int(req.Msg.GetLimit()),
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	resp := &agentcomposev2.ListProjectsResponse{
-		TotalCount: uint32(result.TotalCount),
-		HasMore:    result.HasMore,
-		NextOffset: uint32(result.NextOffset),
-	}
-	for _, project := range result.Projects {
-		resp.Projects = append(resp.Projects, projectSummaryResponse(project, nil, nil))
-	}
-	return connect.NewResponse(resp), nil
+	return NewProjectServiceFromService(s).ListProjects(ctx, req)
 }
 
 func (s *Service) RemoveProject(ctx context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
-	if s.configDB == nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("config store is required"))
-	}
-	if req.Msg.GetRemoveHistory() {
-		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("project history removal is not implemented"))
-	}
-	project, err := s.resolveProjectRef(ctx, req.Msg.GetProject())
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		if strings.Contains(err.Error(), "required") || strings.Contains(err.Error(), "ambiguous") {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	changes, err := s.downProject(ctx, project)
-	if err != nil {
-		return nil, err
-	}
-	agents, err := s.configDB.ListProjectAgents(ctx, project.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	schedulers, err := s.configDB.ListProjectSchedulers(ctx, project.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	return connect.NewResponse(&agentcomposev2.RemoveProjectResponse{
-		Project: projectResponse(project, nil, agents, schedulers),
-		Changes: changes,
-	}), nil
+	return NewProjectServiceFromService(s).RemoveProject(ctx, req)
 }
 
 func (s *Service) resolveProjectRef(ctx context.Context, ref *agentcomposev2.ProjectRef) (ProjectRecord, error) {
+	return NewProjectServiceFromService(s).resolveProjectRef(ctx, ref)
+}
+
+func (p *ProjectService) resolveProjectRef(ctx context.Context, ref *agentcomposev2.ProjectRef) (ProjectRecord, error) {
 	if ref == nil {
 		return ProjectRecord{}, fmt.Errorf("project ref is required")
 	}
 	if projectID := strings.TrimSpace(ref.GetProjectId()); projectID != "" {
-		return s.configDB.GetProject(ctx, projectID)
+		return p.service.configDB.GetProject(ctx, projectID)
 	}
 	name := strings.TrimSpace(ref.GetName())
 	sourcePath := strings.TrimSpace(ref.GetSourcePath())
@@ -198,12 +85,12 @@ func (s *Service) resolveProjectRef(ctx context.Context, ref *agentcomposev2.Pro
 		if err != nil {
 			return ProjectRecord{}, err
 		}
-		return s.configDB.GetProject(ctx, projectID)
+		return p.service.configDB.GetProject(ctx, projectID)
 	}
 	if name == "" {
 		return ProjectRecord{}, fmt.Errorf("project id or name is required")
 	}
-	result, err := s.configDB.ListProjects(ctx, ProjectListOptions{Query: name, Limit: 200})
+	result, err := p.service.configDB.ListProjects(ctx, ProjectListOptions{Query: name, Limit: 200})
 	if err != nil {
 		return ProjectRecord{}, err
 	}
@@ -571,12 +458,16 @@ func sessionEnvItemsFromCompose(values map[string]compose.EnvVarSpec) []SessionE
 	return items
 }
 
-func (s *Service) projectManagedSchedulersFromSpec(ctx context.Context, project ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]ProjectSchedulerRecord, []Loader, error) {
-	builds, err := s.projectManagedSchedulerBuildsFromSpec(ctx, project, revision, spec)
+func (p *ProjectService) projectManagedSchedulersFromSpec(ctx context.Context, project ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]ProjectSchedulerRecord, []Loader, error) {
+	builds, err := p.projectManagedSchedulerBuildsFromSpec(ctx, project, revision, spec)
 	if err != nil {
 		return nil, nil, err
 	}
 	return projectManagedSchedulerRecords(builds), projectManagedSchedulerLoaders(builds), nil
+}
+
+func (s *Service) projectManagedSchedulersFromSpec(ctx context.Context, project ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]ProjectSchedulerRecord, []Loader, error) {
+	return NewProjectServiceFromService(s).projectManagedSchedulersFromSpec(ctx, project, revision, spec)
 }
 
 func projectManagedSchedulerRecords(builds []projectManagedSchedulerBuild) []ProjectSchedulerRecord {
@@ -618,7 +509,7 @@ func projectManagedSchedulerBuildsFromSpec(project ProjectRecord, revision int64
 	return builds, nil
 }
 
-func (s *Service) projectManagedSchedulerBuildsFromSpec(ctx context.Context, project ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]projectManagedSchedulerBuild, error) {
+func (p *ProjectService) projectManagedSchedulerBuildsFromSpec(ctx context.Context, project ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]projectManagedSchedulerBuild, error) {
 	builds := make([]projectManagedSchedulerBuild, 0)
 	for _, agent := range spec.Agents {
 		record, ok, err := NewProjectSchedulerRecordFromSpec(project.ID, revision, agent)
@@ -634,7 +525,7 @@ func (s *Service) projectManagedSchedulerBuildsFromSpec(ctx context.Context, pro
 		}
 		validationTriggers := loader.Triggers
 		if strings.TrimSpace(agent.Scheduler.Script) != "" {
-			validation, err := s.validateInlineSchedulerScript(ctx, agent.Name, agent.Scheduler.Script)
+			validation, err := p.service.validateInlineSchedulerScript(ctx, agent.Name, agent.Scheduler.Script)
 			if err != nil {
 				return nil, err
 			}
@@ -649,6 +540,10 @@ func (s *Service) projectManagedSchedulerBuildsFromSpec(ctx context.Context, pro
 		})
 	}
 	return builds, nil
+}
+
+func (s *Service) projectManagedSchedulerBuildsFromSpec(ctx context.Context, project ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]projectManagedSchedulerBuild, error) {
+	return NewProjectServiceFromService(s).projectManagedSchedulerBuildsFromSpec(ctx, project, revision, spec)
 }
 
 func projectManagedLoaderFromScheduler(project ProjectRecord, scheduler ProjectSchedulerRecord, agent compose.NormalizedAgentSpec) (Loader, error) {
@@ -813,12 +708,12 @@ func jsStringLiteral(value string) string {
 	return string(data)
 }
 
-func (s *Service) validateProjectManagedSchedulers(ctx context.Context, normalized normalizedV2Project) []*agentcomposev2.ProjectValidationIssue {
+func (p *ProjectService) validateProjectManagedSchedulers(ctx context.Context, normalized normalizedV2Project) []*agentcomposev2.ProjectValidationIssue {
 	project, err := NewProjectRecordFromSpec(normalized.spec, normalized.sourcePath)
 	if err != nil {
 		return []*agentcomposev2.ProjectValidationIssue{projectValidationIssue("spec", err.Error())}
 	}
-	builds, err := s.projectManagedSchedulerBuildsFromSpec(ctx, project, 0, normalized.spec)
+	builds, err := p.projectManagedSchedulerBuildsFromSpec(ctx, project, 0, normalized.spec)
 	if err != nil {
 		return []*agentcomposev2.ProjectValidationIssue{projectManagedSchedulerBuildIssue(err)}
 	}
@@ -834,6 +729,10 @@ func (s *Service) validateProjectManagedSchedulers(ctx context.Context, normaliz
 		}
 	}
 	return nil
+}
+
+func (s *Service) validateProjectManagedSchedulers(ctx context.Context, normalized normalizedV2Project) []*agentcomposev2.ProjectValidationIssue {
+	return NewProjectServiceFromService(s).validateProjectManagedSchedulers(ctx, normalized)
 }
 
 type projectManagedSchedulerBuildError struct {
@@ -871,7 +770,7 @@ func projectManagedSchedulerBuildIssue(err error) *agentcomposev2.ProjectValidat
 	return projectValidationIssue("schedulers", err.Error())
 }
 
-func (s *Service) validateProjectManagedAgentDefinitions(normalized normalizedV2Project) []*agentcomposev2.ProjectValidationIssue {
+func (p *ProjectService) validateProjectManagedAgentDefinitions(normalized normalizedV2Project) []*agentcomposev2.ProjectValidationIssue {
 	project, err := NewProjectRecordFromSpec(normalized.spec, normalized.sourcePath)
 	if err != nil {
 		return []*agentcomposev2.ProjectValidationIssue{projectValidationIssue("spec", err.Error())}
@@ -882,8 +781,8 @@ func (s *Service) validateProjectManagedAgentDefinitions(normalized normalizedV2
 	}
 	var issues []*agentcomposev2.ProjectValidationIssue
 	defaultDriver := driverpkg.RuntimeDriverDocker
-	if s != nil && s.config != nil && strings.TrimSpace(s.config.RuntimeDriver) != "" {
-		defaultDriver = s.config.RuntimeDriver
+	if p != nil && p.service != nil && p.service.config != nil && strings.TrimSpace(p.service.config.RuntimeDriver) != "" {
+		defaultDriver = p.service.config.RuntimeDriver
 	}
 	for _, agent := range agents {
 		path := "agents." + agent.ManagedAgentName
@@ -900,8 +799,12 @@ func (s *Service) validateProjectManagedAgentDefinitions(normalized normalizedV2
 	return issues
 }
 
-func (s *Service) reconcileProjectManagedAgentDefinitions(ctx context.Context, project ProjectRecord, current []AgentDefinition) ([]*agentcomposev2.ProjectChange, bool, error) {
-	if s.configDB == nil {
+func (s *Service) validateProjectManagedAgentDefinitions(normalized normalizedV2Project) []*agentcomposev2.ProjectValidationIssue {
+	return NewProjectServiceFromService(s).validateProjectManagedAgentDefinitions(normalized)
+}
+
+func (p *ProjectService) reconcileProjectManagedAgentDefinitions(ctx context.Context, project ProjectRecord, current []AgentDefinition) ([]*agentcomposev2.ProjectChange, bool, error) {
+	if p.service.configDB == nil {
 		return nil, false, fmt.Errorf("config store is required")
 	}
 	currentByID := make(map[string]AgentDefinition, len(current))
@@ -911,11 +814,11 @@ func (s *Service) reconcileProjectManagedAgentDefinitions(ctx context.Context, p
 	changes := make([]*agentcomposev2.ProjectChange, 0, len(current))
 	unchanged := true
 	for _, agent := range current {
-		existing, found, err := s.configDB.GetAgentDefinitionIfExists(ctx, agent.ID, true)
+		existing, found, err := p.service.configDB.GetAgentDefinitionIfExists(ctx, agent.ID, true)
 		if err != nil {
 			return nil, false, fmt.Errorf("load managed agent definition %s: %w", agent.ID, err)
 		}
-		saved, err := s.configDB.UpsertManagedAgentDefinition(ctx, agent)
+		saved, err := p.service.configDB.UpsertManagedAgentDefinition(ctx, agent)
 		if err != nil {
 			return nil, false, fmt.Errorf("upsert managed agent definition %s: %w", agent.ID, err)
 		}
@@ -931,7 +834,7 @@ func (s *Service) reconcileProjectManagedAgentDefinitions(ctx context.Context, p
 		})
 	}
 
-	existingManaged, err := s.configDB.ListManagedAgentDefinitions(ctx, project.ID, false)
+	existingManaged, err := p.service.configDB.ListManagedAgentDefinitions(ctx, project.ID, false)
 	if err != nil {
 		return nil, false, fmt.Errorf("list managed agent definitions: %w", err)
 	}
@@ -942,7 +845,7 @@ func (s *Service) reconcileProjectManagedAgentDefinitions(ctx context.Context, p
 		if !existing.Enabled {
 			continue
 		}
-		disabled, err := s.configDB.SetAgentDefinitionEnabled(ctx, existing.ID, false)
+		disabled, err := p.service.configDB.SetAgentDefinitionEnabled(ctx, existing.ID, false)
 		if err != nil {
 			return nil, false, fmt.Errorf("disable removed managed agent definition %s: %w", existing.ID, err)
 		}
@@ -958,8 +861,12 @@ func (s *Service) reconcileProjectManagedAgentDefinitions(ctx context.Context, p
 	return changes, unchanged, nil
 }
 
-func (s *Service) reconcileProjectManagedSchedulers(ctx context.Context, project ProjectRecord, schedulers []ProjectSchedulerRecord, loaders []Loader) ([]*agentcomposev2.ProjectChange, bool, error) {
-	if s.configDB == nil {
+func (s *Service) reconcileProjectManagedAgentDefinitions(ctx context.Context, project ProjectRecord, current []AgentDefinition) ([]*agentcomposev2.ProjectChange, bool, error) {
+	return NewProjectServiceFromService(s).reconcileProjectManagedAgentDefinitions(ctx, project, current)
+}
+
+func (p *ProjectService) reconcileProjectManagedSchedulers(ctx context.Context, project ProjectRecord, schedulers []ProjectSchedulerRecord, loaders []Loader) ([]*agentcomposev2.ProjectChange, bool, error) {
+	if p.service.configDB == nil {
 		return nil, false, fmt.Errorf("config store is required")
 	}
 	currentByID := make(map[string]ProjectSchedulerRecord, len(schedulers))
@@ -971,13 +878,13 @@ func (s *Service) reconcileProjectManagedSchedulers(ctx context.Context, project
 	unchanged := true
 	for _, scheduler := range schedulers {
 		currentByID[scheduler.SchedulerID] = scheduler
-		existing, found, err := getProjectSchedulerIfExists(ctx, s.configDB, scheduler.ProjectID, scheduler.SchedulerID)
+		existing, found, err := getProjectSchedulerIfExists(ctx, p.service.configDB, scheduler.ProjectID, scheduler.SchedulerID)
 		if err != nil {
 			return changes, false, fmt.Errorf("load project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 		}
 		stagedScheduler := scheduler
 		stagedScheduler.Enabled = false
-		saved, err := s.configDB.UpsertProjectScheduler(ctx, stagedScheduler)
+		saved, err := p.service.configDB.UpsertProjectScheduler(ctx, stagedScheduler)
 		if err != nil {
 			return changes, false, fmt.Errorf("stage project scheduler %s/%s disabled: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 		}
@@ -986,32 +893,32 @@ func (s *Service) reconcileProjectManagedSchedulers(ctx context.Context, project
 		if !ok {
 			return changes, false, fmt.Errorf("managed loader %s for scheduler %s missing", saved.ManagedLoaderID, saved.SchedulerID)
 		}
-		existingLoader, loaderFound, err := s.configDB.GetLoaderIfExists(ctx, loader.Summary.ID)
+		existingLoader, loaderFound, err := p.service.configDB.GetLoaderIfExists(ctx, loader.Summary.ID)
 		if err != nil {
 			return changes, false, fmt.Errorf("load managed loader %s: %w", loader.Summary.ID, err)
 		}
 		stagedLoader := loader
 		stagedLoader.Summary.Enabled = false
-		savedLoader, err := s.configDB.UpsertManagedLoader(ctx, stagedLoader)
+		savedLoader, err := p.service.configDB.UpsertManagedLoader(ctx, stagedLoader)
 		if err != nil {
 			return changes, false, fmt.Errorf("stage managed loader %s disabled: %w", loader.Summary.ID, err)
 		}
-		if _, err := s.configDB.ReplaceLoaderTriggers(ctx, savedLoader.Summary.ID, loader.Triggers); err != nil {
-			s.cleanupFailedManagedSchedulerReconcile(ctx, saved, savedLoader.Summary.ID)
+		if _, err := p.service.configDB.ReplaceLoaderTriggers(ctx, savedLoader.Summary.ID, loader.Triggers); err != nil {
+			p.cleanupFailedManagedSchedulerReconcile(ctx, saved, savedLoader.Summary.ID)
 			return changes, false, fmt.Errorf("replace managed loader triggers %s: %w", savedLoader.Summary.ID, err)
 		}
 		if loader.Summary.Enabled {
-			if err := s.configDB.SetLoaderEnabled(ctx, savedLoader.Summary.ID, true); err != nil {
-				s.cleanupFailedManagedSchedulerReconcile(ctx, saved, savedLoader.Summary.ID)
+			if err := p.service.configDB.SetLoaderEnabled(ctx, savedLoader.Summary.ID, true); err != nil {
+				p.cleanupFailedManagedSchedulerReconcile(ctx, saved, savedLoader.Summary.ID)
 				return changes, false, fmt.Errorf("enable managed loader %s: %w", savedLoader.Summary.ID, err)
 			}
-		} else if err := s.configDB.SetLoaderEnabled(ctx, savedLoader.Summary.ID, false); err != nil {
+		} else if err := p.service.configDB.SetLoaderEnabled(ctx, savedLoader.Summary.ID, false); err != nil {
 			return changes, false, fmt.Errorf("disable managed loader %s: %w", savedLoader.Summary.ID, err)
 		}
 		if scheduler.Enabled {
-			saved, err = s.configDB.SetProjectSchedulerEnabled(ctx, scheduler.ProjectID, scheduler.SchedulerID, true)
+			saved, err = p.service.configDB.SetProjectSchedulerEnabled(ctx, scheduler.ProjectID, scheduler.SchedulerID, true)
 			if err != nil {
-				s.cleanupFailedManagedSchedulerReconcile(ctx, stagedScheduler, savedLoader.Summary.ID)
+				p.cleanupFailedManagedSchedulerReconcile(ctx, stagedScheduler, savedLoader.Summary.ID)
 				return changes, false, fmt.Errorf("enable project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 			}
 		} else {
@@ -1038,7 +945,7 @@ func (s *Service) reconcileProjectManagedSchedulers(ctx context.Context, project
 			Name:         savedLoader.Summary.Name,
 		})
 	}
-	existingSchedulers, err := s.configDB.ListProjectSchedulers(ctx, project.ID)
+	existingSchedulers, err := p.service.configDB.ListProjectSchedulers(ctx, project.ID)
 	if err != nil {
 		return changes, false, fmt.Errorf("list project schedulers: %w", err)
 	}
@@ -1049,11 +956,11 @@ func (s *Service) reconcileProjectManagedSchedulers(ctx context.Context, project
 		if !existing.Enabled {
 			continue
 		}
-		disabled, err := s.configDB.SetProjectSchedulerEnabled(ctx, existing.ProjectID, existing.SchedulerID, false)
+		disabled, err := p.service.configDB.SetProjectSchedulerEnabled(ctx, existing.ProjectID, existing.SchedulerID, false)
 		if err != nil {
 			return changes, false, fmt.Errorf("disable removed project scheduler %s/%s: %w", existing.ProjectID, existing.SchedulerID, err)
 		}
-		if err := s.disableManagedLoaderIfOwned(ctx, existing.ManagedLoaderID, project.ID, existing.SchedulerID); err != nil {
+		if err := p.disableManagedLoaderIfOwned(ctx, existing.ManagedLoaderID, project.ID, existing.SchedulerID); err != nil {
 			return changes, false, fmt.Errorf("disable removed managed loader %s: %w", existing.ManagedLoaderID, err)
 		}
 		unchanged = false
@@ -1071,35 +978,43 @@ func (s *Service) reconcileProjectManagedSchedulers(ctx context.Context, project
 			Message:      "disabled because the scheduler is no longer present in the project spec",
 		})
 	}
-	if s.loaders != nil {
-		if err := s.loaders.Refresh(ctx); err != nil {
+	if p.service.loaders != nil {
+		if err := p.service.loaders.Refresh(ctx); err != nil {
 			return changes, false, fmt.Errorf("refresh loader manager: %w", err)
 		}
 	}
 	return changes, unchanged, nil
 }
 
-func (s *Service) cleanupFailedManagedSchedulerReconcile(ctx context.Context, scheduler ProjectSchedulerRecord, loaderID string) {
-	if s == nil || s.configDB == nil {
+func (s *Service) reconcileProjectManagedSchedulers(ctx context.Context, project ProjectRecord, schedulers []ProjectSchedulerRecord, loaders []Loader) ([]*agentcomposev2.ProjectChange, bool, error) {
+	return NewProjectServiceFromService(s).reconcileProjectManagedSchedulers(ctx, project, schedulers, loaders)
+}
+
+func (p *ProjectService) cleanupFailedManagedSchedulerReconcile(ctx context.Context, scheduler ProjectSchedulerRecord, loaderID string) {
+	if p == nil || p.service == nil || p.service.configDB == nil {
 		return
 	}
 	if strings.TrimSpace(loaderID) != "" {
-		_ = s.configDB.SetLoaderEnabled(ctx, loaderID, false)
+		_ = p.service.configDB.SetLoaderEnabled(ctx, loaderID, false)
 	}
 	if strings.TrimSpace(scheduler.ProjectID) != "" && strings.TrimSpace(scheduler.SchedulerID) != "" {
-		_, _ = s.configDB.SetProjectSchedulerEnabled(ctx, scheduler.ProjectID, scheduler.SchedulerID, false)
+		_, _ = p.service.configDB.SetProjectSchedulerEnabled(ctx, scheduler.ProjectID, scheduler.SchedulerID, false)
 	}
-	if s.loaders != nil {
-		_ = s.loaders.Refresh(ctx)
+	if p.service.loaders != nil {
+		_ = p.service.loaders.Refresh(ctx)
 	}
 }
 
-func (s *Service) disableManagedLoaderIfOwned(ctx context.Context, loaderID, projectID, schedulerID string) error {
+func (s *Service) cleanupFailedManagedSchedulerReconcile(ctx context.Context, scheduler ProjectSchedulerRecord, loaderID string) {
+	NewProjectServiceFromService(s).cleanupFailedManagedSchedulerReconcile(ctx, scheduler, loaderID)
+}
+
+func (p *ProjectService) disableManagedLoaderIfOwned(ctx context.Context, loaderID, projectID, schedulerID string) error {
 	loaderID = strings.TrimSpace(loaderID)
 	if loaderID == "" {
 		return nil
 	}
-	loader, found, err := s.configDB.GetLoaderIfExists(ctx, loaderID)
+	loader, found, err := p.service.configDB.GetLoaderIfExists(ctx, loaderID)
 	if err != nil {
 		return err
 	}
@@ -1112,7 +1027,11 @@ func (s *Service) disableManagedLoaderIfOwned(ctx context.Context, loaderID, pro
 	if !loader.Summary.Enabled {
 		return nil
 	}
-	return s.configDB.SetLoaderEnabled(ctx, loaderID, false)
+	return p.service.configDB.SetLoaderEnabled(ctx, loaderID, false)
+}
+
+func (s *Service) disableManagedLoaderIfOwned(ctx context.Context, loaderID, projectID, schedulerID string) error {
+	return NewProjectServiceFromService(s).disableManagedLoaderIfOwned(ctx, loaderID, projectID, schedulerID)
 }
 
 func managedAgentDefinitionChangeAction(existing AgentDefinition, found bool, current AgentDefinition) agentcomposev2.ProjectChangeAction {
