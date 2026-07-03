@@ -30,15 +30,10 @@ func TestPkgPackagesDoNotImportInternalPackages(t *testing.T) {
 func TestTransportPackagesDoNotAddAppImports(t *testing.T) {
 	root := repoRoot(t)
 	module := strings.TrimSpace(runCommand(t, root, "go", "list", "-m"))
-	knownDebt := map[string]map[string]bool{
-		module + "/internal/transport/connect": {
-			module + "/internal/app": true,
-		},
-	}
 
 	checkNoDisallowedImports(t, root, []string{"./internal/transport/..."}, []importRule{
 		{path: module + "/internal/app"},
-	}, knownDebt)
+	}, nil)
 }
 
 func TestDomainPackagesDoNotImportHandlerFrameworks(t *testing.T) {

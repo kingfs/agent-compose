@@ -14,7 +14,7 @@ internal/transport -> domain/application contracts only
 
 `cmd/agent-compose` is bootstrap code. It owns process setup, configuration loading, Echo creation, route registration, and shutdown wiring. Bootstrap may assemble application services, but business packages should not depend on bootstrap packages.
 
-`internal/transport` is the delivery layer. HTTP, proxy, and Connect adapters translate protocol input and output to application calls. The target boundary is that transport does not import `internal/app`; it should depend on narrower application interfaces or route registration contracts. The current code still has known transport-to-app imports, so architecture tests prevent new imports while that debt is migrated.
+`internal/transport` is the delivery layer. HTTP, proxy, and Connect adapters translate protocol input and output to application calls. Transport must not import `internal/app`; it should depend on narrower application interfaces or route registration contracts. Architecture tests enforce this boundary for all `internal/transport/...` packages.
 
 `internal/app` is the composition and usecase orchestration layer. It wires services, handlers, repositories, background managers, and domain workflows. Echo and Connect handler framework usage belongs here or in transport/bootstrap code, not in domain packages.
 
