@@ -34,9 +34,6 @@ func TestTransportPackagesDoNotAddAppImports(t *testing.T) {
 		module + "/internal/transport/connect": {
 			module + "/internal/app": true,
 		},
-		module + "/internal/transport/http": {
-			module + "/internal/app": true,
-		},
 	}
 
 	checkNoDisallowedImports(t, root, []string{"./internal/transport/..."}, []importRule{
