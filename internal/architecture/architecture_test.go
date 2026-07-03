@@ -113,6 +113,50 @@ func TestAppFacadeMayUseProjectFoundation(t *testing.T) {
 	t.Fatalf("internal/app must use internal/project foundation types during ProjectService migration")
 }
 
+func TestProjectPackageHasUsecaseFoundationShape(t *testing.T) {
+	root := repoRoot(t)
+	projectRoot := filepath.Join(root, "internal", "project")
+	entries, err := os.ReadDir(projectRoot)
+	if err != nil {
+		t.Fatalf("read %s: %v", projectRoot, err)
+	}
+
+	var nonTestGoFiles []string
+	combined := strings.Builder{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		nonTestGoFiles = append(nonTestGoFiles, name)
+		content, err := os.ReadFile(filepath.Join(projectRoot, name))
+		if err != nil {
+			t.Fatalf("read internal/project/%s: %v", name, err)
+		}
+		combined.Write(content)
+		combined.WriteByte('\n')
+	}
+
+	if len(nonTestGoFiles) < 3 {
+		t.Fatalf("internal/project has %d non-test Go files (%s), want at least foundation plus usecase shape", len(nonTestGoFiles), strings.Join(nonTestGoFiles, ", "))
+	}
+	text := combined.String()
+	for _, marker := range []string{
+		"Package project contains transport-agnostic Project usecase",
+		"type ErrorKind",
+		"type Error struct",
+		"type ApplyResult",
+		"type ValidationIssue",
+	} {
+		if !strings.Contains(text, marker) {
+			t.Fatalf("internal/project is missing foundation/usecase marker %q", marker)
+		}
+	}
+}
+
 func TestProjectPackageDoesNotImportAppOrTransportHandlers(t *testing.T) {
 	root := repoRoot(t)
 	projectRoot := filepath.Join(root, "internal", "project")
@@ -132,6 +176,45 @@ func TestProjectPackageDoesNotImportAppOrTransportHandlers(t *testing.T) {
 		{path: "github.com/labstack/echo/v4"},
 	}, nil)
 	checkPackagesDoNotImportGeneratedConnect(t, projectPkgs, module, nil)
+}
+
+func TestProjectAppFilesDoNotRegressToMigrationArtifacts(t *testing.T) {
+	root := repoRoot(t)
+	files, err := filepath.Glob(filepath.Join(root, "internal", "app", "*project*.go"))
+	if err != nil {
+		t.Fatalf("glob project app files: %v", err)
+	}
+	files = append(files,
+		filepath.Join(root, "internal", "app", "project_apply_service.go"),
+		filepath.Join(root, "internal", "app", "project_facade.go"),
+	)
+
+	seen := map[string]bool{}
+	for _, file := range files {
+		if seen[file] || strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		seen[file] = true
+		content, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath(root, file), err)
+		}
+		text := string(content)
+		for _, disallowed := range []string{
+			"ProjectMigration",
+			"projectMigration",
+			"refactorProject",
+			"projectRefactor",
+			"type projectApplyError struct",
+			"type projectValidationError struct",
+			"type applyProjectError struct",
+			"type validationProjectError struct",
+		} {
+			if strings.Contains(text, disallowed) {
+				t.Fatalf("%s reintroduced project migration artifact %q", relativePath(root, file), disallowed)
+			}
+		}
+	}
 }
 
 func TestRemovedPackageReferencesDoNotReturn(t *testing.T) {
