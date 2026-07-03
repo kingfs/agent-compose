@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	projecterrors "agent-compose/internal/project"
+	connecttransport "agent-compose/internal/transport/connect"
 	"agent-compose/pkg/compose"
 	driverpkg "agent-compose/pkg/driver"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -57,15 +58,31 @@ func projectApplyConnectCode(err error) connect.Code {
 }
 
 func (s *Service) GetProject(ctx context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
-	return NewProjectServiceFromService(s).GetProject(ctx, req)
+	result, err := NewProjectServiceFromService(s).GetProject(ctx, connecttransport.GetProjectRequestFromProto(req.Msg))
+	if err != nil {
+		return nil, connect.NewError(connecttransport.ProjectQueryConnectCode(err), err)
+	}
+	resp, err := connecttransport.GetProjectResponseFromResult(result)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(resp), nil
 }
 
 func (s *Service) ListProjects(ctx context.Context, req *connect.Request[agentcomposev2.ListProjectsRequest]) (*connect.Response[agentcomposev2.ListProjectsResponse], error) {
-	return NewProjectServiceFromService(s).ListProjects(ctx, req)
+	result, err := NewProjectServiceFromService(s).ListProjects(ctx, connecttransport.ListProjectsRequestFromProto(req.Msg))
+	if err != nil {
+		return nil, connect.NewError(connecttransport.ProjectQueryConnectCode(err), err)
+	}
+	return connect.NewResponse(connecttransport.ListProjectsResponseFromResult(result)), nil
 }
 
 func (s *Service) RemoveProject(ctx context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
-	return NewProjectServiceFromService(s).RemoveProject(ctx, req)
+	result, err := NewProjectServiceFromService(s).RemoveProject(ctx, connecttransport.RemoveProjectRequestFromProto(req.Msg))
+	if err != nil {
+		return nil, connect.NewError(connecttransport.ProjectQueryConnectCode(err), err)
+	}
+	return connect.NewResponse(connecttransport.RemoveProjectResponseFromResult(result)), nil
 }
 
 func (s *Service) resolveProjectRef(ctx context.Context, ref *agentcomposev2.ProjectRef) (ProjectRecord, error) {
@@ -73,7 +90,7 @@ func (s *Service) resolveProjectRef(ctx context.Context, ref *agentcomposev2.Pro
 }
 
 func (p *ProjectService) resolveProjectRef(ctx context.Context, ref *agentcomposev2.ProjectRef) (ProjectRecord, error) {
-	return p.projectQueryUsecase().ResolveProjectRef(ctx, projectRefFromProto(ref))
+	return p.projectQueryUsecase().ResolveProjectRef(ctx, connecttransport.ProjectRefFromProto(ref))
 }
 
 func normalizeProjectServiceSpec(spec *agentcomposev2.ProjectSpec, source *agentcomposev2.ProjectSource, expectedHash string) (normalizedV2Project, []*agentcomposev2.ProjectValidationIssue, error) {
