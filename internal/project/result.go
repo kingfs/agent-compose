@@ -22,6 +22,7 @@ type Change struct {
 	Kind     ChangeKind
 	Resource string
 	ID       string
+	Name     string
 	Message  string
 }
 
