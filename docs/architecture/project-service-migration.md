@@ -14,7 +14,9 @@ Connect API
 
 `internal/transport/connect` owns Project protocol adaptation. It should receive generated Connect requests, translate request and response shapes, call an application boundary, and return protocol errors in Connect form. It may depend on generated Connect handler packages and `connectrpc.com/connect`.
 
-`internal/app` owns the ProjectService facade during the migration. The facade is the compatibility layer that keeps route wiring and callers stable while the implementation moves out of the large service. It should expose application-oriented operations and delegate project-specific behavior instead of accumulating more project logic.
+Project Connect adapters should live in `internal/transport/connect`. App route code may wire those adapters into the service graph, but should not become the owner of Project request decoding, response encoding, or Connect error mapping.
+
+`internal/app` owns the ProjectService facade during the migration. The facade is the compatibility layer that keeps route wiring and callers stable while the implementation moves out of the large service. It should expose application-oriented operations and delegate project-specific behavior instead of accumulating more project logic. App routes should remain wiring only: construct or register the Project adapter and pass it the facade or a narrow application interface.
 
 `internal/project` is the future usecase package for Project behavior. It should contain project validation, apply/get/list/remove orchestration, and policy that is independent from HTTP, Echo, and generated Connect server packages. It may depend on project model types, persistence interfaces, and reusable lower-level packages.
 
@@ -26,6 +28,7 @@ Generated Connect handler packages are delivery-layer dependencies. They are all
 
 When `internal/project` is added, keep it transport agnostic. It must not import:
 
+- `internal/app`
 - `connectrpc.com/connect`
 - `github.com/labstack/echo/v4`
 - generated Connect handler packages under `proto/...connect`
@@ -36,6 +39,7 @@ Generated proto message packages may remain part of the current API model where 
 
 1. Keep the existing `internal/app` ProjectService behavior as the public application facade.
 2. Move protocol-only request/response conversion toward `internal/transport/connect`.
-3. Extract project usecases behind narrow interfaces into `internal/project`.
-4. Point the app facade at the extracted usecase while preserving the Connect API surface.
-5. Delete transitional app logic only after equivalent usecase coverage exists.
+3. Keep app route changes limited to wiring the `internal/transport/connect` Project adapter to the facade.
+4. Extract project usecases behind narrow interfaces into `internal/project`.
+5. Point the app facade at the extracted usecase while preserving the Connect API surface.
+6. Delete transitional app logic only after equivalent usecase coverage exists.
