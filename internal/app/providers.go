@@ -61,4 +61,5 @@ func registerProviders(di do.Injector) {
 	do.Provide(di, NewSessionRPCBridge)
 	do.Provide(di, NewLoaderManager)
 	do.Provide(di, NewService)
+	do.Provide(di, NewProjectService)
 }
