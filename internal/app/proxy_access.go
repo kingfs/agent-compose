@@ -1,6 +1,7 @@
 package app
 
 import (
+	httptransport "agent-compose/internal/transport/http"
 	"context"
 	"strings"
 	"time"
@@ -22,5 +23,5 @@ func (s *Service) GetSessionProxyState(sessionID string) (ProxyState, error) {
 }
 
 func JupyterTargetReachable(proxyState ProxyState, timeout time.Duration) bool {
-	return jupyterTargetReachable(proxyState, timeout)
+	return httptransport.JupyterTargetReachable(proxyState, timeout)
 }
