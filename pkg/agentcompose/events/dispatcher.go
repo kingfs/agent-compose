@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 type Store interface {

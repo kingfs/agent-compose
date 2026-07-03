@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func TestEventDispatcherPublishesPendingEvents(t *testing.T) {

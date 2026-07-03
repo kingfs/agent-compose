@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 type SessionResult struct {

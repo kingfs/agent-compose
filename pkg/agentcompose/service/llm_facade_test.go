@@ -17,10 +17,10 @@ import (
 	protocolbridge "github.com/chaitin/ai-api-protocol-bridge"
 	"github.com/labstack/echo/v4"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/execution"
 	"agent-compose/pkg/agentcompose/llms"
 	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
 )
 

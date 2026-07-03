@@ -10,10 +10,10 @@ import (
 	"connectrpc.com/connect"
 
 	"agent-compose/pkg/agentcompose/capabilities"
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/loaders"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
 )
 

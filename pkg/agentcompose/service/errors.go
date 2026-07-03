@@ -1,6 +1,6 @@
 package agentcompose
 
-import "agent-compose/pkg/agentcompose/domain"
+import domain "agent-compose/pkg/model"
 
 var (
 	ErrNotFound           = domain.ErrNotFound

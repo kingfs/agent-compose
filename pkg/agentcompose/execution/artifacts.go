@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func CellExecSpec(cellType, guestCellDir string) (scriptName, command string, args []string) {

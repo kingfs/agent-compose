@@ -1,9 +1,9 @@
 package agentcompose
 
 import (
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/llms"
 	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
 	"context"
 	"io"
 	"net/http"

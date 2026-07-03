@@ -1,4 +1,4 @@
-package domain
+package model
 
 // CapabilityGatewaySettings is the page-configured OctoBus connection. It is
 // persisted as a single row in the capability_gateway table and read

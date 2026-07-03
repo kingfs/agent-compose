@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"agent-compose/pkg/agentcompose/domain"
 	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
 )
 
 const DefaultQueueName = "default"

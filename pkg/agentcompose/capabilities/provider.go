@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/capability"
+	domain "agent-compose/pkg/model"
 )
 
 // GatewaySource supplies the page-configured OctoBus connection.

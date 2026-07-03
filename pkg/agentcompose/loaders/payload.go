@@ -3,7 +3,7 @@ package loaders
 import (
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func SessionTopicPayload(session *domain.Session, source string) map[string]any {

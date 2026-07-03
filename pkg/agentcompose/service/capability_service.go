@@ -11,9 +11,9 @@ import (
 
 	"agent-compose/pkg/agentcompose/api"
 	"agent-compose/pkg/agentcompose/capabilities"
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/capability"
 	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
 )
 

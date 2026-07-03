@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/execution"
 	"agent-compose/pkg/agentcompose/llms"
 	"agent-compose/pkg/agentcompose/sessions"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 
 	"github.com/samber/do/v2"
 )

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"agent-compose/pkg/agentcompose/configstore"
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func ScanTopicEvents(rows *sql.Rows) ([]domain.TopicEventRecord, error) {

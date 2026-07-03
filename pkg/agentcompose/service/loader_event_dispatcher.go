@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/webhooks"
+	domain "agent-compose/pkg/model"
 )
 
 type LoaderEventDispatcher struct {

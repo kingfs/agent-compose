@@ -1,9 +1,9 @@
 package images
 
 import (
-	"agent-compose/pkg/agentcompose/domain"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 	"context"
 	"fmt"
 	"strings"

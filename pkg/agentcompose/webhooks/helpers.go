@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func PresentedToken(r *http.Request) string {

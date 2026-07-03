@@ -6,7 +6,7 @@ import (
 
 	"agent-compose/pkg/agentcompose/capabilities"
 	"agent-compose/pkg/agentcompose/configstore"
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func ScanLoaderSummary(scan func(dest ...any) error) (domain.LoaderSummary, error) {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func WriteAgentSessionArtifact(path string, info *domain.AgentResumeInfo) error {

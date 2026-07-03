@@ -1,8 +1,8 @@
 package execution
 
 import (
-	"agent-compose/pkg/agentcompose/domain"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 )
 
 func ToDriverSession(session *domain.Session) *driverpkg.Session {

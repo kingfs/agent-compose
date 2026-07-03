@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/loaders"
 	"agent-compose/pkg/compose"
+	domain "agent-compose/pkg/model"
 )
 
 func ManagedLoaderTriggersAndScript(projectID, agentName, schedulerName string, scheduler *compose.NormalizedSchedulerSpec) ([]domain.LoaderTrigger, string, error) {

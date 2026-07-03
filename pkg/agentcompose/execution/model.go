@@ -1,7 +1,7 @@
 package execution
 
 import (
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 	"fmt"
 	"strings"
 	"time"

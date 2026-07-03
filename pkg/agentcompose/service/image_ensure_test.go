@@ -9,9 +9,9 @@ import (
 	"connectrpc.com/connect"
 	cerrdefs "github.com/containerd/errdefs"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/images"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 

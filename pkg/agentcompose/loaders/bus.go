@@ -5,7 +5,7 @@ import (
 
 	"github.com/samber/do/v2"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 type Bus struct {

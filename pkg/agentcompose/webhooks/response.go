@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func SourceToJSON(source domain.WebhookSource) SourceJSON {

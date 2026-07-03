@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/webhooks"
+	domain "agent-compose/pkg/model"
 )
 
 func registerWebhookRoutes(app *echo.Echo, service *Service) {

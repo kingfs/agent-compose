@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/execution"
 	"agent-compose/pkg/agentcompose/llms"
+	domain "agent-compose/pkg/model"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func EnvItemValue(items []domain.SessionEnvVar, key string) string {

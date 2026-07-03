@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"agent-compose/pkg/agentcompose/configstore"
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func ScanProject(scan func(dest ...any) error) (domain.ProjectRecord, error) {

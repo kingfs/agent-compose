@@ -12,8 +12,8 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"agent-compose/pkg/agentcompose/api"
-	"agent-compose/pkg/agentcompose/domain"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
 )
 

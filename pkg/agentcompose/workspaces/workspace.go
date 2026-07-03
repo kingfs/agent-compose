@@ -1,8 +1,8 @@
 package workspaces
 
 import (
-	"agent-compose/pkg/agentcompose/domain"
 	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
 	"archive/tar"
 	"context"
 	"encoding/json"

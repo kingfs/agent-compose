@@ -9,9 +9,9 @@ import (
 	"github.com/samber/do/v2"
 
 	"agent-compose/pkg/agentcompose/capabilities"
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/capproxy"
 	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
 )
 
 func NewCapProxyServer(di do.Injector) (*capproxy.Server, error) {

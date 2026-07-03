@@ -3,7 +3,7 @@ package webhooks
 import (
 	"encoding/json"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func ExistingBodyHash(payloadJSON string) string {

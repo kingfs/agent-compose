@@ -3,8 +3,8 @@ package llms
 import (
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 )
 
 func LoaderCommandFacadeAgentModel(env map[string]string) (string, string) {

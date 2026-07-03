@@ -13,9 +13,9 @@ import (
 	"github.com/google/uuid"
 
 	"agent-compose/pkg/agentcompose/api"
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/execution"
 	"agent-compose/pkg/agentcompose/runs"
+	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 

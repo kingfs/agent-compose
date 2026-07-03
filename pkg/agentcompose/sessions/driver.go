@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func ApplySessionStartInfo(vmState domain.VMState, proxyState domain.ProxyState, info domain.SessionVMInfo, now time.Time) (domain.VMState, domain.ProxyState) {

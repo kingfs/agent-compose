@@ -15,8 +15,8 @@ import (
 
 	"agent-compose/pkg/agentcompose/capabilities"
 	"agent-compose/pkg/agentcompose/configstore"
-	"agent-compose/pkg/agentcompose/domain"
 	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
 )
 
 const storedUnixMillisecondThreshold int64 = configstore.StoredUnixMillisecondThreshold

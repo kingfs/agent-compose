@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"agent-compose/pkg/agentcompose/capabilities"
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func SameSessionEnvItems(a, b []domain.SessionEnvVar) bool {

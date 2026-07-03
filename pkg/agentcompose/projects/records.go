@@ -2,8 +2,8 @@ package projects
 
 import (
 	"agent-compose/pkg/agentcompose/capabilities"
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/compose"
+	domain "agent-compose/pkg/model"
 	"encoding/json"
 	"fmt"
 	"strings"

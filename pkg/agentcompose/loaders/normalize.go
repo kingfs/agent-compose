@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 
 	"agent-compose/pkg/agentcompose/capabilities"
-	"agent-compose/pkg/agentcompose/domain"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 )
 
 func NormalizeLoader(item domain.Loader, assignID bool) (domain.Loader, error) {

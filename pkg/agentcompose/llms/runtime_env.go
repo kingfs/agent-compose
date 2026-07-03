@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func SplitOpenCodeModel(model string) (string, string, error) {

@@ -1,12 +1,12 @@
 package agentcompose
 
 import (
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/execution"
 	"agent-compose/pkg/agentcompose/llms"
 	"agent-compose/pkg/agentcompose/loaders"
 	"agent-compose/pkg/agentcompose/sessions"
 	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
 	"context"
 	"fmt"
 	"os"

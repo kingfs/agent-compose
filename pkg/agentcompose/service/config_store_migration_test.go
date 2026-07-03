@@ -2,9 +2,9 @@ package agentcompose
 
 import (
 	"agent-compose/pkg/agentcompose/configstore"
-	"agent-compose/pkg/agentcompose/domain"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 	"context"
 	"database/sql"
 	"path/filepath"

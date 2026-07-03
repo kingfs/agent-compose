@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"agent-compose/pkg/agentcompose/configstore"
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/projects"
 	"agent-compose/pkg/agentcompose/runs"
+	domain "agent-compose/pkg/model"
 )
 
 type (

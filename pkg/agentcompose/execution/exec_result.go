@@ -3,7 +3,7 @@ package execution
 import (
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 type ExecStreamAccumulator struct {

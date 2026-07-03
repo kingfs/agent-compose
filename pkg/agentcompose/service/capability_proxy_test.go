@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"agent-compose/pkg/agentcompose/capabilities"
-	"agent-compose/pkg/agentcompose/domain"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 )
 
 func TestResolveCapabilitySession(t *testing.T) {

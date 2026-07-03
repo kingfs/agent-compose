@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"agent-compose/pkg/agentcompose/capabilities"
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/images"
 	"agent-compose/pkg/agentcompose/loaders"
 	"agent-compose/pkg/agentcompose/runs"
 	"agent-compose/pkg/agentcompose/workspaces"
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 
 	"github.com/google/uuid"
 )

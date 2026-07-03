@@ -1,7 +1,7 @@
 package runs
 
 import (
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 	"context"
 	"database/sql"
 	"errors"

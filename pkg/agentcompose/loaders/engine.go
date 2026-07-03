@@ -1,7 +1,7 @@
 package loaders
 
 import (
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 	"context"
 	"encoding/json"
 	"fmt"

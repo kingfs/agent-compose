@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 // capabilityGatewayRowID pins the settings to a single row.

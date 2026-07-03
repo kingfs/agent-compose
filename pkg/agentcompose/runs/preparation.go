@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/compose"
+	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 

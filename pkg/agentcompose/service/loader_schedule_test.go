@@ -1,8 +1,8 @@
 package agentcompose
 
 import (
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/loaders"
+	domain "agent-compose/pkg/model"
 	"strings"
 	"testing"
 	"time"

@@ -3,7 +3,7 @@ package agentcompose
 import (
 	"time"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 func (s *Service) publishLoaderTopic(topic string, payload map[string]any) {

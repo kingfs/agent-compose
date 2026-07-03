@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/agentcompose/loaders"
 	"agent-compose/pkg/agentcompose/webhooks"
 	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
 )
 
 func TestWebhookRunQueueMatchesPayloadRules(t *testing.T) {

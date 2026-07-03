@@ -3,8 +3,8 @@ package projects
 import (
 	"slices"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/compose"
+	domain "agent-compose/pkg/model"
 )
 
 func SessionEnvItemsFromCompose(values map[string]compose.EnvVarSpec) []domain.SessionEnvVar {

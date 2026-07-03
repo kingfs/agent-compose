@@ -3,8 +3,8 @@ package api
 import (
 	"strings"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/capability"
+	domain "agent-compose/pkg/model"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
 )
 

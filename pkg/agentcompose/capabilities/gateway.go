@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"agent-compose/pkg/agentcompose/domain"
 	"agent-compose/pkg/capproxy"
+	domain "agent-compose/pkg/model"
 )
 
 const (

@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"agent-compose/pkg/agentcompose/domain"
+	domain "agent-compose/pkg/model"
 )
 
 const StoredUnixMillisecondThreshold int64 = 10_000_000_000
