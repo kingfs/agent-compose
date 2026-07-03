@@ -1,12 +1,6 @@
 package app
 
 import (
-	capdomain "agent-compose/internal/capability"
-	execdomain "agent-compose/internal/exec"
-	loaderdomain "agent-compose/internal/loader"
-	filestore "agent-compose/internal/persistence/filestore"
-	sessiondomain "agent-compose/internal/session"
-	httptransport "agent-compose/internal/transport/http"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	"context"
@@ -22,13 +16,11 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
 	"github.com/samber/do/v2"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"agent-compose/pkg/capproxy"
 	"agent-compose/pkg/imagecache"
-	llmdomain "agent-compose/pkg/llm"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
 	"agent-compose/proto/agentcompose/v1/agentcomposev1connect"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
@@ -121,101 +113,6 @@ func NewService(di do.Injector) (*Service, error) {
 		svc.loaders.SetProjectAgentRunner(serviceProjectAgentRunner{service: svc})
 	}
 	return svc, nil
-}
-
-func Setup(di do.Injector) {
-	Register(di)
-	if err := StartBackground(di); err != nil {
-		slog.Error("failed to start agent-compose background managers", "error", err)
-	}
-}
-
-func Register(di do.Injector) {
-	do.Provide(di, NewStore)
-	do.Provide(di, NewConfigStore)
-	do.Provide(di, NewRuntimeProvider)
-	do.Provide(di, func(i do.Injector) (sessiondomain.Store, error) {
-		return do.MustInvoke[*Store](i), nil
-	})
-	do.Provide(di, func(i do.Injector) (sessiondomain.ConfigStore, error) {
-		return do.MustInvoke[*ConfigStore](i), nil
-	})
-	do.Provide(di, func(i do.Injector) (filestore.ConfigStore, error) {
-		return do.MustInvoke[*ConfigStore](i), nil
-	})
-	do.Provide(di, func(i do.Injector) (execdomain.Store, error) {
-		return do.MustInvoke[*Store](i), nil
-	})
-	do.Provide(di, func(i do.Injector) (execdomain.ConfigStore, error) {
-		return do.MustInvoke[*ConfigStore](i), nil
-	})
-	do.Provide(di, func(i do.Injector) (execdomain.SessionStreamBroker, error) {
-		return do.MustInvoke[*SessionStreamBroker](i), nil
-	})
-	do.Provide(di, func(i do.Injector) (loaderdomain.ConfigStore, error) {
-		return do.MustInvoke[*ConfigStore](i), nil
-	})
-	do.Provide(di, func(i do.Injector) (loaderdomain.SessionRPCBridge, error) {
-		return do.MustInvoke[*SessionRPCBridge](i), nil
-	})
-	do.Provide(di, func(i do.Injector) (llmdomain.ConfigStore, error) {
-		return do.MustInvoke[*ConfigStore](i), nil
-	})
-	do.Provide(di, func(i do.Injector) (capdomain.CapabilityProvider, error) {
-		return do.MustInvoke[capabilityIntegration](i), nil
-	})
-	do.Provide(di, func(i do.Injector) (CapabilityProvider, error) {
-		return do.MustInvoke[capabilityIntegration](i), nil
-	})
-	do.Provide(di, NewDriver)
-	do.Provide(di, NewExecutor)
-	do.Provide(di, NewLLMClient)
-	do.Provide(di, NewCapabilityProvider)
-	do.Provide(di, NewCapProxyServer)
-	do.Provide(di, NewLoaderBus)
-	do.Provide(di, NewSessionStreamBroker)
-	do.Provide(di, NewDashboardOverviewAggregator)
-	do.Provide(di, NewDashboardOverviewHub)
-	do.Provide(di, NewLoaderEngine)
-	do.Provide(di, NewSessionRPCBridge)
-	do.Provide(di, NewLoaderManager)
-	do.Provide(di, NewService)
-
-	app := do.MustInvoke[*echo.Echo](di)
-	service := do.MustInvoke[*Service](di)
-
-	path, handler := agentcomposev1connect.NewSessionServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewKernelServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewAgentServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewAgentDefinitionServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewLLMServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewConfigServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewLoaderServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewDashboardServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev1connect.NewCapabilityServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-
-	path, handler = agentcomposev2connect.NewProjectServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev2connect.NewRunServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev2connect.NewExecServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-	path, handler = agentcomposev2connect.NewImageServiceHandler(service)
-	app.Any(path+"*", echo.WrapHandler(handler))
-
-	registerWebhookRoutes(app, service)
-	registerRuntimeLLMFacadeRoutes(app, service)
-	registerProxyRoutes(app, service)
-	registerWorkspaceRoutes(app, service)
 }
 
 func StartBackground(di do.Injector) error {
@@ -621,10 +518,6 @@ func (s *Service) GetSession(ctx context.Context, req *connect.Request[agentcomp
 
 func (s *Service) ListSessions(ctx context.Context, req *connect.Request[agentcomposev1.ListSessionsRequest]) (*connect.Response[agentcomposev1.ListSessionsResponse], error) {
 	return s.sessions.ListSessions(ctx, req)
-}
-
-func jupyterTargetReachable(proxyState ProxyState, timeout time.Duration) bool {
-	return httptransport.JupyterTargetReachable(proxyState, timeout)
 }
 
 func (s *Service) ensureSessionProxyReady(ctx context.Context, sessionID string) (*Session, ProxyState, error) {
