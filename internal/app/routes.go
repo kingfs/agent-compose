@@ -8,6 +8,8 @@ import (
 )
 
 func registerConnectRoutes(app *echo.Echo, service *Service) {
+	projectService := NewProjectServiceFromService(service)
+
 	path, handler := agentcomposev1connect.NewSessionServiceHandler(service)
 	app.Any(path+"*", echo.WrapHandler(handler))
 	path, handler = agentcomposev1connect.NewKernelServiceHandler(service)
@@ -27,7 +29,7 @@ func registerConnectRoutes(app *echo.Echo, service *Service) {
 	path, handler = agentcomposev1connect.NewCapabilityServiceHandler(service)
 	app.Any(path+"*", echo.WrapHandler(handler))
 
-	path, handler = agentcomposev2connect.NewProjectServiceHandler(service)
+	path, handler = agentcomposev2connect.NewProjectServiceHandler(projectService)
 	app.Any(path+"*", echo.WrapHandler(handler))
 	path, handler = agentcomposev2connect.NewRunServiceHandler(service)
 	app.Any(path+"*", echo.WrapHandler(handler))

@@ -56,7 +56,6 @@ type Service struct {
 	agentcomposev1connect.UnimplementedLoaderServiceHandler
 	agentcomposev1connect.UnimplementedDashboardServiceHandler
 	agentcomposev1connect.UnimplementedCapabilityServiceHandler
-	agentcomposev2connect.UnimplementedProjectServiceHandler
 	agentcomposev2connect.UnimplementedRunServiceHandler
 	agentcomposev2connect.UnimplementedExecServiceHandler
 	agentcomposev2connect.UnimplementedImageServiceHandler
