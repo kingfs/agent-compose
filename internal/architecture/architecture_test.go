@@ -92,6 +92,27 @@ func TestGeneratedConnectPackagesStayInRouteAdapters(t *testing.T) {
 	}
 }
 
+func TestAppFacadeMayUseProjectFoundation(t *testing.T) {
+	root := repoRoot(t)
+	projectRoot := filepath.Join(root, "internal", "project")
+	if _, err := os.Stat(projectRoot); os.IsNotExist(err) {
+		t.Skip("internal/project does not exist yet")
+	} else if err != nil {
+		t.Fatalf("stat %s: %v", projectRoot, err)
+	}
+
+	module := strings.TrimSpace(runCommand(t, root, "go", "list", "-m"))
+	projectImport := module + "/internal/project"
+	for _, pkg := range listGoPackages(t, root, "./internal/app") {
+		for _, imported := range pkg.Imports {
+			if imported == projectImport || strings.HasPrefix(imported, projectImport+"/") {
+				return
+			}
+		}
+	}
+	t.Log("internal/app does not import internal/project yet; this branch only verifies that architecture rules allow that migration direction")
+}
+
 func TestProjectPackageDoesNotImportAppOrTransportHandlers(t *testing.T) {
 	root := repoRoot(t)
 	projectRoot := filepath.Join(root, "internal", "project")
@@ -105,6 +126,8 @@ func TestProjectPackageDoesNotImportAppOrTransportHandlers(t *testing.T) {
 	projectPkgs := listGoPackages(t, root, "./internal/project/...")
 	checkPackagesDoNotImport(t, projectPkgs, []importRule{
 		{path: module + "/internal/app"},
+		{path: module + "/internal/app/", prefix: true},
+		{path: module + "/internal/transport/", prefix: true},
 		{path: "connectrpc.com/connect"},
 		{path: "github.com/labstack/echo/v4"},
 	}, nil)
