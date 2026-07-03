@@ -18,6 +18,8 @@ Connect API
 
 `internal/project` is the future usecase package for Project behavior. It should contain project validation, apply/get/list/remove orchestration, and policy that is independent from HTTP, Echo, and generated Connect server packages. It may depend on project model types, persistence interfaces, and reusable lower-level packages.
 
+The initial `internal/project` package is intentionally only a foundation layer. It defines transport-agnostic error classification and lightweight result structures, such as validation issues and apply changes, so later usecase code can return stable internal shapes before any Connect or HTTP mapping happens.
+
 Persistence adapters remain under `internal/persistence`. They should implement storage concerns for project state without depending on transport handlers.
 
 ## Migration Guardrails
@@ -32,6 +34,8 @@ When `internal/project` is added, keep it transport agnostic. It must not import
 
 Generated proto message packages may remain part of the current API model where necessary. The stricter boundary is specifically against Connect handler/server packages and handler frameworks.
 
+Foundation types should prefer internal Go structures over proto messages unless the usecase boundary would otherwise duplicate a stable domain model. Protocol message conversion belongs at the facade or transport edge during the migration.
+
 ## Incremental Steps
 
 1. Keep the existing `internal/app` ProjectService behavior as the public application facade.
@@ -39,3 +43,5 @@ Generated proto message packages may remain part of the current API model where 
 3. Extract project usecases behind narrow interfaces into `internal/project`.
 4. Point the app facade at the extracted usecase while preserving the Connect API surface.
 5. Delete transitional app logic only after equivalent usecase coverage exists.
+
+When extracting apply behavior, return `project.ApplyResult` and `project.Error` from the new usecase first, then translate those values in the app facade or Connect adapter. This keeps persistence and orchestration tests independent from Connect status codes while preserving the current API response shape until the facade can be thinned further.
