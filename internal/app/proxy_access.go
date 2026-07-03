@@ -25,3 +25,7 @@ func (s *Service) GetSessionProxyState(sessionID string) (ProxyState, error) {
 func JupyterTargetReachable(proxyState ProxyState, timeout time.Duration) bool {
 	return httptransport.JupyterTargetReachable(proxyState, timeout)
 }
+
+func jupyterTargetReachable(proxyState ProxyState, timeout time.Duration) bool {
+	return httptransport.JupyterTargetReachable(proxyState, timeout)
+}
