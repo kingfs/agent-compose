@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	projectdomain "agent-compose/internal/project"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"connectrpc.com/connect"
@@ -12,9 +13,9 @@ import (
 type ProjectService interface {
 	ValidateProject(context.Context, *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error)
 	ApplyProject(context.Context, *connect.Request[agentcomposev2.ApplyProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error)
-	GetProject(context.Context, *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error)
-	ListProjects(context.Context, *connect.Request[agentcomposev2.ListProjectsRequest]) (*connect.Response[agentcomposev2.ListProjectsResponse], error)
-	RemoveProject(context.Context, *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error)
+	GetProject(context.Context, projectdomain.GetProjectRequest) (projectdomain.GetProjectResult, error)
+	ListProjects(context.Context, projectdomain.ListProjectsRequest) (projectdomain.ListProjectsResult, error)
+	RemoveProject(context.Context, projectdomain.RemoveProjectRequest) (projectdomain.RemoveProjectResult, error)
 	WatchProject(context.Context, *connect.Request[agentcomposev2.WatchProjectRequest], *connect.ServerStream[agentcomposev2.WatchProjectResponse]) error
 }
 
@@ -37,15 +38,31 @@ func (h projectServiceHandler) ApplyProject(ctx context.Context, req *connect.Re
 }
 
 func (h projectServiceHandler) GetProject(ctx context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
-	return h.service.GetProject(ctx, req)
+	result, err := h.service.GetProject(ctx, GetProjectRequestFromProto(req.Msg))
+	if err != nil {
+		return nil, connect.NewError(ProjectQueryConnectCode(err), err)
+	}
+	resp, err := GetProjectResponseFromResult(result)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(resp), nil
 }
 
 func (h projectServiceHandler) ListProjects(ctx context.Context, req *connect.Request[agentcomposev2.ListProjectsRequest]) (*connect.Response[agentcomposev2.ListProjectsResponse], error) {
-	return h.service.ListProjects(ctx, req)
+	result, err := h.service.ListProjects(ctx, ListProjectsRequestFromProto(req.Msg))
+	if err != nil {
+		return nil, connect.NewError(ProjectQueryConnectCode(err), err)
+	}
+	return connect.NewResponse(ListProjectsResponseFromResult(result)), nil
 }
 
 func (h projectServiceHandler) RemoveProject(ctx context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
-	return h.service.RemoveProject(ctx, req)
+	result, err := h.service.RemoveProject(ctx, RemoveProjectRequestFromProto(req.Msg))
+	if err != nil {
+		return nil, connect.NewError(ProjectQueryConnectCode(err), err)
+	}
+	return connect.NewResponse(RemoveProjectResponseFromResult(result)), nil
 }
 
 func (h projectServiceHandler) WatchProject(ctx context.Context, req *connect.Request[agentcomposev2.WatchProjectRequest], stream *connect.ServerStream[agentcomposev2.WatchProjectResponse]) error {
