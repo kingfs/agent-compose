@@ -59,130 +59,14 @@ func projectApplyResponseFromResult(result *projectApplyResult) *agentcomposev2.
 }
 
 func (p *ProjectService) applyProjectWorkflow(ctx context.Context, req *agentcomposev2.ApplyProjectRequest) (*projectApplyResult, error) {
-	var normalized normalizedV2Project
-	var resources projectApplyResources
-	var persisted projectApplyPersistResult
-	var reconciled projectApplyReconcileResult
-	var issueProtos []*agentcomposev2.ProjectValidationIssue
-	var schedulerFailure *projectApplyResult
-
-	usecase := projectdomain.NewApplyService(projectdomain.ApplyHooks{
-		Normalize: func(context.Context) (projectdomain.ApplyResult, error) {
-			var err error
-			normalized, issueProtos, err = normalizeProjectServiceSpec(req.GetSpec(), req.GetSource(), req.GetExpectedSpecHash())
-			if err != nil {
-				return projectdomain.ApplyResult{}, err
-			}
-			return projectdomain.ApplyResult{
-				ProjectName: normalizedProjectName(normalized),
-				SpecHash:    normalized.specHash,
-				Issues:      projectValidationIssuesFromProto(issueProtos),
-			}, nil
-		},
-		CheckStore: func(context.Context, projectdomain.ApplyResult) error {
-			if p.service.configDB == nil {
-				return projectdomain.ApplyStoreRequiredError(normalizedProjectName(normalized))
-			}
-			return nil
-		},
-		Prepare: func(ctx context.Context, base projectdomain.ApplyResult, revision int64) (projectdomain.ApplyResult, error) {
-			var err error
-			resources, issueProtos, err = p.prepareProjectApplyResources(ctx, normalized, revision)
-			if err != nil {
-				return projectdomain.ApplyResult{}, err
-			}
-			result := projectdomain.ApplyResult{
-				ProjectID:   resources.project.ID,
-				ProjectName: base.ProjectName,
-				SpecHash:    base.SpecHash,
-				Issues:      projectValidationIssuesFromProto(issueProtos),
-			}
-			if len(issueProtos) == 0 {
-				result.Changes = projectChangesFromProto(dryRunProjectChanges(resources.project, resources.agents, resources.agentDefinitions, resources.schedulers, resources.loaders))
-			}
-			return result, nil
-		},
-		EnsureRuntime: func(ctx context.Context, _ projectdomain.ApplyResult) error {
-			if err := p.service.ensureProjectAgentImages(ctx, normalized.spec.Name, resources.agents); err != nil {
-				return newApplyProjectError(projectdomain.ErrorKindRuntime, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
-			}
-			return nil
-		},
-		Persist: func(ctx context.Context, result projectdomain.ApplyResult) (projectdomain.ApplyPersistResult, error) {
-			var err error
-			persisted, err = p.persistProjectApplyRevision(ctx, normalized, resources.project)
-			if err != nil {
-				return projectdomain.ApplyPersistResult{}, err
-			}
-			return projectdomain.ApplyPersistResult{
-				Result: projectdomain.ApplyResult{
-					ProjectID:   persisted.project.ID,
-					ProjectName: result.ProjectName,
-					Revision:    persisted.revision.Revision,
-					SpecHash:    result.SpecHash,
-					Changes:     projectChangesFromProto(projectApplyChanges(persisted.project, persisted.existingProject, persisted.projectFound, persisted.revision, persisted.revisionCreated)),
-				},
-				ProjectFound:     persisted.projectFound,
-				RevisionCreated:  persisted.revisionCreated,
-				ProjectUnchanged: projectRecordUnchanged(persisted.existingProject, persisted.project),
-			}, nil
-		},
-		Reload: func(ctx context.Context, result projectdomain.ApplyResult, persistedResult projectdomain.ApplyPersistResult) (projectdomain.ApplyResult, error) {
-			var err error
-			resources, err = p.projectApplyResourcesForRevision(ctx, normalized, persisted.project, persisted.revision.Revision)
-			if err != nil {
-				return projectdomain.ApplyResult{}, err
-			}
-			return projectdomain.ApplyResult{
-				ProjectID:   persisted.project.ID,
-				ProjectName: result.ProjectName,
-				Revision:    persisted.revision.Revision,
-				SpecHash:    result.SpecHash,
-				Changes:     result.Changes,
-			}, nil
-		},
-		Reconcile: func(ctx context.Context, result projectdomain.ApplyResult, persistedResult projectdomain.ApplyPersistResult) (projectdomain.ApplyReconcileResult, error) {
-			var err error
-			reconciled, schedulerFailure, err = p.reconcileProjectApplyResources(ctx, normalized, persisted, resources)
-			if err != nil {
-				return projectdomain.ApplyReconcileResult{}, err
-			}
-			if schedulerFailure != nil {
-				return projectdomain.ApplyReconcileResult{Failure: &schedulerFailure.foundation}, nil
-			}
-			return projectdomain.ApplyReconcileResult{
-				Result: projectdomain.ApplyResult{
-					ProjectID:   persisted.project.ID,
-					ProjectName: result.ProjectName,
-					Revision:    persisted.revision.Revision,
-					SpecHash:    result.SpecHash,
-					Changes:     projectChangesFromProto(reconciled.changes),
-				},
-				ResourcesUnchanged: reconciled.agentsUnchanged,
-			}, nil
-		},
-	})
+	adapter := newProjectApplyAdapter(p, req)
+	usecase := projectdomain.NewApplyService(adapter.hooks())
 
 	foundation, err := usecase.Apply(ctx, projectdomain.ApplyRequest{DryRun: req.GetDryRun()})
 	if err != nil {
 		return nil, err
 	}
-	if schedulerFailure != nil {
-		schedulerFailure.foundation = foundation
-		return schedulerFailure, nil
-	}
-	if foundation.HasIssues() {
-		return &projectApplyResult{
-			foundation: foundation,
-			issues:     issueProtos,
-		}, nil
-	}
-	if foundation.DryRun {
-		result := dryRunProjectApplyResult(normalized, resources)
-		result.foundation = foundation
-		return result, nil
-	}
-	return p.finalProjectApplyResult(ctx, normalized, persisted, resources, reconciled, foundation)
+	return adapter.result(ctx, foundation)
 }
 
 func (p *ProjectService) prepareProjectApplyResources(ctx context.Context, normalized normalizedV2Project, revision int64) (projectApplyResources, []*agentcomposev2.ProjectValidationIssue, error) {
