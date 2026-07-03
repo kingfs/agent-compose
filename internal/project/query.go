@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	sqlitestore "agent-compose/internal/persistence/sqlite"
+	"agent-compose/internal/projecttypes"
 )
 
 const defaultResolveByNameLimit = 200
@@ -19,15 +19,15 @@ type ProjectRef struct {
 }
 
 type Store interface {
-	GetProject(ctx context.Context, projectID string) (sqlitestore.ProjectRecord, error)
-	ListProjects(ctx context.Context, options sqlitestore.ProjectListOptions) (sqlitestore.ProjectListResult, error)
-	ListProjectAgents(ctx context.Context, projectID string) ([]sqlitestore.ProjectAgentRecord, error)
-	ListProjectSchedulers(ctx context.Context, projectID string) ([]sqlitestore.ProjectSchedulerRecord, error)
-	GetProjectRevision(ctx context.Context, projectID string, revision int64) (sqlitestore.ProjectRevisionRecord, error)
+	GetProject(ctx context.Context, projectID string) (projecttypes.ProjectRecord, error)
+	ListProjects(ctx context.Context, options projecttypes.ProjectListOptions) (projecttypes.ProjectListResult, error)
+	ListProjectAgents(ctx context.Context, projectID string) ([]projecttypes.ProjectAgentRecord, error)
+	ListProjectSchedulers(ctx context.Context, projectID string) ([]projecttypes.ProjectSchedulerRecord, error)
+	GetProjectRevision(ctx context.Context, projectID string, revision int64) (projecttypes.ProjectRevisionRecord, error)
 }
 
 type Runtime interface {
-	DownProject(ctx context.Context, project sqlitestore.ProjectRecord) ([]Change, error)
+	DownProject(ctx context.Context, project projecttypes.ProjectRecord) ([]Change, error)
 }
 
 type StableProjectIDFunc func(name, sourcePath string) (string, error)
@@ -58,9 +58,9 @@ type GetProjectRequest struct {
 }
 
 type GetProjectResult struct {
-	Project          sqlitestore.ProjectRecord
-	Agents           []sqlitestore.ProjectAgentRecord
-	Schedulers       []sqlitestore.ProjectSchedulerRecord
+	Project          projecttypes.ProjectRecord
+	Agents           []projecttypes.ProjectAgentRecord
+	Schedulers       []projecttypes.ProjectSchedulerRecord
 	RevisionSpecJSON string
 }
 
@@ -71,7 +71,7 @@ type ListProjectsRequest struct {
 	Limit          int
 }
 
-type ListProjectsResult = sqlitestore.ProjectListResult
+type ListProjectsResult = projecttypes.ProjectListResult
 
 type RemoveProjectRequest struct {
 	Ref           ProjectRef
@@ -79,9 +79,9 @@ type RemoveProjectRequest struct {
 }
 
 type RemoveProjectResult struct {
-	Project    sqlitestore.ProjectRecord
-	Agents     []sqlitestore.ProjectAgentRecord
-	Schedulers []sqlitestore.ProjectSchedulerRecord
+	Project    projecttypes.ProjectRecord
+	Agents     []projecttypes.ProjectAgentRecord
+	Schedulers []projecttypes.ProjectSchedulerRecord
 	Changes    []Change
 }
 
@@ -116,7 +116,7 @@ func (u *QueryUsecase) ListProjects(ctx context.Context, req ListProjectsRequest
 	if err := u.requireStore(); err != nil {
 		return ListProjectsResult{}, err
 	}
-	result, err := u.store.ListProjects(ctx, sqlitestore.ProjectListOptions{
+	result, err := u.store.ListProjects(ctx, projecttypes.ProjectListOptions{
 		Query:          req.Query,
 		IncludeRemoved: req.IncludeRemoved,
 		Offset:         req.Offset,
@@ -158,14 +158,14 @@ func (u *QueryUsecase) RemoveProject(ctx context.Context, req RemoveProjectReque
 	}, nil
 }
 
-func (u *QueryUsecase) ResolveProjectRef(ctx context.Context, ref ProjectRef) (sqlitestore.ProjectRecord, error) {
+func (u *QueryUsecase) ResolveProjectRef(ctx context.Context, ref ProjectRef) (projecttypes.ProjectRecord, error) {
 	if err := u.requireStore(); err != nil {
-		return sqlitestore.ProjectRecord{}, err
+		return projecttypes.ProjectRecord{}, err
 	}
 	if projectID := strings.TrimSpace(ref.ProjectID); projectID != "" {
 		project, err := u.store.GetProject(ctx, projectID)
 		if err != nil {
-			return sqlitestore.ProjectRecord{}, projectLookupError("project "+projectID, err)
+			return projecttypes.ProjectRecord{}, projectLookupError("project "+projectID, err)
 		}
 		return project, nil
 	}
@@ -174,41 +174,41 @@ func (u *QueryUsecase) ResolveProjectRef(ctx context.Context, ref ProjectRef) (s
 	if name != "" && sourcePath != "" {
 		stableProjectID := u.stableProjectID
 		if stableProjectID == nil {
-			return sqlitestore.ProjectRecord{}, NewError(ErrorKindStorage, "stable project id resolver is required", nil)
+			return projecttypes.ProjectRecord{}, NewError(ErrorKindStorage, "stable project id resolver is required", nil)
 		}
 		projectID, err := stableProjectID(name, sourcePath)
 		if err != nil {
-			return sqlitestore.ProjectRecord{}, NewError(ErrorKindValidation, err.Error(), err)
+			return projecttypes.ProjectRecord{}, NewError(ErrorKindValidation, err.Error(), err)
 		}
 		project, err := u.store.GetProject(ctx, projectID)
 		if err != nil {
-			return sqlitestore.ProjectRecord{}, projectLookupError("project "+name, err)
+			return projecttypes.ProjectRecord{}, projectLookupError("project "+name, err)
 		}
 		return project, nil
 	}
 	if name == "" {
-		return sqlitestore.ProjectRecord{}, NewError(ErrorKindValidation, "project id or name is required", nil)
+		return projecttypes.ProjectRecord{}, NewError(ErrorKindValidation, "project id or name is required", nil)
 	}
-	result, err := u.store.ListProjects(ctx, sqlitestore.ProjectListOptions{Query: name, Limit: defaultResolveByNameLimit})
+	result, err := u.store.ListProjects(ctx, projecttypes.ProjectListOptions{Query: name, Limit: defaultResolveByNameLimit})
 	if err != nil {
-		return sqlitestore.ProjectRecord{}, storageError("list projects by name", err)
+		return projecttypes.ProjectRecord{}, storageError("list projects by name", err)
 	}
-	matches := make([]sqlitestore.ProjectRecord, 0, 1)
+	matches := make([]projecttypes.ProjectRecord, 0, 1)
 	for _, project := range result.Projects {
 		if project.Name == name {
 			matches = append(matches, project)
 		}
 	}
 	if len(matches) == 0 {
-		return sqlitestore.ProjectRecord{}, NewError(ErrorKindNotFound, fmt.Sprintf("project %s not found", name), sql.ErrNoRows)
+		return projecttypes.ProjectRecord{}, NewError(ErrorKindNotFound, fmt.Sprintf("project %s not found", name), sql.ErrNoRows)
 	}
 	if len(matches) > 1 {
-		return sqlitestore.ProjectRecord{}, NewError(ErrorKindValidation, fmt.Sprintf("project name %s is ambiguous; use project_id or source_path", name), nil)
+		return projecttypes.ProjectRecord{}, NewError(ErrorKindValidation, fmt.Sprintf("project name %s is ambiguous; use project_id or source_path", name), nil)
 	}
 	return matches[0], nil
 }
 
-func (u *QueryUsecase) loadProjectChildren(ctx context.Context, projectID string) ([]sqlitestore.ProjectAgentRecord, []sqlitestore.ProjectSchedulerRecord, error) {
+func (u *QueryUsecase) loadProjectChildren(ctx context.Context, projectID string) ([]projecttypes.ProjectAgentRecord, []projecttypes.ProjectSchedulerRecord, error) {
 	agents, err := u.store.ListProjectAgents(ctx, projectID)
 	if err != nil {
 		return nil, nil, storageError("list project agents", err)
