@@ -2,10 +2,13 @@ package architecture_test
 
 import (
 	"encoding/json"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -178,6 +181,52 @@ func TestProjectPackageDoesNotImportAppOrTransportHandlers(t *testing.T) {
 	checkPackagesDoNotImportGeneratedConnect(t, projectPkgs, module, nil)
 }
 
+func TestProjectPackageDoesNotImportPersistenceAdapters(t *testing.T) {
+	root := repoRoot(t)
+	projectRoot := filepath.Join(root, "internal", "project")
+	if _, err := os.Stat(projectRoot); os.IsNotExist(err) {
+		t.Skip("internal/project does not exist yet")
+	} else if err != nil {
+		t.Fatalf("stat %s: %v", projectRoot, err)
+	}
+
+	module := strings.TrimSpace(runCommand(t, root, "go", "list", "-m"))
+	disallowed := []importRule{
+		{path: module + "/internal/persistence/", prefix: true},
+	}
+	temporaryAllow := map[string]map[string]string{
+		"query.go": {
+			// TODO(project-query-types): remove this allow after query usecases
+			// accept projecttypes/store interfaces instead of sqlite adapter records.
+			module + "/internal/persistence/sqlite": "query usecase still consumes sqlite project records in this stage",
+		},
+	}
+
+	entries, err := os.ReadDir(projectRoot)
+	if err != nil {
+		t.Fatalf("read %s: %v", projectRoot, err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file := filepath.Join(projectRoot, name)
+		for _, imported := range goFileImports(t, file) {
+			if !matchesAnyImportRule(imported, disallowed) {
+				continue
+			}
+			if temporaryAllow[name][imported] != "" {
+				continue
+			}
+			t.Fatalf("%s imports persistence adapter %s", relativePath(root, file), imported)
+		}
+	}
+}
+
 func TestProjectAppFilesDoNotRegressToMigrationArtifacts(t *testing.T) {
 	root := repoRoot(t)
 	files, err := filepath.Glob(filepath.Join(root, "internal", "app", "*project*.go"))
@@ -312,6 +361,23 @@ func checkPackagesDoNotImportGeneratedConnect(t *testing.T, packages []goPackage
 
 func isGeneratedConnectPackage(imported, module string) bool {
 	return strings.HasPrefix(imported, module+"/proto/") && strings.HasSuffix(imported, "connect")
+}
+
+func goFileImports(t *testing.T, file string) []string {
+	t.Helper()
+	parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.ImportsOnly)
+	if err != nil {
+		t.Fatalf("parse imports from %s: %v", file, err)
+	}
+	imports := make([]string, 0, len(parsed.Imports))
+	for _, spec := range parsed.Imports {
+		imported, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			t.Fatalf("parse import path %s in %s: %v", spec.Path.Value, file, err)
+		}
+		imports = append(imports, imported)
+	}
+	return imports
 }
 
 func matchesAnyImportRule(imported string, rules []importRule) bool {

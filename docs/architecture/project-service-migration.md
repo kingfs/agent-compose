@@ -22,6 +22,8 @@ Project Connect adapters should live in `internal/transport/connect`. App route 
 
 The initial `internal/project` package is intentionally only a foundation layer. It defines transport-agnostic error classification and lightweight result structures, such as validation issues and apply changes, so later usecase code can return stable internal shapes before any Connect or HTTP mapping happens.
 
+Project record and list-result data shapes that used to be tied to persistence have been lifted to `internal/projecttypes`. New project usecase boundaries should accept and return those shared model types, or interfaces expressed in terms of those types, instead of importing concrete persistence adapter packages.
+
 Persistence adapters remain under `internal/persistence`. They should implement storage concerns for project state without depending on transport handlers.
 
 ## Migration Guardrails
@@ -35,6 +37,7 @@ When `internal/project` is added, keep it transport agnostic. It must not import
 - `internal/app`
 - `internal/app/...`
 - `internal/transport/...`
+- `internal/persistence/...` adapter packages
 - `connectrpc.com/connect`
 - `github.com/labstack/echo/v4`
 - generated Connect handler packages under `proto/...connect`
@@ -42,6 +45,8 @@ When `internal/project` is added, keep it transport agnostic. It must not import
 Generated proto message packages may remain part of the current API model where necessary. The stricter boundary is specifically against Connect handler/server packages and handler frameworks.
 
 Foundation types should prefer internal Go structures over proto messages unless the usecase boundary would otherwise duplicate a stable domain model. Protocol message conversion belongs at the facade or transport edge during the migration.
+
+Persistence adapter imports have a short-lived staged exception while query extraction catches up: current `internal/project/query.go` may still import `internal/persistence/sqlite` for project record/list shapes. After the query-types work lands on this branch, remove that architecture-test allow and require all `internal/project` files to depend on `internal/projecttypes` and narrow store interfaces instead of persistence adapters.
 
 The foundation package must not remain idle during the facade migration. Architecture tests require `internal/app` to import and use `internal/project` foundation types while Project behavior is still being extracted out of the broad app service. If that import disappears, either the migration has completed and the guard should be replaced with a stricter usecase-boundary check, or the facade has regressed to proto/app-local shapes.
 
@@ -65,6 +70,8 @@ First, sink Apply orchestration into `internal/project`. The usecase should own 
 Second, sink Query and Remove behavior after Apply has a stable usecase boundary. Get/List/Remove should share the same project reference resolution, not-found classification, and removed-project policy through `internal/project` instead of duplicating Connect status decisions in app methods. Remove should return project changes and resulting state in internal result shapes, then let the facade or transport adapter map those shapes to protobuf messages.
 
 Third, introduce store interfaces at the project boundary before moving persistence-heavy code. The interfaces should describe the operations the usecases need, such as project lookup, revision save/load, agent and scheduler listing, managed resource updates, and removal state changes. `internal/persistence` and the current app config store can adapt to those interfaces; `internal/project` should not import concrete app service types or Connect handler packages.
+
+The immediate tightening step after `internal/projecttypes` adoption is to remove the temporary `query.go` sqlite allow from the architecture guard. At that point `internal/project` must not import `internal/persistence/sqlite` or any other persistence adapter directly; adapters should satisfy project-owned interfaces from outside the usecase package.
 
 Fourth, keep thinning the facade. Once a usecase owns an operation, the app method should be limited to request extraction, usecase invocation, error classification, and response mapping. Route registration can still wire the facade during the transition, but new Project protocol adaptation belongs in `internal/transport/connect`.
 
