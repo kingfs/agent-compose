@@ -65,11 +65,11 @@ func (s *Service) ValidateProject(ctx context.Context, req *connect.Request[agen
 }
 
 func (s *Service) ApplyProject(ctx context.Context, req *connect.Request[agentcomposev2.ApplyProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
-	resp, err := s.applyProjectWorkflow(ctx, req.Msg)
+	result, err := s.applyProjectWorkflow(ctx, req.Msg)
 	if err != nil {
 		return nil, connect.NewError(projectApplyConnectCode(err), err)
 	}
-	return connect.NewResponse(resp), nil
+	return connect.NewResponse(projectApplyResponseFromResult(result)), nil
 }
 
 func projectApplyConnectCode(err error) connect.Code {
