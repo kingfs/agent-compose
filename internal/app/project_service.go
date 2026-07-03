@@ -65,164 +65,26 @@ func (s *Service) ValidateProject(ctx context.Context, req *connect.Request[agen
 }
 
 func (s *Service) ApplyProject(ctx context.Context, req *connect.Request[agentcomposev2.ApplyProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
-	normalized, issues, err := normalizeProjectServiceSpec(req.Msg.GetSpec(), req.Msg.GetSource(), req.Msg.GetExpectedSpecHash())
+	resp, err := s.applyProjectWorkflow(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(projectApplyConnectCode(err), err)
 	}
-	if len(issues) > 0 {
-		return connect.NewResponse(&agentcomposev2.ApplyProjectResponse{
-			Issues: issues,
-		}), nil
-	}
-	if s.configDB == nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: config store is required", normalized.spec.Name))
-	}
+	return connect.NewResponse(resp), nil
+}
 
-	project, err := NewProjectRecordFromSpec(normalized.spec, normalized.sourcePath)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
+func projectApplyConnectCode(err error) connect.Code {
+	var applyErr projectApplyError
+	if !errors.As(err, &applyErr) {
+		return connect.CodeInternal
 	}
-	if issues := s.validateProjectManagedAgentDefinitions(normalized); len(issues) > 0 {
-		return connect.NewResponse(&agentcomposev2.ApplyProjectResponse{Issues: issues}), nil
+	switch applyErr.code {
+	case projectApplyErrorCodeInvalidArgument:
+		return connect.CodeInvalidArgument
+	case projectApplyErrorCodeUnavailable:
+		return connect.CodeUnavailable
+	default:
+		return connect.CodeInternal
 	}
-	if issues := s.validateProjectManagedSchedulers(ctx, normalized); len(issues) > 0 {
-		return connect.NewResponse(&agentcomposev2.ApplyProjectResponse{Issues: issues}), nil
-	}
-	agentRecords, err := projectAgentRecordsFromSpec(project.ID, 0, normalized.spec)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
-	}
-	agentDefinitions, err := projectManagedAgentDefinitionsFromSpec(project, 0, normalized.spec)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
-	}
-	schedulerRecords, managedLoaders, err := s.projectManagedSchedulersFromSpec(ctx, project, 0, normalized.spec)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
-	}
-	if req.Msg.GetDryRun() {
-		return connect.NewResponse(&agentcomposev2.ApplyProjectResponse{
-			Project:  projectResponse(project, normalized.specProto, agentRecords, schedulerRecords),
-			Revision: projectRevisionResponse(ProjectRevisionRecord{ProjectID: project.ID, SpecHash: normalized.specHash}, normalized.specProto),
-			Changes:  dryRunProjectChanges(project, agentRecords, agentDefinitions, schedulerRecords, managedLoaders),
-			Applied:  false,
-		}), nil
-	}
-	if err := s.ensureProjectAgentImages(ctx, normalized.spec.Name, agentRecords); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
-	}
-
-	existingProject, projectFound, err := s.configDB.GetProjectIncludingRemoved(ctx, project.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: load existing project: %w", normalized.spec.Name, err))
-	}
-	project, err = s.configDB.UpsertProject(ctx, project)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: upsert project: %w", normalized.spec.Name, err))
-	}
-	specJSON, err := normalized.spec.MarshalCanonicalJSON(false)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: marshal project spec: %w", normalized.spec.Name, err))
-	}
-	revision, revisionCreated, err := s.configDB.SaveProjectRevision(ctx, ProjectRevisionRecord{
-		ProjectID: project.ID,
-		SpecHash:  normalized.specHash,
-		SpecJSON:  string(specJSON),
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: save revision: %w", normalized.spec.Name, err))
-	}
-	project, err = s.configDB.GetProject(ctx, project.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: reload project: %w", normalized.spec.Name, err))
-	}
-
-	agentRecords, err = projectAgentRecordsFromSpec(project.ID, revision.Revision, normalized.spec)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
-	}
-	agentDefinitions, err = projectManagedAgentDefinitionsFromSpec(project, revision.Revision, normalized.spec)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
-	}
-	schedulerRecords, managedLoaders, err = s.projectManagedSchedulersFromSpec(ctx, project, revision.Revision, normalized.spec)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
-	}
-	changes := projectApplyChanges(project, existingProject, projectFound, revision, revisionCreated)
-	agentsUnchanged := true
-	for _, agent := range agentRecords {
-		existingAgent, found, err := getProjectAgentIfExists(ctx, s.configDB, project.ID, agent.AgentName)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: load agent %s: %w", normalized.spec.Name, agent.AgentName, err))
-		}
-		if _, err := s.configDB.UpsertProjectAgent(ctx, agent); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: upsert agent %s: %w", normalized.spec.Name, agent.AgentName, err))
-		}
-		action := agentChangeAction(existingAgent, found, agent)
-		if action != agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UNCHANGED {
-			agentsUnchanged = false
-		}
-		changes = append(changes, &agentcomposev2.ProjectChange{
-			Action:       action,
-			ResourceType: "project_agent",
-			ResourceId:   agent.ManagedAgentID,
-			Name:         agent.AgentName,
-		})
-	}
-	agentDefinitionChanges, agentDefinitionsUnchanged, err := s.reconcileProjectManagedAgentDefinitions(ctx, project, agentDefinitions)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
-	}
-	if !agentDefinitionsUnchanged {
-		agentsUnchanged = false
-	}
-	changes = append(changes, agentDefinitionChanges...)
-	schedulerChanges, schedulersUnchanged, err := s.reconcileProjectManagedSchedulers(ctx, project, schedulerRecords, managedLoaders)
-	if err != nil {
-		changes = append(changes, schedulerChanges...)
-		agents, listAgentsErr := s.configDB.ListProjectAgents(ctx, project.ID)
-		if listAgentsErr != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: %w; list project agents after reconcile failure: %v", normalized.spec.Name, err, listAgentsErr))
-		}
-		schedulers, listSchedulersErr := s.configDB.ListProjectSchedulers(ctx, project.ID)
-		if listSchedulersErr != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: %w; list project schedulers after reconcile failure: %v", normalized.spec.Name, err, listSchedulersErr))
-		}
-		return connect.NewResponse(&agentcomposev2.ApplyProjectResponse{
-			Project:  projectResponse(project, normalized.specProto, agents, schedulers),
-			Revision: projectRevisionResponse(revision, normalized.specProto),
-			Changes:  changes,
-			Issues: []*agentcomposev2.ProjectValidationIssue{
-				projectValidationIssue("reconcile.schedulers", fmt.Sprintf("apply project %s: %v", normalized.spec.Name, err)),
-			},
-			Applied:   false,
-			Unchanged: false,
-		}), nil
-	}
-	if !schedulersUnchanged {
-		agentsUnchanged = false
-	}
-	changes = append(changes, schedulerChanges...)
-
-	agents, err := s.configDB.ListProjectAgents(ctx, project.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: list project agents: %w", normalized.spec.Name, err))
-	}
-	schedulers, err := s.configDB.ListProjectSchedulers(ctx, project.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("apply project %s: list project schedulers: %w", normalized.spec.Name, err))
-	}
-	return connect.NewResponse(&agentcomposev2.ApplyProjectResponse{
-		Project:  projectResponse(project, normalized.specProto, agents, schedulers),
-		Revision: projectRevisionResponse(revision, normalized.specProto),
-		Changes:  changes,
-		Applied:  true,
-		Unchanged: projectFound &&
-			!revisionCreated &&
-			projectRecordUnchanged(existingProject, project) &&
-			agentsUnchanged,
-	}), nil
 }
 
 func (s *Service) GetProject(ctx context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
