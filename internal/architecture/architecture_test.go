@@ -56,6 +56,7 @@ func TestDomainPackagesDoNotImportHandlerFrameworks(t *testing.T) {
 		{path: "github.com/labstack/echo/v4"},
 		{path: module + "/internal/transport/", prefix: true},
 	}, nil)
+	checkPackagesDoNotImportGeneratedConnect(t, domainPkgs, module, nil)
 }
 
 func TestPersistencePackagesDoNotImportTransportFrameworks(t *testing.T) {
@@ -66,6 +67,47 @@ func TestPersistencePackagesDoNotImportTransportFrameworks(t *testing.T) {
 		{path: "github.com/labstack/echo/v4"},
 		{path: module + "/internal/transport/", prefix: true},
 	}, nil)
+}
+
+func TestGeneratedConnectPackagesStayInRouteAdapters(t *testing.T) {
+	root := repoRoot(t)
+	module := strings.TrimSpace(runCommand(t, root, "go", "list", "-m"))
+	allow := map[string]bool{
+		module + "/internal/app":       true,
+		module + "/cmd/agent-compose":  true,
+		module + "/pkg/health":         true,
+		module + "/internal/transport": true,
+	}
+
+	for _, pkg := range listGoPackages(t, root, "./...") {
+		for _, imported := range pkg.Imports {
+			if !isGeneratedConnectPackage(imported, module) {
+				continue
+			}
+			if allow[pkg.ImportPath] || strings.HasPrefix(pkg.ImportPath, module+"/internal/transport/") {
+				continue
+			}
+			t.Fatalf("%s imports generated Connect handler package %s", pkg.ImportPath, imported)
+		}
+	}
+}
+
+func TestProjectPackageDoesNotImportTransportHandlers(t *testing.T) {
+	root := repoRoot(t)
+	projectRoot := filepath.Join(root, "internal", "project")
+	if _, err := os.Stat(projectRoot); os.IsNotExist(err) {
+		return
+	} else if err != nil {
+		t.Fatalf("stat %s: %v", projectRoot, err)
+	}
+
+	module := strings.TrimSpace(runCommand(t, root, "go", "list", "-m"))
+	projectPkgs := listGoPackages(t, root, "./internal/project/...")
+	checkPackagesDoNotImport(t, projectPkgs, []importRule{
+		{path: "connectrpc.com/connect"},
+		{path: "github.com/labstack/echo/v4"},
+	}, nil)
+	checkPackagesDoNotImportGeneratedConnect(t, projectPkgs, module, nil)
 }
 
 func TestRemovedPackageReferencesDoNotReturn(t *testing.T) {
@@ -144,6 +186,25 @@ func checkPackagesDoNotImport(t *testing.T, packages []goPackage, rules []import
 			t.Fatalf("%s imports disallowed package %s", pkg.ImportPath, imported)
 		}
 	}
+}
+
+func checkPackagesDoNotImportGeneratedConnect(t *testing.T, packages []goPackage, module string, allow map[string]map[string]bool) {
+	t.Helper()
+	for _, pkg := range packages {
+		for _, imported := range pkg.Imports {
+			if !isGeneratedConnectPackage(imported, module) {
+				continue
+			}
+			if allow[pkg.ImportPath][imported] {
+				continue
+			}
+			t.Fatalf("%s imports generated Connect handler package %s", pkg.ImportPath, imported)
+		}
+	}
+}
+
+func isGeneratedConnectPackage(imported, module string) bool {
+	return strings.HasPrefix(imported, module+"/proto/") && strings.HasSuffix(imported, "connect")
 }
 
 func matchesAnyImportRule(imported string, rules []importRule) bool {
