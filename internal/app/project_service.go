@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"gopkg.in/yaml.v3"
 
+	projecterrors "agent-compose/internal/project"
 	"agent-compose/pkg/compose"
 	driverpkg "agent-compose/pkg/driver"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -41,15 +42,15 @@ func (s *Service) ApplyProject(ctx context.Context, req *connect.Request[agentco
 }
 
 func projectApplyConnectCode(err error) connect.Code {
-	var applyErr projectApplyError
-	if !errors.As(err, &applyErr) {
-		return connect.CodeInternal
-	}
-	switch applyErr.code {
-	case projectApplyErrorCodeInvalidArgument:
+	switch projecterrors.ErrorKindOf(err) {
+	case projecterrors.ErrorKindValidation, projecterrors.ErrorKindConflict:
 		return connect.CodeInvalidArgument
-	case projectApplyErrorCodeUnavailable:
+	case projecterrors.ErrorKindRuntime:
 		return connect.CodeUnavailable
+	case projecterrors.ErrorKindNotFound:
+		return connect.CodeNotFound
+	case projecterrors.ErrorKindStorage, projecterrors.ErrorKindUnknown:
+		return connect.CodeInternal
 	default:
 		return connect.CodeInternal
 	}
