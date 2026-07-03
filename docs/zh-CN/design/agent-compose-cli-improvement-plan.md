@@ -84,14 +84,15 @@
 - `up/down/ls/inspect/logs/stats` 如何展示和管理 service。
 - service 与 agent/sandbox/runtime driver 的边界关系。
 
-仍未完成且不建议在小补丁中强行落地：
+暂不做的命令和能力：
 
+- `build`：本轮不实现。
+- `push`：本轮不实现；如未来实现，需要扩展 v2 ImageService。
+- `stats` / `stats -w`：本轮不实现；该能力需要统一 sandbox stats API 和 runtime driver 指标接入。
+- `up` 前台 attach / Ctrl+C 停止整个 project：本轮不实现。当前 `up` 的语义就是将 project 注册/应用到 daemon 后返回，不新增 `-d/--detach`，也不再规划 docker compose 风格的默认前台 attach。
 - `run -d/--detach`、`run -i/--interactive`、`--jupyter`、`--jupyter-expose`：需要明确后台运行、交互和 runtime/session 创建参数。
 - `run -d/--detach` 当前不能只在 CLI 或现有 `RunAgentStream` 上包装实现。现有执行生命周期绑定 RPC request context，`StopRun` 也只更新 DB 状态，不取消内存执行；真正实现需要 v2 后台 run 提交 API、daemon 级 run supervisor、cancel map，并明确 daemon 重启后的语义。
 - `--jupyter`、`--jupyter-expose` 当前不能只在 CLI 加 flag。Jupyter proxy state 和 runtime port mapping 在 session 创建和 driver 启动时决定，guest port 来自全局配置，host bind 当前固定为内部随机地址；真正实现需要 per-session Jupyter/network options、store/proxy state 扩展和 driver 映射支持。
-- 默认前台 attach/Ctrl+C down：需要 project 级日志 attach 和中断处理；当前 `up` 已是 apply 后返回语义，不再新增 `-d/--detach`。
-- `push`：需要扩展 v2 ImageService。
-- `stats` / `stats -w`：需要统一 sandbox stats API 和 runtime driver 指标接入，放在最后阶段。
 
 ## 目标命令体系
 
@@ -115,14 +116,12 @@ rm
 exec
 logs
 inspect
-stats
 images
 pull
-push
 rmi
 ```
 
-本轮不实现 `build`。旧 `image` 命令树不删除，只标记 deprecated，并提示用户迁移到顶层 image 命令和 `inspect image`。
+本轮不实现 `build`、`push`、`stats`。旧 `image` 命令树不删除，只标记 deprecated，并提示用户迁移到顶层 image 命令和 `inspect image`。
 
 ## 实施原则
 
@@ -131,14 +130,14 @@ rmi
 具体原则：
 
 - 不扩散改动范围。优先复用当前 v1 SessionService、v2 ProjectService、RunService、ExecService、ImageService 能力。
-- 必要时才扩展后端/API。当前明确需要新增或扩展后端能力的范围包括 sandbox 删除、run 新输入模式中的部分能力、image push、stats。
+- 必要时才扩展后端/API。当前已完成 sandbox 删除和 `run --command` 所需 v2 能力；`push`、`stats` 等扩展暂缓。
 - 需要新增底层功能或 API 时，统一走 v2。v1 会在后续版本逐步删除，因此本轮不向 v1 增加新 RPC 或新数据模型。
 - 兼容优先。计划删除命令、删除参数、改变 positional 语义前，必须先提供替代命令，并在旧入口输出 deprecated warning。
 - warning 必须写到 stderr，不污染 `--json` stdout。
 - deprecated warning 需要明确说明旧入口后续会被删除，并给出替代命令。例如：`agent-compose image inspect` is deprecated and will be removed in a future release; use `agent-compose inspect image` instead.
 - 代码中同步增加 `Deprecated:` 注释或显式 deprecation 标记，方便后续定位旧兼容逻辑。
 - 本轮不实际删除旧命令和旧参数。删除动作等后续经过几个版本兼容期后再单独评估和执行。
-- `stats` 涉及统一资源采集 API 和 runtime driver 指标接入，改动范围较大，作为最后阶段实现。
+- `stats` 涉及统一资源采集 API 和 runtime driver 指标接入，改动范围较大，本轮暂缓。
 
 ## 任务拆分和依赖关系
 
@@ -164,9 +163,9 @@ rmi
 4. sandbox 删除 API -> `rm --force` -> `run --rm`。
 5. `ps` sandbox 化 -> `stop/resume/rm` 批量操作体验。
 6. `run` 新输入模式 API 支持 -> `run --trigger/--command` -> positional prompt deprecated warning；`run --detach` 仍需单独设计。
-7. 保持当前 `up` apply 后返回语义 -> 如未来需要前台 attach，单独设计 attach/Ctrl+C project shutdown。
+7. 保持当前 `up` apply 后返回语义；不实现前台 attach / Ctrl+C project shutdown。
 8. `inspect image` 发布 -> 旧 `image` 命令树 deprecated warning。
-9. sandbox 输出模型稳定 -> stats API -> `stats` CLI。
+9. sandbox 输出模型稳定；`stats` API/CLI 本轮暂缓。
 
 ### 可并行任务
 
@@ -175,8 +174,7 @@ rmi
 | 可并行任务 | 前置条件 | 说明 |
 | --- | --- | --- |
 | `logs --tail`、`--timestamp` | 已完成 | 当前基于 v2 RunService 的 run output/artifacts；CLI 端对 `RunDetail.output` 按行 tail，文本 timestamp 使用 run 级时间。 |
-| image `push` | ImageService 扩展方案确定 | 与 project/sandbox 命令正交。 |
-| `up` attach | project 级 attach 和中断语义明确 | 当前 `up` 已是 apply 后返回语义；不新增 `-d/--detach`。 |
+| image `push` | 暂不做 | 与 project/sandbox 命令正交；未来如需实现再扩展 v2 ImageService。 |
 
 ### 命令级开发矩阵
 
@@ -184,7 +182,7 @@ rmi
 | --- | --- | --- | --- | --- | --- |
 | `config` | 已实现，已支持 `.yml/.yaml` | 保持现状 | 无 | 无 | 已完成 |
 | `ls` | 已实现 | 后续如需展示 services，需要扩展 API/store | services 字段来源未定义 | project list API | 主体已完成 |
-| `up` | 已实现 apply 后返回 | 保持现状；未来如需前台模式需新增 attach 语义 | 可能复用 `WatchProject`/logs；无需先改 proto | project logs/stop 语义 | attach 需单独设计 |
+| `up` | 已实现 apply 后返回 | 保持现状，不实现前台 attach，不新增 `-d/--detach` | 无 | 无 | 已完成 |
 | `down` | 已实现 | 文案和输出对齐 sandbox | 无 | sandbox 输出术语 | 可随输出模型调整 |
 | `run` | 已支持 prompt stream、`--sandbox`、`--trigger`、`--command`、`--rm` | `-d/--detach`、`-i/--interactive`、jupyter 参数 | command 模式已扩展 v2 Run API；后台/交互/jupyter 仍需定义映射 | run API | command 已完成，其余需拆设计 |
 | `ps` | 已实现 sandbox 视图 | 后续按需要补更多 verbose 字段 | 可能需要补查询 | sandbox 输出模型 | 主体已完成 |
@@ -194,10 +192,10 @@ rmi
 | `exec` | 已实现 `exec <sandbox>`、`--command`，旧 flags deprecated | 后续评估 `--prompt`、`-d`、`-i` | `--command` 复用现有 ExecRequest；交互/后台仍需扩展 | ps sandbox 发现路径 | 主体已完成 |
 | `logs` | 已支持 positional agent、`--sandbox`、旧 `--session-id` warning、`--tail`、`--timestamp` | 后续如需 provider 原生日志需单独设计 | 当前 CLI 层截断 `RunDetail.output`，不读取 provider 私有日志 | 日志语义 | 主体完成 |
 | `inspect` | 已支持 sandbox/image，旧入口 warning | 保持现状 | 无新增 API；复用 GetSession/InspectImage | warning 机制 | 已完成 |
-| `stats` | 缺 CLI/API | running sandbox 当前值和 watch | 新增统一 stats API；driver 接入 | sandbox 输出模型、driver 指标能力 | 最后阶段实现 |
+| `stats` | 缺 CLI/API | 暂不做 | 如未来实现需新增统一 stats API；driver 接入 | sandbox 输出模型、driver 指标能力 | 暂缓 |
 | `images` | 已实现 | 保留 | 无 | 无 | 无需优先改 |
 | `pull` | 已支持 `pull [image]` | 保持现状 | 无 | compose 解析 | 已完成 |
-| `push` | 缺 CLI/API | 新增 push | v2 ImageService 增加 PushImage | image store 能力 | 与 sandbox 正交 |
+| `push` | 缺 CLI/API | 暂不做 | 如未来实现需 v2 ImageService 增加 PushImage | image store 能力 | 暂缓 |
 | `rmi` | 已实现 | 保留 | 无 | 无 | 无需优先改 |
 
 ### 建议里程碑
@@ -209,9 +207,7 @@ rmi
 3. **sandbox 可观测性**：`ps` sandbox 视图、`logs --tail/--timestamp`、JSON 输出模型稳定。
 4. **sandbox 生命周期**：`stop`、`resume`、删除 API、`rm --force`。
 5. **执行和运行语义**：`exec <sandbox>`、`run --sandbox`、`run --trigger/--command`、`run --rm` 已完成；`run -d` 单独设计。
-6. **project 前台运行**：如确有需要，单独设计 `up` attach 或新命令的 Ctrl+C shutdown 语义。
-7. **镜像扩展和旧入口兼容**：`push`、旧 `image` 命令树 deprecated warning。
-8. **资源统计**：最后实现 `stats` 和 `stats -w/--watch`。
+6. **暂缓能力**：`build`、`push`、`stats`、`up` 前台 attach / Ctrl+C project shutdown 本轮不做。
 
 ## 分阶段实施计划
 
@@ -484,7 +480,7 @@ rmi
 目标：
 
 - 保持当前 `up` apply 后返回语义。
-- 如未来需要前台模式，应单独设计 project attach 输出和 `Ctrl+C` 停止整个 project 的行为。
+- 不实现 project 前台 attach 输出和 `Ctrl+C` 停止整个 project 的行为。
 
 当前差异：
 
@@ -493,20 +489,18 @@ rmi
 实现要点：
 
 - 本轮不新增 `-d/--detach`，避免出现没有实际差异的参数。
-- 如果后续实现前台 attach，应先实现 project 级日志 attach。
-- 前台 attach 模式需要处理 signal，并调用 project down/stop 逻辑。
+- 不规划 docker compose 风格的默认前台 attach。
 
 测试点：
 
 - `up` 返回 project/revision/change summary。
-- 如新增前台 attach，再测试 attach 输出和中断后 project 停止。
 
 ### 10. 镜像命令整理
 
 目标：
 
 - 保留顶层 `images`、`pull`、`rmi`。
-- 新增 `push`。
+- `push` 本轮暂不实现。
 - `image inspect` 迁移到 `inspect image`。
 - 保留旧 `image` 命令树，但全部标记 deprecated。
 
@@ -528,8 +522,9 @@ rmi
 
 目标：
 
-- `stats` 默认展示当前 running sandbox 的资源消耗，采集一次后返回。
-- `stats -w/--watch` 定期刷新。
+- 本轮暂不实现。
+- 如未来实现，`stats` 默认展示当前 running sandbox 的资源消耗，采集一次后返回。
+- 如未来实现，`stats -w/--watch` 定期刷新。
 
 当前差异：
 
@@ -572,8 +567,7 @@ rmi
 3. `--jupyter`、`--jupyter-expose`：先实现 per-session Jupyter/network options、proxy state 和 driver port mapping，再开放 CLI flag。
 4. `run -i/--interactive`：需要 runtime/session 的双向 stdin/TTY 流式能力，单独设计。
 5. 如确需 project 前台模式：先实现 project 级日志 attach 和中断处理，再开放对应命令/参数。
-6. `push`：扩展 v2 ImageService，再新增 CLI。
-7. `stats` 和 `stats -w/--watch`：最后实现统一 stats API、runtime driver 指标接入和 watch UI。
+6. `build`、`push`、`stats`：本轮暂不做，后续需要时重新评估范围。
 
 ## 仍需确认
 

@@ -1,6 +1,6 @@
 # agent-compose 命令行使用手册
 
-agent-compose 命令行用于连接 agent-compose daemon，管理 project、agent、sandbox、日志、资源统计和镜像。它的使用模型接近 Docker Compose：配置文件定义 project，daemon 负责长期状态和运行时生命周期，CLI 负责发起操作和展示结果。
+agent-compose 命令行用于连接 agent-compose daemon，管理 project、agent、sandbox、日志和镜像。它的使用模型接近 Docker Compose：配置文件定义 project，daemon 负责长期状态和运行时生命周期，CLI 负责发起操作和展示结果。
 
 ## 核心概念
 
@@ -66,7 +66,7 @@ agent-compose -f /path/to/project/agent-compose.yml logs --follow
 ```bash
 agent-compose --host http://10.0.0.12:7410 ls
 agent-compose --host http://10.0.0.12:7410 -f /path/to/project/agent-compose.yml up
-agent-compose --host http://10.0.0.12:7410 -f /path/to/project/agent-compose.yml stats --watch
+agent-compose --host http://10.0.0.12:7410 -f /path/to/project/agent-compose.yml logs --follow
 ```
 
 ## `ls`：查看 project
@@ -353,35 +353,6 @@ agent-compose inspect image <image>
 - `inspect sandbox <sandbox>` 查看 sandbox/runtime 详情。
 - `inspect image <image>` 查看镜像详情。
 
-## `stats`：查看资源消耗
-
-查看当前 project 下 running sandbox 的资源消耗，行为类似 `docker compose stats`。默认展示当前采集值后返回。
-
-```bash
-agent-compose stats
-agent-compose stats -w
-agent-compose stats --watch
-agent-compose stats --json
-```
-
-选项：
-
-| 参数 | 说明 |
-| --- | --- |
-| `-w, --watch` | 定期刷新资源消耗，直到用户中断。 |
-
-输出字段：
-
-- `SANDBOX`
-- `AGENT`
-- `CPU %`
-- `MEM USAGE / LIMIT`
-- `MEM %`
-- `NET I/O`
-- `BLOCK I/O`
-
-不同 runtime driver 可采集的指标可能不同。不可用指标显示为 `-`，JSON 输出保持字段结构稳定。
-
 ## 镜像命令
 
 管理 daemon 或当前 project 相关的镜像。
@@ -389,7 +360,6 @@ agent-compose stats --json
 ```bash
 agent-compose images
 agent-compose pull <image>
-agent-compose push <image>
 agent-compose rmi <image>
 agent-compose inspect image <image>
 ```
@@ -398,7 +368,6 @@ agent-compose inspect image <image>
 
 - `images`：列出镜像。
 - `pull <image>`：拉取镜像。
-- `push <image>`：推送镜像。
 - `rmi <image>`：删除镜像。
 - `inspect image <image>`：查看镜像详情。
 
@@ -430,7 +399,7 @@ agent-compose config --quiet
 
 ## 使用建议
 
-- 使用 `up` 将 project 应用到 daemon 后，通过 `ps`、`logs`、`stats` 观察状态。
+- 使用 `up` 将 project 应用到 daemon 后，通过 `ps`、`logs` 观察状态。
 - 跨目录操作 project 时使用 `-f /path/to/project/agent-compose.yml` 或 `-f /path/to/project/agent-compose.yaml`。
 - 操作远程 daemon 时显式传入 `--host`，并确认目标 daemon 上的 project 名称和配置文件路径符合预期。
 - 脚本和自动化系统使用 `--json`，避免依赖表格列宽或文本排版。
