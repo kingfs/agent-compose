@@ -597,6 +597,7 @@ func newRootCommand(out, errOut io.Writer, runDaemon daemonRunner) *cobra.Comman
 	execCmd.Flags().StringVar(&execOptions.RunID, "run-id", "", "Execute in the session linked to a run")
 	// Deprecated: use `agent-compose exec <sandbox>` instead.
 	execCmd.Flags().StringVar(&execOptions.SessionID, "session-id", "", "Execute in a specific session")
+	execCmd.Flags().StringVar(&execOptions.Command, "command", "", "Shell command to execute in the sandbox")
 	execCmd.Flags().StringVar(&execOptions.Cwd, "cwd", "", "Guest working directory")
 
 	imageListOptions := composeImageListOptions{}
@@ -760,6 +761,7 @@ type composeExecOptions struct {
 	AgentName string
 	RunID     string
 	SessionID string
+	Command   string
 	Cwd       string
 }
 
@@ -1358,12 +1360,12 @@ func normalizeComposeExecRequest(cmd *cobra.Command, projectName, projectID stri
 		if err := writeDeprecatedWarning(cmd.ErrOrStderr(), "agent-compose exec "+legacyTargetFlags[0], "agent-compose exec <sandbox>"); err != nil {
 			return nil, err
 		}
-		commandArgs := append([]string(nil), args...)
-		if len(commandArgs) == 0 {
-			commandArgs = []string{"sh"}
+		command, err := composeExecCommandFromArgs(options, args)
+		if err != nil {
+			return nil, err
 		}
 		req := &agentcomposev2.ExecRequest{
-			Command: &agentcomposev2.ExecCommand{Command: commandArgs[0], Args: append([]string(nil), commandArgs[1:]...)},
+			Command: command,
 			Cwd:     strings.TrimSpace(options.Cwd),
 		}
 		switch legacyTargetFlags[0] {
@@ -1396,15 +1398,30 @@ func normalizeComposeExecRequest(cmd *cobra.Command, projectName, projectID stri
 	if sandbox == "" {
 		return nil, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("exec requires non-empty sandbox")}
 	}
-	commandArgs := append([]string(nil), args[1:]...)
-	if len(commandArgs) == 0 {
-		commandArgs = []string{"sh"}
+	command, err := composeExecCommandFromArgs(options, args[1:])
+	if err != nil {
+		return nil, err
 	}
 	return &agentcomposev2.ExecRequest{
-		Command: &agentcomposev2.ExecCommand{Command: commandArgs[0], Args: append([]string(nil), commandArgs[1:]...)},
+		Command: command,
 		Cwd:     strings.TrimSpace(options.Cwd),
 		Target:  &agentcomposev2.ExecRequest_SessionId{SessionId: sandbox},
 	}, nil
+}
+
+func composeExecCommandFromArgs(options composeExecOptions, args []string) (*agentcomposev2.ExecCommand, error) {
+	commandText := strings.TrimSpace(options.Command)
+	if commandText != "" {
+		if len(args) > 0 {
+			return nil, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("exec command can be specified either with --command or positional arguments, not both")}
+		}
+		return &agentcomposev2.ExecCommand{Command: "bash", Args: []string{"-lc", commandText}}, nil
+	}
+	commandArgs := append([]string(nil), args...)
+	if len(commandArgs) == 0 {
+		commandArgs = []string{"sh"}
+	}
+	return &agentcomposev2.ExecCommand{Command: commandArgs[0], Args: append([]string(nil), commandArgs[1:]...)}, nil
 }
 
 func runComposeImageListCommand(cmd *cobra.Command, cli cliOptions, options composeImageListOptions) error {

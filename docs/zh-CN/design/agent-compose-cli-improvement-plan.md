@@ -43,7 +43,7 @@
 | `stop` | `agent-compose stop <sandbox...>` | 基于 v1 `StopSession` 停止 sandbox。 |
 | `resume` | `agent-compose resume <sandbox...>` | 基于 v1 `ResumeSession` 恢复 sandbox。 |
 | `rm` | `agent-compose rm [--force] <sandbox...>` | 调用 v2 `SandboxService.RemoveSandbox` 删除 sandbox；running sandbox 无 `--force` 会报 `is running`。 |
-| `exec` | `agent-compose exec <sandbox> [command] [args...]` | 调用 v2 `ExecService.ExecStream`；旧 `--agent`、`--run-id`、`--session-id` 目标选择方式保留并输出 deprecated warning；支持 `--cwd`。 |
+| `exec` | `agent-compose exec <sandbox> [command] [args...]` | 调用 v2 `ExecService.ExecStream`；旧 `--agent`、`--run-id`、`--session-id` 目标选择方式保留并输出 deprecated warning；支持 `--cwd` 和 `--command`。 |
 | `inspect` | `agent-compose inspect <project|agent|run|sandbox|session|image> [name-or-id]` | 查看 project、agent、run、sandbox/session、image；`inspect session` 保留并输出 deprecated warning。 |
 | `images` | `agent-compose images` | 调用 image list；支持 `--query`、`-a/--all`。 |
 | `pull` | `agent-compose pull [image]` | 指定 image 时拉取单个镜像；无参数时读取当前 project 下所有 agent image 并去重拉取；支持 `--platform`。 |
@@ -69,7 +69,7 @@
 - 命名迁移和兼容层：新增 `inspect image`、`inspect sandbox`；旧 `image` 命令树、`inspect session`、`--session-id` 等兼容入口输出 deprecated warning 到 stderr。
 - Sandbox 可观测性：`ps` 已转为 sandbox 视图，支持 `-a/--all`、`--status`、`--verbose`、`--json`。
 - Sandbox 生命周期：新增 `stop`、`resume`、`rm --force`；新增 v2 `SandboxService.RemoveSandbox` 和底层 session 删除能力。
-- 执行目标迁移：`exec <sandbox> [command] [args...]` 已落地；旧 target flags 保留并输出 deprecated warning。
+- 执行目标迁移：`exec <sandbox> [command] [args...]` 已落地；`exec <sandbox> --command "..."` 已支持；旧 target flags 保留并输出 deprecated warning。
 - Run 增强：新增 `--sandbox`、`--trigger`、`--rm`；旧 `--session-id` 和 positional prompt 保留并输出 deprecated warning。
 - 镜像命令：旧 `image` 命令树已 deprecated；`pull [image]` 支持无参数时拉取当前 project 下所有 agent image。
 
@@ -189,7 +189,7 @@ rmi
 | `stop` | 已实现 | 保持现状 | 复用 v1 StopSession | sandbox id 映射 | 已完成 |
 | `resume` | 已实现 | 保持现状 | 复用 v1 ResumeSession | sandbox id 映射 | 已完成 |
 | `rm` | 已实现 | 保持现状，后续可优化批量部分失败 JSON | 已新增 v2 SandboxService 和 store 删除能力 | sandbox 删除 API | 已完成 |
-| `exec` | 已实现 `exec <sandbox>`，旧 flags deprecated | 后续评估 `--prompt`、`--command`、`-d`、`-i` | 现有 ExecRequest 支持 session target；新输入模式可能需扩展 | ps sandbox 发现路径 | 主体已完成 |
+| `exec` | 已实现 `exec <sandbox>`、`--command`，旧 flags deprecated | 后续评估 `--prompt`、`-d`、`-i` | `--command` 复用现有 ExecRequest；交互/后台仍需扩展 | ps sandbox 发现路径 | 主体已完成 |
 | `logs` | 已支持 positional agent、`--sandbox`、旧 `--session-id` warning、`--tail`、`--timestamp` | 后续如需 provider 原生日志需单独设计 | 当前 CLI 层截断 `RunDetail.output`，不读取 provider 私有日志 | 日志语义 | 主体完成 |
 | `inspect` | 已支持 sandbox/image，旧入口 warning | 保持现状 | 无新增 API；复用 GetSession/InspectImage | warning 机制 | 已完成 |
 | `stats` | 缺 CLI/API | running sandbox 当前值和 watch | 新增统一 stats API；driver 接入 | sandbox 输出模型、driver 指标能力 | 最后阶段实现 |
@@ -399,7 +399,7 @@ rmi
 目标：
 
 - `exec <sandbox> [command] [args...]`。
-- 新增 `--prompt`、`--command`、`-d/--detach`、`-i/--interactive`。
+- 新增 `--command`；后续再评估 `--prompt`、`-d/--detach`、`-i/--interactive`。
 - 保留 `--agent`、`--run-id`、`--session-id` 目标选择方式作为 deprecated 兼容入口。
 
 当前差异：
@@ -415,10 +415,13 @@ rmi
 - 旧 `--agent`、`--run-id`、`--session-id` target flags 输出 deprecated warning，说明后续删除，并提示使用 `agent-compose exec <sandbox> ...`。
 - 旧 target flags 定义或兼容分支旁增加 `Deprecated:` 注释。
 - `--cwd` 是否保留为执行上下文参数需要单独决定；如果保留，不应再承担目标选择语义。
+- `--command "..."` 映射为 `bash -lc "..."`，只作为命令输入形式，不改变 exec 的目标选择和历史记录语义。
 
 测试点：
 
 - `exec sandbox_123 pwd` 目标为 sandbox_123，命令为 pwd。
+- `exec sandbox_123 --command "pwd"` 目标为 sandbox_123，命令为 `bash -lc "pwd"`。
+- `--command` 和 positional command 同时出现时报 usage error。
 - 旧 `exec --session-id ... pwd` warning 后仍可用。
 - 未传 command 时进入默认交互入口。
 

@@ -291,7 +291,7 @@ agent-compose exec <sandbox> --command "..."
 | `-d, --detach` | 后台执行。 |
 | `-i, --interactive` | 交互执行。 |
 | `--prompt "..."` | 在该 sandbox 中向 provider 发送 prompt。 |
-| `--command "..."` | 以 flag 形式传入命令。 |
+| `--command "..."` | 以 flag 形式传入 shell 命令，等价于在 sandbox 中执行 `bash -lc "..."`。 |
 
 示例：
 

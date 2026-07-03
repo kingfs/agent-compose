@@ -1927,6 +1927,7 @@ agents:
 `)
 	var sawSelector bool
 	var sawSandbox bool
+	var sawCommand bool
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		exec: execServiceStub{
 			execStream: func(ctx context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.ExecStreamResponse]) error {
@@ -1934,6 +1935,12 @@ agents:
 					sawSandbox = true
 					if req.Msg.GetCommand().GetCommand() != "bash" || req.Msg.GetCommand().GetArgs()[0] != "-lc" {
 						t.Fatalf("ExecStream sandbox request = %#v", req.Msg)
+					}
+				}
+				if req.Msg.GetSessionId() == "sandbox-command" {
+					sawCommand = true
+					if req.Msg.GetCommand().GetCommand() != "bash" || len(req.Msg.GetCommand().GetArgs()) != 2 || req.Msg.GetCommand().GetArgs()[0] != "-lc" || req.Msg.GetCommand().GetArgs()[1] != "git status --short" {
+						t.Fatalf("ExecStream --command request = %#v", req.Msg)
 					}
 				}
 				if selector := req.Msg.GetSelector(); selector != nil {
@@ -1995,6 +2002,17 @@ agents:
 		t.Fatal("ExecStream sandbox target was not used")
 	}
 
+	commandOut, commandErr, _, commandCode := executeCLICommand("exec", "--host", server.URL, "--file", composePath, "sandbox-command", "--command", "git status --short")
+	if commandCode != 0 {
+		t.Fatalf("exec --command exit code = %d, stderr=%q", commandCode, commandErr)
+	}
+	if commandOut != "exec stdout\n" || commandErr != "exec stderr\n" {
+		t.Fatalf("exec --command stdout/stderr = %q / %q", commandOut, commandErr)
+	}
+	if !sawCommand {
+		t.Fatal("ExecStream --command target was not used")
+	}
+
 	legacyOut, legacyErr, _, legacyCode := executeCLICommand("exec", "--host", server.URL, "--file", composePath, "--agent", "reviewer", "--cwd", "/workspace", "--", "bash", "-lc", "pwd")
 	if legacyCode != 0 {
 		t.Fatalf("exec --agent exit code = %d, stderr=%q", legacyCode, legacyErr)
@@ -2019,6 +2037,14 @@ agents:
 	}
 	if decoded.ExecID != "exec-cli" || decoded.SessionID != "session-exec" || decoded.Stdout != "exec stdout\n" || !decoded.Success {
 		t.Fatalf("exec JSON = %#v", decoded)
+	}
+
+	ambiguousOut, ambiguousErr, _, ambiguousCode := executeCLICommand("exec", "--host", server.URL, "--file", composePath, "sandbox-command", "--command", "pwd", "whoami")
+	if ambiguousCode != exitCodeUsage {
+		t.Fatalf("exec --command ambiguous exit code = %d, want %d", ambiguousCode, exitCodeUsage)
+	}
+	if ambiguousOut != "" || !strings.Contains(ambiguousErr, "either with --command or positional arguments") {
+		t.Fatalf("exec --command ambiguous stdout/stderr = %q / %q", ambiguousOut, ambiguousErr)
 	}
 }
 
