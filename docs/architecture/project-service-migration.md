@@ -28,9 +28,13 @@ Persistence adapters remain under `internal/persistence`. They should implement 
 
 Generated Connect handler packages are delivery-layer dependencies. They are allowed in app route wiring, transport adapters, bootstrap wiring, and the health route adapter, but they should not be imported by domain or usecase packages.
 
+Current-stage migration keeps `internal/app` as the ProjectService facade. That facade may import `internal/project` foundation types such as `project.ApplyResult`, `project.Change`, `project.ValidationIssue`, and `project.Error` while it continues to preserve the existing Connect API surface. This direction is intentional: app code adapts current handlers and response shapes, while project foundation code stays independent of delivery concerns.
+
 When `internal/project` is added, keep it transport agnostic. It must not import:
 
 - `internal/app`
+- `internal/app/...`
+- `internal/transport/...`
 - `connectrpc.com/connect`
 - `github.com/labstack/echo/v4`
 - generated Connect handler packages under `proto/...connect`
@@ -38,6 +42,8 @@ When `internal/project` is added, keep it transport agnostic. It must not import
 Generated proto message packages may remain part of the current API model where necessary. The stricter boundary is specifically against Connect handler/server packages and handler frameworks.
 
 Foundation types should prefer internal Go structures over proto messages unless the usecase boundary would otherwise duplicate a stable domain model. Protocol message conversion belongs at the facade or transport edge during the migration.
+
+The foundation package must not remain idle once the facade migration branch lands. Add or enable an architecture check at that point requiring either `internal/app/project_apply_service.go` or `internal/app/project_facade.go` to import `internal/project`. Do not enable that check on a branch where the facade still has no safe business-logic integration with the foundation package, because it would create a red test without proving the architecture boundary.
 
 ## Incremental Steps
 
