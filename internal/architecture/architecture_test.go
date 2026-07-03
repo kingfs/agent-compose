@@ -2,6 +2,7 @@ package architecture_test
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,19 +18,62 @@ type goPackage struct {
 func TestPkgPackagesDoNotImportInternalPackages(t *testing.T) {
 	root := repoRoot(t)
 	module := strings.TrimSpace(runCommand(t, root, "go", "list", "-m"))
-	output := runCommand(t, root, "go", "list", "-json", "./pkg/...")
-	decoder := json.NewDecoder(strings.NewReader(output))
-	for decoder.More() {
-		var pkg goPackage
-		if err := decoder.Decode(&pkg); err != nil {
-			t.Fatalf("decode go list output: %v", err)
-		}
+	for _, pkg := range listGoPackages(t, root, "./pkg/...") {
 		for _, imported := range pkg.Imports {
 			if strings.HasPrefix(imported, module+"/internal/") {
 				t.Fatalf("%s imports internal package %s", pkg.ImportPath, imported)
 			}
 		}
 	}
+}
+
+func TestTransportPackagesDoNotAddAppImports(t *testing.T) {
+	root := repoRoot(t)
+	module := strings.TrimSpace(runCommand(t, root, "go", "list", "-m"))
+	knownDebt := map[string]map[string]bool{
+		module + "/internal/transport/connect": {
+			module + "/internal/app": true,
+		},
+		module + "/internal/transport/http": {
+			module + "/internal/app": true,
+		},
+	}
+
+	checkNoDisallowedImports(t, root, []string{"./internal/transport/..."}, []importRule{
+		{path: module + "/internal/app"},
+	}, knownDebt)
+}
+
+func TestDomainPackagesDoNotImportHandlerFrameworks(t *testing.T) {
+	root := repoRoot(t)
+	module := strings.TrimSpace(runCommand(t, root, "go", "list", "-m"))
+	var domainPkgs []goPackage
+	for _, pkg := range listGoPackages(t, root, "./internal/...") {
+		if pkg.ImportPath == module+"/internal/app" ||
+			strings.HasPrefix(pkg.ImportPath, module+"/internal/app/") ||
+			strings.HasPrefix(pkg.ImportPath, module+"/internal/persistence/") ||
+			strings.HasPrefix(pkg.ImportPath, module+"/internal/transport/") ||
+			strings.HasPrefix(pkg.ImportPath, module+"/internal/architecture") {
+			continue
+		}
+		domainPkgs = append(domainPkgs, pkg)
+	}
+
+	checkPackagesDoNotImport(t, domainPkgs, []importRule{
+		{path: "connectrpc.com/connect"},
+		{path: "github.com/labstack/echo/v4"},
+		{path: module + "/internal/transport/", prefix: true},
+	}, nil)
+}
+
+func TestPersistencePackagesDoNotImportTransportFrameworks(t *testing.T) {
+	root := repoRoot(t)
+	module := strings.TrimSpace(runCommand(t, root, "go", "list", "-m"))
+	checkNoDisallowedImports(t, root, []string{"./internal/persistence/..."}, []importRule{
+		{path: "connectrpc.com/connect"},
+		{path: "github.com/labstack/echo/v4"},
+		{path: module + "/internal/transport/", prefix: true},
+	}, nil)
 }
 
 func TestRemovedPackageReferencesDoNotReturn(t *testing.T) {
@@ -82,6 +126,65 @@ func TestRefactorMigrationArtifactsDoNotReturn(t *testing.T) {
 		if err != nil {
 			t.Fatalf("walk %s: %v", dir, err)
 		}
+	}
+}
+
+type importRule struct {
+	path   string
+	prefix bool
+}
+
+func checkNoDisallowedImports(t *testing.T, root string, patterns []string, rules []importRule, allow map[string]map[string]bool) {
+	t.Helper()
+	checkPackagesDoNotImport(t, listGoPackages(t, root, patterns...), rules, allow)
+}
+
+func checkPackagesDoNotImport(t *testing.T, packages []goPackage, rules []importRule, allow map[string]map[string]bool) {
+	t.Helper()
+	for _, pkg := range packages {
+		for _, imported := range pkg.Imports {
+			if !matchesAnyImportRule(imported, rules) {
+				continue
+			}
+			if allow[pkg.ImportPath][imported] {
+				continue
+			}
+			t.Fatalf("%s imports disallowed package %s", pkg.ImportPath, imported)
+		}
+	}
+}
+
+func matchesAnyImportRule(imported string, rules []importRule) bool {
+	for _, rule := range rules {
+		if rule.prefix {
+			if strings.HasPrefix(imported, rule.path) {
+				return true
+			}
+			continue
+		}
+		if imported == rule.path {
+			return true
+		}
+	}
+	return false
+}
+
+func listGoPackages(t *testing.T, root string, patterns ...string) []goPackage {
+	t.Helper()
+	args := append([]string{"list", "-json"}, patterns...)
+	output := runCommand(t, root, "go", args...)
+	decoder := json.NewDecoder(strings.NewReader(output))
+	var packages []goPackage
+	for {
+		var pkg goPackage
+		err := decoder.Decode(&pkg)
+		if err == io.EOF {
+			return packages
+		}
+		if err != nil {
+			t.Fatalf("decode go list output: %v", err)
+		}
+		packages = append(packages, pkg)
 	}
 }
 
