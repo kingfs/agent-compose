@@ -79,7 +79,7 @@ func projectApplyResponseFromResult(result *projectApplyResult) *agentcomposev2.
 	}
 }
 
-func (s *Service) applyProjectWorkflow(ctx context.Context, req *agentcomposev2.ApplyProjectRequest) (*projectApplyResult, error) {
+func (p *ProjectService) applyProjectWorkflow(ctx context.Context, req *agentcomposev2.ApplyProjectRequest) (*projectApplyResult, error) {
 	normalized, issues, err := normalizeProjectServiceSpec(req.GetSpec(), req.GetSource(), req.GetExpectedSpecHash())
 	if err != nil {
 		return nil, newProjectApplyError(projectApplyErrorCodeInternal, err)
@@ -87,11 +87,11 @@ func (s *Service) applyProjectWorkflow(ctx context.Context, req *agentcomposev2.
 	if len(issues) > 0 {
 		return &projectApplyResult{issues: issues}, nil
 	}
-	if s.configDB == nil {
+	if p.service.configDB == nil {
 		return nil, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: config store is required", normalized.spec.Name))
 	}
 
-	resources, issues, err := s.prepareProjectApplyResources(ctx, normalized, 0)
+	resources, issues, err := p.prepareProjectApplyResources(ctx, normalized, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -101,47 +101,47 @@ func (s *Service) applyProjectWorkflow(ctx context.Context, req *agentcomposev2.
 	if req.GetDryRun() {
 		return dryRunProjectApplyResult(normalized, resources), nil
 	}
-	if err := s.ensureProjectAgentImages(ctx, normalized.spec.Name, resources.agents); err != nil {
+	if err := p.service.ensureProjectAgentImages(ctx, normalized.spec.Name, resources.agents); err != nil {
 		return nil, newProjectApplyError(projectApplyErrorCodeUnavailable, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
 	}
 
-	persisted, err := s.persistProjectApplyRevision(ctx, normalized, resources.project)
+	persisted, err := p.persistProjectApplyRevision(ctx, normalized, resources.project)
 	if err != nil {
 		return nil, err
 	}
-	resources, err = s.projectApplyResourcesForRevision(ctx, normalized, persisted.project, persisted.revision.Revision)
+	resources, err = p.projectApplyResourcesForRevision(ctx, normalized, persisted.project, persisted.revision.Revision)
 	if err != nil {
 		return nil, err
 	}
-	reconciled, schedulerFailure, err := s.reconcileProjectApplyResources(ctx, normalized, persisted, resources)
+	reconciled, schedulerFailure, err := p.reconcileProjectApplyResources(ctx, normalized, persisted, resources)
 	if err != nil {
 		return nil, err
 	}
 	if schedulerFailure != nil {
 		return schedulerFailure, nil
 	}
-	return s.finalProjectApplyResult(ctx, normalized, persisted, resources, reconciled)
+	return p.finalProjectApplyResult(ctx, normalized, persisted, resources, reconciled)
 }
 
-func (s *Service) prepareProjectApplyResources(ctx context.Context, normalized normalizedV2Project, revision int64) (projectApplyResources, []*agentcomposev2.ProjectValidationIssue, error) {
+func (p *ProjectService) prepareProjectApplyResources(ctx context.Context, normalized normalizedV2Project, revision int64) (projectApplyResources, []*agentcomposev2.ProjectValidationIssue, error) {
 	project, err := NewProjectRecordFromSpec(normalized.spec, normalized.sourcePath)
 	if err != nil {
 		return projectApplyResources{}, nil, newProjectApplyError(projectApplyErrorCodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
 	}
-	if issues := s.validateProjectManagedAgentDefinitions(normalized); len(issues) > 0 {
+	if issues := p.validateProjectManagedAgentDefinitions(normalized); len(issues) > 0 {
 		return projectApplyResources{}, issues, nil
 	}
-	if issues := s.validateProjectManagedSchedulers(ctx, normalized); len(issues) > 0 {
+	if issues := p.validateProjectManagedSchedulers(ctx, normalized); len(issues) > 0 {
 		return projectApplyResources{}, issues, nil
 	}
-	resources, err := s.projectApplyResourcesForRevision(ctx, normalized, project, revision)
+	resources, err := p.projectApplyResourcesForRevision(ctx, normalized, project, revision)
 	if err != nil {
 		return projectApplyResources{}, nil, err
 	}
 	return resources, nil, nil
 }
 
-func (s *Service) projectApplyResourcesForRevision(ctx context.Context, normalized normalizedV2Project, project ProjectRecord, revision int64) (projectApplyResources, error) {
+func (p *ProjectService) projectApplyResourcesForRevision(ctx context.Context, normalized normalizedV2Project, project ProjectRecord, revision int64) (projectApplyResources, error) {
 	agentRecords, err := projectAgentRecordsFromSpec(project.ID, revision, normalized.spec)
 	if err != nil {
 		return projectApplyResources{}, newProjectApplyError(projectApplyErrorCodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
@@ -150,7 +150,7 @@ func (s *Service) projectApplyResourcesForRevision(ctx context.Context, normaliz
 	if err != nil {
 		return projectApplyResources{}, newProjectApplyError(projectApplyErrorCodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
 	}
-	schedulerRecords, managedLoaders, err := s.projectManagedSchedulersFromSpec(ctx, project, revision, normalized.spec)
+	schedulerRecords, managedLoaders, err := p.projectManagedSchedulersFromSpec(ctx, project, revision, normalized.spec)
 	if err != nil {
 		return projectApplyResources{}, newProjectApplyError(projectApplyErrorCodeInvalidArgument, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
 	}
@@ -172,12 +172,12 @@ func dryRunProjectApplyResult(normalized normalizedV2Project, resources projectA
 	}
 }
 
-func (s *Service) persistProjectApplyRevision(ctx context.Context, normalized normalizedV2Project, project ProjectRecord) (projectApplyPersistResult, error) {
-	existingProject, projectFound, err := s.configDB.GetProjectIncludingRemoved(ctx, project.ID)
+func (p *ProjectService) persistProjectApplyRevision(ctx context.Context, normalized normalizedV2Project, project ProjectRecord) (projectApplyPersistResult, error) {
+	existingProject, projectFound, err := p.service.configDB.GetProjectIncludingRemoved(ctx, project.ID)
 	if err != nil {
 		return projectApplyPersistResult{}, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: load existing project: %w", normalized.spec.Name, err))
 	}
-	project, err = s.configDB.UpsertProject(ctx, project)
+	project, err = p.service.configDB.UpsertProject(ctx, project)
 	if err != nil {
 		return projectApplyPersistResult{}, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: upsert project: %w", normalized.spec.Name, err))
 	}
@@ -185,7 +185,7 @@ func (s *Service) persistProjectApplyRevision(ctx context.Context, normalized no
 	if err != nil {
 		return projectApplyPersistResult{}, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: marshal project spec: %w", normalized.spec.Name, err))
 	}
-	revision, revisionCreated, err := s.configDB.SaveProjectRevision(ctx, ProjectRevisionRecord{
+	revision, revisionCreated, err := p.service.configDB.SaveProjectRevision(ctx, ProjectRevisionRecord{
 		ProjectID: project.ID,
 		SpecHash:  normalized.specHash,
 		SpecJSON:  string(specJSON),
@@ -193,7 +193,7 @@ func (s *Service) persistProjectApplyRevision(ctx context.Context, normalized no
 	if err != nil {
 		return projectApplyPersistResult{}, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: save revision: %w", normalized.spec.Name, err))
 	}
-	project, err = s.configDB.GetProject(ctx, project.ID)
+	project, err = p.service.configDB.GetProject(ctx, project.ID)
 	if err != nil {
 		return projectApplyPersistResult{}, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: reload project: %w", normalized.spec.Name, err))
 	}
@@ -206,18 +206,18 @@ func (s *Service) persistProjectApplyRevision(ctx context.Context, normalized no
 	}, nil
 }
 
-func (s *Service) reconcileProjectApplyResources(ctx context.Context, normalized normalizedV2Project, persisted projectApplyPersistResult, resources projectApplyResources) (projectApplyReconcileResult, *projectApplyResult, error) {
+func (p *ProjectService) reconcileProjectApplyResources(ctx context.Context, normalized normalizedV2Project, persisted projectApplyPersistResult, resources projectApplyResources) (projectApplyReconcileResult, *projectApplyResult, error) {
 	changes := projectApplyChanges(persisted.project, persisted.existingProject, persisted.projectFound, persisted.revision, persisted.revisionCreated)
-	agentChanges, agentsUnchanged, err := s.reconcileProjectApplyAgents(ctx, normalized, persisted.project, resources.agents, resources.agentDefinitions)
+	agentChanges, agentsUnchanged, err := p.reconcileProjectApplyAgents(ctx, normalized, persisted.project, resources.agents, resources.agentDefinitions)
 	if err != nil {
 		return projectApplyReconcileResult{}, nil, err
 	}
 	changes = append(changes, agentChanges...)
 
-	schedulerChanges, schedulersUnchanged, err := s.reconcileProjectManagedSchedulers(ctx, persisted.project, resources.schedulers, resources.loaders)
+	schedulerChanges, schedulersUnchanged, err := p.reconcileProjectManagedSchedulers(ctx, persisted.project, resources.schedulers, resources.loaders)
 	if err != nil {
 		changes = append(changes, schedulerChanges...)
-		result, failureErr := s.schedulerReconcileFailureProjectApplyResult(ctx, normalized, persisted, changes, err)
+		result, failureErr := p.schedulerReconcileFailureProjectApplyResult(ctx, normalized, persisted, changes, err)
 		if failureErr != nil {
 			return projectApplyReconcileResult{}, nil, failureErr
 		}
@@ -233,15 +233,15 @@ func (s *Service) reconcileProjectApplyResources(ctx context.Context, normalized
 	}, nil, nil
 }
 
-func (s *Service) reconcileProjectApplyAgents(ctx context.Context, normalized normalizedV2Project, project ProjectRecord, agents []ProjectAgentRecord, agentDefinitions []AgentDefinition) ([]*agentcomposev2.ProjectChange, bool, error) {
+func (p *ProjectService) reconcileProjectApplyAgents(ctx context.Context, normalized normalizedV2Project, project ProjectRecord, agents []ProjectAgentRecord, agentDefinitions []AgentDefinition) ([]*agentcomposev2.ProjectChange, bool, error) {
 	changes := make([]*agentcomposev2.ProjectChange, 0, len(agents)+len(agentDefinitions))
 	agentsUnchanged := true
 	for _, agent := range agents {
-		existingAgent, found, err := getProjectAgentIfExists(ctx, s.configDB, project.ID, agent.AgentName)
+		existingAgent, found, err := getProjectAgentIfExists(ctx, p.service.configDB, project.ID, agent.AgentName)
 		if err != nil {
 			return nil, false, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: load agent %s: %w", normalized.spec.Name, agent.AgentName, err))
 		}
-		if _, err := s.configDB.UpsertProjectAgent(ctx, agent); err != nil {
+		if _, err := p.service.configDB.UpsertProjectAgent(ctx, agent); err != nil {
 			return nil, false, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: upsert agent %s: %w", normalized.spec.Name, agent.AgentName, err))
 		}
 		action := agentChangeAction(existingAgent, found, agent)
@@ -255,7 +255,7 @@ func (s *Service) reconcileProjectApplyAgents(ctx context.Context, normalized no
 			Name:         agent.AgentName,
 		})
 	}
-	agentDefinitionChanges, agentDefinitionsUnchanged, err := s.reconcileProjectManagedAgentDefinitions(ctx, project, agentDefinitions)
+	agentDefinitionChanges, agentDefinitionsUnchanged, err := p.reconcileProjectManagedAgentDefinitions(ctx, project, agentDefinitions)
 	if err != nil {
 		return nil, false, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: %w", normalized.spec.Name, err))
 	}
@@ -266,12 +266,12 @@ func (s *Service) reconcileProjectApplyAgents(ctx context.Context, normalized no
 	return changes, agentsUnchanged, nil
 }
 
-func (s *Service) schedulerReconcileFailureProjectApplyResult(ctx context.Context, normalized normalizedV2Project, persisted projectApplyPersistResult, changes []*agentcomposev2.ProjectChange, reconcileErr error) (*projectApplyResult, error) {
-	agents, listAgentsErr := s.configDB.ListProjectAgents(ctx, persisted.project.ID)
+func (p *ProjectService) schedulerReconcileFailureProjectApplyResult(ctx context.Context, normalized normalizedV2Project, persisted projectApplyPersistResult, changes []*agentcomposev2.ProjectChange, reconcileErr error) (*projectApplyResult, error) {
+	agents, listAgentsErr := p.service.configDB.ListProjectAgents(ctx, persisted.project.ID)
 	if listAgentsErr != nil {
 		return nil, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: %w; list project agents after reconcile failure: %v", normalized.spec.Name, reconcileErr, listAgentsErr))
 	}
-	schedulers, listSchedulersErr := s.configDB.ListProjectSchedulers(ctx, persisted.project.ID)
+	schedulers, listSchedulersErr := p.service.configDB.ListProjectSchedulers(ctx, persisted.project.ID)
 	if listSchedulersErr != nil {
 		return nil, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: %w; list project schedulers after reconcile failure: %v", normalized.spec.Name, reconcileErr, listSchedulersErr))
 	}
@@ -287,12 +287,12 @@ func (s *Service) schedulerReconcileFailureProjectApplyResult(ctx context.Contex
 	}, nil
 }
 
-func (s *Service) finalProjectApplyResult(ctx context.Context, normalized normalizedV2Project, persisted projectApplyPersistResult, resources projectApplyResources, reconciled projectApplyReconcileResult) (*projectApplyResult, error) {
-	agents, err := s.configDB.ListProjectAgents(ctx, persisted.project.ID)
+func (p *ProjectService) finalProjectApplyResult(ctx context.Context, normalized normalizedV2Project, persisted projectApplyPersistResult, resources projectApplyResources, reconciled projectApplyReconcileResult) (*projectApplyResult, error) {
+	agents, err := p.service.configDB.ListProjectAgents(ctx, persisted.project.ID)
 	if err != nil {
 		return nil, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: list project agents: %w", normalized.spec.Name, err))
 	}
-	schedulers, err := s.configDB.ListProjectSchedulers(ctx, persisted.project.ID)
+	schedulers, err := p.service.configDB.ListProjectSchedulers(ctx, persisted.project.ID)
 	if err != nil {
 		return nil, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: list project schedulers: %w", normalized.spec.Name, err))
 	}
