@@ -10,6 +10,7 @@ import (
 	modeldomain "agent-compose/internal/model"
 	filestore "agent-compose/internal/persistence/filestore"
 	sqlitestore "agent-compose/internal/persistence/sqlite"
+	projecttypes "agent-compose/internal/projecttypes"
 	rundomain "agent-compose/internal/run"
 	runtimedomain "agent-compose/internal/runtime"
 	sessiondomain "agent-compose/internal/session"
@@ -152,14 +153,14 @@ type EventSessionLink = eventdomain.EventSessionLink
 type EventSessionTraceItem = eventdomain.EventSessionTraceItem
 
 type CapabilityGatewaySettings = sqlitestore.CapabilityGatewaySettings
-type ProjectRecord = sqlitestore.ProjectRecord
-type ProjectRevisionRecord = sqlitestore.ProjectRevisionRecord
-type ProjectAgentRecord = sqlitestore.ProjectAgentRecord
-type ProjectSchedulerRecord = sqlitestore.ProjectSchedulerRecord
-type ProjectRunRecord = sqlitestore.ProjectRunRecord
-type ProjectListOptions = sqlitestore.ProjectListOptions
+type ProjectRecord = projecttypes.ProjectRecord
+type ProjectRevisionRecord = projecttypes.ProjectRevisionRecord
+type ProjectAgentRecord = projecttypes.ProjectAgentRecord
+type ProjectSchedulerRecord = projecttypes.ProjectSchedulerRecord
+type ProjectRunRecord = projecttypes.ProjectRunRecord
+type ProjectListOptions = projecttypes.ProjectListOptions
 type ProjectRunListOptions = sqlitestore.ProjectRunListOptions
-type ProjectListResult = sqlitestore.ProjectListResult
+type ProjectListResult = projecttypes.ProjectListResult
 type ProjectSessionRelationFilter = sqlitestore.ProjectSessionRelationFilter
 type ProjectSessionStatus = sqlitestore.ProjectSessionStatus
 type LLMProvider = sqlitestore.LLMProvider

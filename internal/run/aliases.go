@@ -8,8 +8,8 @@ import (
 	projecttypes "agent-compose/internal/projecttypes"
 )
 
-type ProjectRecord = sqlitestore.ProjectRecord
-type ProjectAgentRecord = sqlitestore.ProjectAgentRecord
+type ProjectRecord = projecttypes.ProjectRecord
+type ProjectAgentRecord = projecttypes.ProjectAgentRecord
 type AgentDefinition = agentdomain.AgentDefinition
 type ProjectRunRecord = projecttypes.ProjectRunRecord
 
