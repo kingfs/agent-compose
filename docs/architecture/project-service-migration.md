@@ -43,7 +43,7 @@ Generated proto message packages may remain part of the current API model where 
 
 Foundation types should prefer internal Go structures over proto messages unless the usecase boundary would otherwise duplicate a stable domain model. Protocol message conversion belongs at the facade or transport edge during the migration.
 
-The foundation package must not remain idle once the facade migration branch lands. Add or enable an architecture check at that point requiring either `internal/app/project_apply_service.go` or `internal/app/project_facade.go` to import `internal/project`. Do not enable that check on a branch where the facade still has no safe business-logic integration with the foundation package, because it would create a red test without proving the architecture boundary.
+The foundation package must not remain idle during the facade migration. Architecture tests require `internal/app` to import and use `internal/project` foundation types while Project behavior is still being extracted out of the broad app service. If that import disappears, either the migration has completed and the guard should be replaced with a stricter usecase-boundary check, or the facade has regressed to proto/app-local shapes.
 
 ## Incremental Steps
 

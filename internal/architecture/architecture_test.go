@@ -110,7 +110,7 @@ func TestAppFacadeMayUseProjectFoundation(t *testing.T) {
 			}
 		}
 	}
-	t.Log("internal/app does not import internal/project yet; this branch only verifies that architecture rules allow that migration direction")
+	t.Fatalf("internal/app must use internal/project foundation types during ProjectService migration")
 }
 
 func TestProjectPackageDoesNotImportAppOrTransportHandlers(t *testing.T) {
