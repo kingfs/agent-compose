@@ -92,11 +92,11 @@ func TestGeneratedConnectPackagesStayInRouteAdapters(t *testing.T) {
 	}
 }
 
-func TestProjectPackageDoesNotImportTransportHandlers(t *testing.T) {
+func TestProjectPackageDoesNotImportAppOrTransportHandlers(t *testing.T) {
 	root := repoRoot(t)
 	projectRoot := filepath.Join(root, "internal", "project")
 	if _, err := os.Stat(projectRoot); os.IsNotExist(err) {
-		return
+		t.Skip("internal/project does not exist yet")
 	} else if err != nil {
 		t.Fatalf("stat %s: %v", projectRoot, err)
 	}
@@ -104,6 +104,7 @@ func TestProjectPackageDoesNotImportTransportHandlers(t *testing.T) {
 	module := strings.TrimSpace(runCommand(t, root, "go", "list", "-m"))
 	projectPkgs := listGoPackages(t, root, "./internal/project/...")
 	checkPackagesDoNotImport(t, projectPkgs, []importRule{
+		{path: module + "/internal/app"},
 		{path: "connectrpc.com/connect"},
 		{path: "github.com/labstack/echo/v4"},
 	}, nil)

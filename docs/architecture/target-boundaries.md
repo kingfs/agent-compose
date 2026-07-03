@@ -37,6 +37,8 @@ internal/transport/connect Project handler
 
 During the transition, `internal/app` may continue to host the generated Connect route registration and the ProjectService facade. The target shape is that protocol handling stays in transport/connect adapters, application-facing orchestration stays behind the app facade, and reusable project behavior moves into a future `internal/project` usecase package.
 
+Project Connect adapters belong in `internal/transport/connect`. App routes should only wire those adapters into the service graph and pass them the ProjectService facade or a narrow application interface; request decoding, response encoding, and Connect error mapping should stay in the adapter.
+
 Generated Connect handler packages such as `proto/...connect` are route adapter dependencies. They must not leak into domain or usecase packages. If `internal/project` is introduced, it should not import Echo, `connectrpc.com/connect`, or generated Connect handler packages.
 
 See [project-service-migration.md](project-service-migration.md) for the ProjectService-specific migration target and guardrails.
