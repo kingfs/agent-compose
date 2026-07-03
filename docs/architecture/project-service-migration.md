@@ -18,6 +18,8 @@ Project Connect adapters should live in `internal/transport/connect`. App route 
 
 `internal/app` owns the ProjectService facade during the migration. The facade is the compatibility layer that keeps route wiring and callers stable while the implementation moves out of the large service. It should expose application-oriented operations and delegate project-specific behavior instead of accumulating more project logic. App routes should remain wiring only: construct or register the Project adapter and pass it the facade or a narrow application interface.
 
+The current facade may temporarily implement generated Project Connect handler methods while operation groups are in flight. That allowance is a migration bridge, not the target owner model. Once an operation group's request decoding, response construction, and Connect error mapping move into `internal/transport/connect`, the matching app facade methods should drop generated Connect request/response signatures and expose application-level inputs and outputs instead.
+
 `internal/project` is the future usecase package for Project behavior. It should contain project validation, apply/get/list/remove orchestration, and policy that is independent from HTTP, Echo, and generated Connect server packages. It may depend on project model types, persistence interfaces, and reusable lower-level packages.
 
 The initial `internal/project` package is intentionally only a foundation layer. It defines transport-agnostic error classification and lightweight result structures, such as validation issues and apply changes, so later usecase code can return stable internal shapes before any Connect or HTTP mapping happens.
@@ -53,11 +55,12 @@ The foundation package must not remain idle during the facade migration. Archite
 ## Incremental Steps
 
 1. Keep the existing `internal/app` ProjectService behavior as the public application facade.
-2. Move protocol-only request/response conversion toward `internal/transport/connect`.
-3. Keep app route changes limited to wiring the `internal/transport/connect` Project adapter to the facade.
-4. Extract project usecases behind narrow interfaces into `internal/project`.
-5. Point the app facade at the extracted usecase while preserving the Connect API surface.
-6. Delete transitional app logic only after equivalent usecase coverage exists.
+2. Move Get/List/Remove protocol mapping into `internal/transport/connect`: generated request extraction, protobuf response assembly, and Connect code mapping belong there.
+3. Change the app facade for Get/List/Remove to expose application-level methods that accept project query inputs and return project query results or `internal/project` errors, without generated Connect handler ownership.
+4. Keep app route changes limited to wiring the `internal/transport/connect` Project adapter to the facade or a narrow application interface.
+5. Extract remaining project usecases behind narrow interfaces into `internal/project`.
+6. After Get/List/Remove, migrate Apply and Validate using the same split: transport owns protocol mapping, app exposes application-level methods, and `internal/project` owns operation policy.
+7. Delete transitional app logic only after equivalent usecase coverage exists.
 
 When extracting apply behavior, return `project.ApplyResult` and `project.Error` from the new usecase first, then translate those values in the app facade or Connect adapter. This keeps persistence and orchestration tests independent from Connect status codes while preserving the current API response shape until the facade can be thinned further.
 
@@ -65,14 +68,18 @@ When extracting apply behavior, return `project.ApplyResult` and `project.Error`
 
 The next migration stage should move large behavior blocks in dependency order, while keeping the current Connect API green at every step.
 
-First, sink Apply orchestration into `internal/project`. The usecase should own normalization-adjacent policy, validation aggregation, dry-run planning, persistence sequencing, and reconciliation result assembly behind transport-neutral inputs and outputs. The app facade may continue to translate from generated proto requests and to generated proto responses while this lands, but it should stop owning new Apply business decisions.
+First, complete the Query/Remove facade thinning already started by `internal/project.QueryUsecase`. Get/List/Remove should have their protocol mapping in `internal/transport/connect`, including project reference extraction, response protobuf construction, and `project.ErrorKind` to Connect code mapping. The app facade should expose application-level methods for those operations, such as query/remove request structs and result structs, and should not remain the permanent owner of generated Connect handler signatures for those methods.
 
-Second, sink Query and Remove behavior after Apply has a stable usecase boundary. Get/List/Remove should share the same project reference resolution, not-found classification, and removed-project policy through `internal/project` instead of duplicating Connect status decisions in app methods. Remove should return project changes and resulting state in internal result shapes, then let the facade or transport adapter map those shapes to protobuf messages.
+Second, sink Apply orchestration further into `internal/project`. The usecase should own normalization-adjacent policy, validation aggregation, dry-run planning, persistence sequencing, and reconciliation result assembly behind transport-neutral inputs and outputs. The app facade may continue to translate from generated proto requests and to generated proto responses while this lands, but it should stop owning new Apply business decisions.
 
-Third, introduce store interfaces at the project boundary before moving persistence-heavy code. The interfaces should describe the operations the usecases need, such as project lookup, revision save/load, agent and scheduler listing, managed resource updates, and removal state changes. `internal/persistence` and the current app config store can adapt to those interfaces; `internal/project` should not import concrete app service types or Connect handler packages.
+Third, migrate Apply protocol mapping to `internal/transport/connect` once the application-level Apply boundary is stable. The Connect adapter should map generated Apply requests to app-level inputs, map `project.ApplyResult` and project errors back to protobuf responses and Connect errors, and leave the app facade without generated Connect handler ownership for Apply.
+
+Fourth, migrate Validate by the same pattern. Validation policy and issue aggregation should live behind `internal/project`, the app facade should expose a validation method in application terms, and `internal/transport/connect` should own generated request/response and Connect error mapping.
+
+Fifth, introduce store interfaces at the project boundary before moving persistence-heavy code. The interfaces should describe the operations the usecases need, such as project lookup, revision save/load, agent and scheduler listing, managed resource updates, and removal state changes. `internal/persistence` and the current app config store can adapt to those interfaces; `internal/project` should not import concrete app service types or Connect handler packages.
 
 After `internal/projecttypes` adoption, keep the architecture guard strict: `internal/project` must not import `internal/persistence/sqlite` or any other persistence adapter directly; adapters should satisfy project-owned interfaces from outside the usecase package.
 
-Fourth, keep thinning the facade. Once a usecase owns an operation, the app method should be limited to request extraction, usecase invocation, error classification, and response mapping. Route registration can still wire the facade during the transition, but new Project protocol adaptation belongs in `internal/transport/connect`.
+Sixth, keep thinning the facade. Once a usecase owns an operation, the app method should be limited to application orchestration and usecase invocation; generated request extraction, Connect error classification, and protobuf response mapping should sit in `internal/transport/connect`. Route registration can still wire the facade during the transition, but new Project protocol adaptation belongs in `internal/transport/connect`.
 
 Finally, tighten the architecture tests after the large blocks have landed. The current guards require a live `internal/project` foundation, prevent delivery and persistence dependencies from entering it, and prevent app Project files from reviving migration artifacts or app-local private error classifications. After Apply and Query/Remove are owned by `internal/project`, replace the temporary allowance for app Project logic with stricter checks that app is only wiring and mapping, and that `internal/transport/connect` depends on a narrow application interface rather than the broad app package.
