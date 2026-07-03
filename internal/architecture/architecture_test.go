@@ -194,14 +194,6 @@ func TestProjectPackageDoesNotImportPersistenceAdapters(t *testing.T) {
 	disallowed := []importRule{
 		{path: module + "/internal/persistence/", prefix: true},
 	}
-	temporaryAllow := map[string]map[string]string{
-		"query.go": {
-			// TODO(project-query-types): remove this allow after query usecases
-			// accept projecttypes/store interfaces instead of sqlite adapter records.
-			module + "/internal/persistence/sqlite": "query usecase still consumes sqlite project records in this stage",
-		},
-	}
-
 	entries, err := os.ReadDir(projectRoot)
 	if err != nil {
 		t.Fatalf("read %s: %v", projectRoot, err)
@@ -217,9 +209,6 @@ func TestProjectPackageDoesNotImportPersistenceAdapters(t *testing.T) {
 		file := filepath.Join(projectRoot, name)
 		for _, imported := range goFileImports(t, file) {
 			if !matchesAnyImportRule(imported, disallowed) {
-				continue
-			}
-			if temporaryAllow[name][imported] != "" {
 				continue
 			}
 			t.Fatalf("%s imports persistence adapter %s", relativePath(root, file), imported)
