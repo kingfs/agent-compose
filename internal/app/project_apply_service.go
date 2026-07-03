@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	foundationproject "agent-compose/internal/project"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -57,12 +58,11 @@ type projectApplyReconcileResult struct {
 }
 
 type projectApplyResult struct {
-	project   *agentcomposev2.Project
-	revision  *agentcomposev2.ProjectRevision
-	changes   []*agentcomposev2.ProjectChange
-	issues    []*agentcomposev2.ProjectValidationIssue
-	applied   bool
-	unchanged bool
+	foundation foundationproject.ApplyResult
+	project    *agentcomposev2.Project
+	revision   *agentcomposev2.ProjectRevision
+	changes    []*agentcomposev2.ProjectChange
+	issues     []*agentcomposev2.ProjectValidationIssue
 }
 
 func projectApplyResponseFromResult(result *projectApplyResult) *agentcomposev2.ApplyProjectResponse {
@@ -74,8 +74,8 @@ func projectApplyResponseFromResult(result *projectApplyResult) *agentcomposev2.
 		Revision:  result.revision,
 		Changes:   result.changes,
 		Issues:    result.issues,
-		Applied:   result.applied,
-		Unchanged: result.unchanged,
+		Applied:   result.foundation.Applied,
+		Unchanged: result.foundation.Unchanged,
 	}
 }
 
@@ -85,7 +85,7 @@ func (p *ProjectService) applyProjectWorkflow(ctx context.Context, req *agentcom
 		return nil, newProjectApplyError(projectApplyErrorCodeInternal, err)
 	}
 	if len(issues) > 0 {
-		return &projectApplyResult{issues: issues}, nil
+		return projectApplyResultFromIssues(normalized, issues), nil
 	}
 	if p.service.configDB == nil {
 		return nil, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: config store is required", normalized.spec.Name))
@@ -96,7 +96,7 @@ func (p *ProjectService) applyProjectWorkflow(ctx context.Context, req *agentcom
 		return nil, err
 	}
 	if len(issues) > 0 {
-		return &projectApplyResult{issues: issues}, nil
+		return projectApplyResultFromIssues(normalized, issues), nil
 	}
 	if req.GetDryRun() {
 		return dryRunProjectApplyResult(normalized, resources), nil
@@ -164,11 +164,33 @@ func (p *ProjectService) projectApplyResourcesForRevision(ctx context.Context, n
 }
 
 func dryRunProjectApplyResult(normalized normalizedV2Project, resources projectApplyResources) *projectApplyResult {
+	changes := dryRunProjectChanges(resources.project, resources.agents, resources.agentDefinitions, resources.schedulers, resources.loaders)
+	revision := projectRevisionResponse(ProjectRevisionRecord{ProjectID: resources.project.ID, SpecHash: normalized.specHash}, normalized.specProto)
 	return &projectApplyResult{
+		foundation: foundationproject.ApplyResult{
+			ProjectID:   resources.project.ID,
+			ProjectName: normalizedProjectName(normalized),
+			Revision:    int64(revision.GetRevision()),
+			SpecHash:    normalized.specHash,
+			DryRun:      true,
+			Applied:     false,
+			Unchanged:   false,
+			Changes:     projectChangesFromProto(changes),
+		},
 		project:  projectResponse(resources.project, normalized.specProto, resources.agents, resources.schedulers),
-		revision: projectRevisionResponse(ProjectRevisionRecord{ProjectID: resources.project.ID, SpecHash: normalized.specHash}, normalized.specProto),
-		changes:  dryRunProjectChanges(resources.project, resources.agents, resources.agentDefinitions, resources.schedulers, resources.loaders),
-		applied:  false,
+		revision: revision,
+		changes:  changes,
+	}
+}
+
+func projectApplyResultFromIssues(normalized normalizedV2Project, issues []*agentcomposev2.ProjectValidationIssue) *projectApplyResult {
+	return &projectApplyResult{
+		foundation: foundationproject.ApplyResult{
+			ProjectName: normalizedProjectName(normalized),
+			SpecHash:    normalized.specHash,
+			Issues:      projectValidationIssuesFromProto(issues),
+		},
+		issues: issues,
 	}
 }
 
@@ -275,15 +297,24 @@ func (p *ProjectService) schedulerReconcileFailureProjectApplyResult(ctx context
 	if listSchedulersErr != nil {
 		return nil, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: %w; list project schedulers after reconcile failure: %v", normalized.spec.Name, reconcileErr, listSchedulersErr))
 	}
+	issues := []*agentcomposev2.ProjectValidationIssue{
+		projectValidationIssue("reconcile.schedulers", fmt.Sprintf("apply project %s: %v", normalized.spec.Name, reconcileErr)),
+	}
 	return &projectApplyResult{
+		foundation: foundationproject.ApplyResult{
+			ProjectID:   persisted.project.ID,
+			ProjectName: normalizedProjectName(normalized),
+			Revision:    persisted.revision.Revision,
+			SpecHash:    normalized.specHash,
+			Applied:     false,
+			Unchanged:   false,
+			Changes:     projectChangesFromProto(changes),
+			Issues:      projectValidationIssuesFromProto(issues),
+		},
 		project:  projectResponse(persisted.project, normalized.specProto, agents, schedulers),
 		revision: projectRevisionResponse(persisted.revision, normalized.specProto),
 		changes:  changes,
-		issues: []*agentcomposev2.ProjectValidationIssue{
-			projectValidationIssue("reconcile.schedulers", fmt.Sprintf("apply project %s: %v", normalized.spec.Name, reconcileErr)),
-		},
-		applied:   false,
-		unchanged: false,
+		issues:   issues,
 	}, nil
 }
 
@@ -296,14 +327,80 @@ func (p *ProjectService) finalProjectApplyResult(ctx context.Context, normalized
 	if err != nil {
 		return nil, newProjectApplyError(projectApplyErrorCodeInternal, fmt.Errorf("apply project %s: list project schedulers: %w", normalized.spec.Name, err))
 	}
+	unchanged := persisted.projectFound &&
+		!persisted.revisionCreated &&
+		projectRecordUnchanged(persisted.existingProject, persisted.project) &&
+		reconciled.agentsUnchanged
 	return &projectApplyResult{
+		foundation: foundationproject.ApplyResult{
+			ProjectID:   persisted.project.ID,
+			ProjectName: normalizedProjectName(normalized),
+			Revision:    persisted.revision.Revision,
+			SpecHash:    normalized.specHash,
+			Applied:     true,
+			Unchanged:   unchanged,
+			Changes:     projectChangesFromProto(reconciled.changes),
+		},
 		project:  projectResponse(resources.project, normalized.specProto, agents, schedulers),
 		revision: projectRevisionResponse(persisted.revision, normalized.specProto),
 		changes:  reconciled.changes,
-		applied:  true,
-		unchanged: persisted.projectFound &&
-			!persisted.revisionCreated &&
-			projectRecordUnchanged(persisted.existingProject, persisted.project) &&
-			reconciled.agentsUnchanged,
 	}, nil
+}
+
+func normalizedProjectName(normalized normalizedV2Project) string {
+	if normalized.spec == nil {
+		return ""
+	}
+	return normalized.spec.Name
+}
+
+func projectChangesFromProto(changes []*agentcomposev2.ProjectChange) []foundationproject.Change {
+	if len(changes) == 0 {
+		return nil
+	}
+	result := make([]foundationproject.Change, 0, len(changes))
+	for _, change := range changes {
+		if change == nil {
+			continue
+		}
+		result = append(result, foundationproject.Change{
+			Kind:     projectChangeKindFromProto(change.GetAction()),
+			Resource: change.GetResourceType(),
+			ID:       change.GetResourceId(),
+			Message:  change.GetMessage(),
+		})
+	}
+	return result
+}
+
+func projectChangeKindFromProto(action agentcomposev2.ProjectChangeAction) foundationproject.ChangeKind {
+	switch action {
+	case agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED:
+		return foundationproject.ChangeKindCreated
+	case agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UPDATED:
+		return foundationproject.ChangeKindUpdated
+	case agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_REMOVED:
+		return foundationproject.ChangeKindDeleted
+	case agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UNCHANGED:
+		return foundationproject.ChangeKindUnchanged
+	default:
+		return ""
+	}
+}
+
+func projectValidationIssuesFromProto(issues []*agentcomposev2.ProjectValidationIssue) []foundationproject.ValidationIssue {
+	if len(issues) == 0 {
+		return nil
+	}
+	result := make([]foundationproject.ValidationIssue, 0, len(issues))
+	for _, issue := range issues {
+		if issue == nil {
+			continue
+		}
+		result = append(result, foundationproject.ValidationIssue{
+			Field:   issue.GetPath(),
+			Message: issue.GetMessage(),
+		})
+	}
+	return result
 }
