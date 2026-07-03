@@ -7,12 +7,13 @@ import "errors"
 type ErrorKind string
 
 const (
-	ErrorKindUnknown    ErrorKind = "unknown"
-	ErrorKindValidation ErrorKind = "validation"
-	ErrorKindNotFound   ErrorKind = "not_found"
-	ErrorKindConflict   ErrorKind = "conflict"
-	ErrorKindStorage    ErrorKind = "storage"
-	ErrorKindRuntime    ErrorKind = "runtime"
+	ErrorKindUnknown       ErrorKind = "unknown"
+	ErrorKindValidation    ErrorKind = "validation"
+	ErrorKindNotFound      ErrorKind = "not_found"
+	ErrorKindConflict      ErrorKind = "conflict"
+	ErrorKindStorage       ErrorKind = "storage"
+	ErrorKindRuntime       ErrorKind = "runtime"
+	ErrorKindUnimplemented ErrorKind = "unimplemented"
 )
 
 // Error is the package-level error shape returned by project usecases.

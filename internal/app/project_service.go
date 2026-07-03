@@ -73,41 +73,7 @@ func (s *Service) resolveProjectRef(ctx context.Context, ref *agentcomposev2.Pro
 }
 
 func (p *ProjectService) resolveProjectRef(ctx context.Context, ref *agentcomposev2.ProjectRef) (ProjectRecord, error) {
-	if ref == nil {
-		return ProjectRecord{}, fmt.Errorf("project ref is required")
-	}
-	if projectID := strings.TrimSpace(ref.GetProjectId()); projectID != "" {
-		return p.service.configDB.GetProject(ctx, projectID)
-	}
-	name := strings.TrimSpace(ref.GetName())
-	sourcePath := strings.TrimSpace(ref.GetSourcePath())
-	if name != "" && sourcePath != "" {
-		projectID, err := StableProjectID(name, sourcePath)
-		if err != nil {
-			return ProjectRecord{}, err
-		}
-		return p.service.configDB.GetProject(ctx, projectID)
-	}
-	if name == "" {
-		return ProjectRecord{}, fmt.Errorf("project id or name is required")
-	}
-	result, err := p.service.configDB.ListProjects(ctx, ProjectListOptions{Query: name, Limit: 200})
-	if err != nil {
-		return ProjectRecord{}, err
-	}
-	var matches []ProjectRecord
-	for _, project := range result.Projects {
-		if project.Name == name {
-			matches = append(matches, project)
-		}
-	}
-	if len(matches) == 0 {
-		return ProjectRecord{}, fmt.Errorf("project %s not found: %w", name, sql.ErrNoRows)
-	}
-	if len(matches) > 1 {
-		return ProjectRecord{}, fmt.Errorf("project name %s is ambiguous; use project_id or source_path", name)
-	}
-	return matches[0], nil
+	return p.projectQueryUsecase().ResolveProjectRef(ctx, projectRefFromProto(ref))
 }
 
 func normalizeProjectServiceSpec(spec *agentcomposev2.ProjectSpec, source *agentcomposev2.ProjectSource, expectedHash string) (normalizedV2Project, []*agentcomposev2.ProjectValidationIssue, error) {
