@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"testing"
 
-	sqlitestore "agent-compose/internal/persistence/sqlite"
+	"agent-compose/internal/projecttypes"
 )
 
 func TestResolveProjectRefByID(t *testing.T) {
 	ctx := context.Background()
-	store := newQueryTestStore([]sqlitestore.ProjectRecord{{ID: "project-1", Name: "demo"}})
+	store := newQueryTestStore([]projecttypes.ProjectRecord{{ID: "project-1", Name: "demo"}})
 	usecase := NewQueryUsecase(QueryUsecaseOptions{Store: store})
 
 	project, err := usecase.ResolveProjectRef(ctx, ProjectRef{ProjectID: " project-1 "})
@@ -26,7 +26,7 @@ func TestResolveProjectRefByID(t *testing.T) {
 
 func TestResolveProjectRefByName(t *testing.T) {
 	ctx := context.Background()
-	store := newQueryTestStore([]sqlitestore.ProjectRecord{{ID: "project-1", Name: "demo"}})
+	store := newQueryTestStore([]projecttypes.ProjectRecord{{ID: "project-1", Name: "demo"}})
 	usecase := NewQueryUsecase(QueryUsecaseOptions{Store: store})
 
 	project, err := usecase.ResolveProjectRef(ctx, ProjectRef{Name: "demo"})
@@ -43,7 +43,7 @@ func TestResolveProjectRefByName(t *testing.T) {
 
 func TestResolveProjectRefByNameAndSourcePath(t *testing.T) {
 	ctx := context.Background()
-	store := newQueryTestStore([]sqlitestore.ProjectRecord{{ID: "stable-demo", Name: "demo", SourcePath: "/tmp/project.yml"}})
+	store := newQueryTestStore([]projecttypes.ProjectRecord{{ID: "stable-demo", Name: "demo", SourcePath: "/tmp/project.yml"}})
 	usecase := NewQueryUsecase(QueryUsecaseOptions{
 		Store: store,
 		StableProjectID: func(name, sourcePath string) (string, error) {
@@ -65,7 +65,7 @@ func TestResolveProjectRefByNameAndSourcePath(t *testing.T) {
 
 func TestResolveProjectRefAmbiguousName(t *testing.T) {
 	ctx := context.Background()
-	store := newQueryTestStore([]sqlitestore.ProjectRecord{
+	store := newQueryTestStore([]projecttypes.ProjectRecord{
 		{ID: "project-1", Name: "demo"},
 		{ID: "project-2", Name: "demo"},
 	})
@@ -99,7 +99,7 @@ func TestResolveProjectRefNotFound(t *testing.T) {
 
 func TestRemoveProjectHistoryUnimplemented(t *testing.T) {
 	ctx := context.Background()
-	store := newQueryTestStore([]sqlitestore.ProjectRecord{{ID: "project-1", Name: "demo"}})
+	store := newQueryTestStore([]projecttypes.ProjectRecord{{ID: "project-1", Name: "demo"}})
 	usecase := NewQueryUsecase(QueryUsecaseOptions{Store: store})
 
 	_, err := usecase.RemoveProject(ctx, RemoveProjectRequest{Ref: ProjectRef{ProjectID: "project-1"}, RemoveHistory: true})
@@ -112,36 +112,36 @@ func TestRemoveProjectHistoryUnimplemented(t *testing.T) {
 }
 
 type queryTestStore struct {
-	projects        []sqlitestore.ProjectRecord
-	lastListOptions sqlitestore.ProjectListOptions
+	projects        []projecttypes.ProjectRecord
+	lastListOptions projecttypes.ProjectListOptions
 }
 
-func newQueryTestStore(projects []sqlitestore.ProjectRecord) *queryTestStore {
+func newQueryTestStore(projects []projecttypes.ProjectRecord) *queryTestStore {
 	return &queryTestStore{projects: projects}
 }
 
-func (s *queryTestStore) GetProject(_ context.Context, projectID string) (sqlitestore.ProjectRecord, error) {
+func (s *queryTestStore) GetProject(_ context.Context, projectID string) (projecttypes.ProjectRecord, error) {
 	for _, project := range s.projects {
 		if project.ID == projectID {
 			return project, nil
 		}
 	}
-	return sqlitestore.ProjectRecord{}, fmt.Errorf("project %s not found: %w", projectID, sql.ErrNoRows)
+	return projecttypes.ProjectRecord{}, fmt.Errorf("project %s not found: %w", projectID, sql.ErrNoRows)
 }
 
-func (s *queryTestStore) ListProjects(_ context.Context, options sqlitestore.ProjectListOptions) (sqlitestore.ProjectListResult, error) {
+func (s *queryTestStore) ListProjects(_ context.Context, options projecttypes.ProjectListOptions) (projecttypes.ProjectListResult, error) {
 	s.lastListOptions = options
-	return sqlitestore.ProjectListResult{Projects: s.projects, TotalCount: len(s.projects)}, nil
+	return projecttypes.ProjectListResult{Projects: s.projects, TotalCount: len(s.projects)}, nil
 }
 
-func (s *queryTestStore) ListProjectAgents(_ context.Context, _ string) ([]sqlitestore.ProjectAgentRecord, error) {
+func (s *queryTestStore) ListProjectAgents(_ context.Context, _ string) ([]projecttypes.ProjectAgentRecord, error) {
 	return nil, nil
 }
 
-func (s *queryTestStore) ListProjectSchedulers(_ context.Context, _ string) ([]sqlitestore.ProjectSchedulerRecord, error) {
+func (s *queryTestStore) ListProjectSchedulers(_ context.Context, _ string) ([]projecttypes.ProjectSchedulerRecord, error) {
 	return nil, nil
 }
 
-func (s *queryTestStore) GetProjectRevision(_ context.Context, _ string, _ int64) (sqlitestore.ProjectRevisionRecord, error) {
-	return sqlitestore.ProjectRevisionRecord{}, nil
+func (s *queryTestStore) GetProjectRevision(_ context.Context, _ string, _ int64) (projecttypes.ProjectRevisionRecord, error) {
+	return projecttypes.ProjectRevisionRecord{}, nil
 }
