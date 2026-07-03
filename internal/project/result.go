@@ -27,11 +27,15 @@ type Change struct {
 
 // ApplyResult is the transport-agnostic result shape for project apply flows.
 type ApplyResult struct {
-	ProjectID string
-	Revision  int64
-	DryRun    bool
-	Changes   []Change
-	Issues    []ValidationIssue
+	ProjectID   string
+	ProjectName string
+	Revision    int64
+	SpecHash    string
+	DryRun      bool
+	Applied     bool
+	Unchanged   bool
+	Changes     []Change
+	Issues      []ValidationIssue
 }
 
 func (r ApplyResult) HasIssues() bool {
