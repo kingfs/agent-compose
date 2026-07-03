@@ -1,11 +1,11 @@
 package httptransport
 
 import (
-	appdomain "agent-compose/internal/app"
 	modeldomain "agent-compose/internal/model"
 	runtimedomain "agent-compose/internal/runtime"
 	driverpkg "agent-compose/pkg/driver"
 	"context"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -15,13 +15,13 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-type proxyService interface {
+type ProxyRouteService interface {
 	JupyterProxyBasePath() string
-	EnsureSessionProxyReady(context.Context, string) (*appdomain.Session, modeldomain.ProxyState, error)
+	EnsureSessionProxyReady(context.Context, string) (*modeldomain.Session, modeldomain.ProxyState, error)
 	GetSessionProxyState(string) (modeldomain.ProxyState, error)
 }
 
-func registerProxyRoutes(app *echo.Echo, service proxyService) {
+func RegisterProxyRoutes(app *echo.Echo, service ProxyRouteService) {
 	base := strings.TrimRight(service.JupyterProxyBasePath(), "/")
 	app.GET(base+"/:sessionID", func(c echo.Context) error {
 		_, proxyState, err := service.EnsureSessionProxyReady(c.Request().Context(), c.Param("sessionID"))
@@ -36,7 +36,7 @@ func registerProxyRoutes(app *echo.Echo, service proxyService) {
 	})
 	app.Any(base+"/:sessionID/*", func(c echo.Context) error {
 		sessionID := c.Param("sessionID")
-		if !appdomain.JupyterTargetReachable(func() modeldomain.ProxyState {
+		if !JupyterTargetReachable(func() modeldomain.ProxyState {
 			proxyState, err := service.GetSessionProxyState(sessionID)
 			if err != nil {
 				return modeldomain.ProxyState{}
@@ -72,4 +72,17 @@ func registerProxyRoutes(app *echo.Echo, service proxyService) {
 		proxy.ServeHTTP(c.Response(), c.Request())
 		return nil
 	})
+}
+
+func JupyterTargetReachable(proxyState modeldomain.ProxyState, timeout time.Duration) bool {
+	_, port := driverpkg.JupyterConnectTarget(runtimedomain.ToDriverProxyState(proxyState))
+	if port <= 0 {
+		return false
+	}
+	conn, err := net.DialTimeout("tcp", driverpkg.JupyterConnectAddress(runtimedomain.ToDriverProxyState(proxyState)), timeout)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }

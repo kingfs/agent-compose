@@ -6,13 +6,13 @@ import (
 	loaderdomain "agent-compose/internal/loader"
 	filestore "agent-compose/internal/persistence/filestore"
 	sessiondomain "agent-compose/internal/session"
+	httptransport "agent-compose/internal/transport/http"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -624,16 +624,7 @@ func (s *Service) ListSessions(ctx context.Context, req *connect.Request[agentco
 }
 
 func jupyterTargetReachable(proxyState ProxyState, timeout time.Duration) bool {
-	_, port := driverpkg.JupyterConnectTarget(toDriverProxyState(proxyState))
-	if port <= 0 {
-		return false
-	}
-	conn, err := net.DialTimeout("tcp", driverpkg.JupyterConnectAddress(toDriverProxyState(proxyState)), timeout)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
+	return httptransport.JupyterTargetReachable(proxyState, timeout)
 }
 
 func (s *Service) ensureSessionProxyReady(ctx context.Context, sessionID string) (*Session, ProxyState, error) {
