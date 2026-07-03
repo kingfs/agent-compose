@@ -24,6 +24,23 @@ internal/transport -> domain/application contracts only
 
 `pkg` contains reusable packages and must not depend on project `internal` packages.
 
+## Project Capability Target
+
+Project capability migration should converge on this dependency direction:
+
+```text
+internal/transport/connect Project handler
+  -> internal/app ProjectService facade
+  -> internal/project usecase
+  -> internal/persistence and pkg
+```
+
+During the transition, `internal/app` may continue to host the generated Connect route registration and the ProjectService facade. The target shape is that protocol handling stays in transport/connect adapters, application-facing orchestration stays behind the app facade, and reusable project behavior moves into a future `internal/project` usecase package.
+
+Generated Connect handler packages such as `proto/...connect` are route adapter dependencies. They must not leak into domain or usecase packages. If `internal/project` is introduced, it should not import Echo, `connectrpc.com/connect`, or generated Connect handler packages.
+
+See [project-service-migration.md](project-service-migration.md) for the ProjectService-specific migration target and guardrails.
+
 ## Migration Strategy
 
 1. Keep the architecture tests green and expand them when a boundary becomes clean.
