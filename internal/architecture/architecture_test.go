@@ -2,7 +2,9 @@ package architecture_test
 
 import (
 	"encoding/json"
+	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"io"
 	"os"
@@ -255,6 +257,66 @@ func TestProjectAppFilesDoNotRegressToMigrationArtifacts(t *testing.T) {
 	}
 }
 
+func TestProjectFacadeGeneratedConnectOwnershipOnlyShrinks(t *testing.T) {
+	root := repoRoot(t)
+	facadeFile := filepath.Join(root, "internal", "app", "project_facade.go")
+	methods := projectServiceMethods(t, facadeFile)
+	allowed := map[string]bool{
+		"ValidateProject": true,
+		"ApplyProject":    true,
+		"GetProject":      true,
+		"ListProjects":    true,
+		"RemoveProject":   true,
+		"WatchProject":    true,
+	}
+	for method := range methods {
+		if !allowed[method] {
+			t.Fatalf("internal/app Project facade owns new generated Connect handler method %s; add protocol mapping in internal/transport/connect instead", method)
+		}
+	}
+	if len(methods) > len(allowed) {
+		t.Fatalf("internal/app Project facade owns %d generated Connect handler methods, want no more than %d", len(methods), len(allowed))
+	}
+
+	queryPassthrough := projectTransportQueryPassthroughHandlers(t, root)
+	for _, method := range []string{"GetProject", "ListProjects", "RemoveProject"} {
+		if !queryPassthrough[method] && methods[method] {
+			t.Fatalf("internal/transport/connect no longer has query passthrough for %s, so internal/app Project facade must not keep owning its generated Connect handler signature", method)
+		}
+	}
+}
+
+func TestProjectFacadeDoesNotAddPrivateProjectErrorTypes(t *testing.T) {
+	root := repoRoot(t)
+	files := []string{
+		filepath.Join(root, "internal", "app", "project_facade.go"),
+		filepath.Join(root, "internal", "app", "project_apply_service.go"),
+	}
+	for _, file := range files {
+		parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", relativePath(root, file), err)
+		}
+		for _, decl := range parsed.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				name := typeSpec.Name.Name
+				if ast.IsExported(name) || !strings.Contains(strings.ToLower(name), "project") || !strings.HasSuffix(name, "Error") {
+					continue
+				}
+				t.Fatalf("%s defines app-local private Project error type %s; use internal/project error classification instead", relativePath(root, file), name)
+			}
+		}
+	}
+}
+
 func TestRemovedPackageReferencesDoNotReturn(t *testing.T) {
 	root := repoRoot(t)
 	files := []string{
@@ -350,6 +412,76 @@ func checkPackagesDoNotImportGeneratedConnect(t *testing.T, packages []goPackage
 
 func isGeneratedConnectPackage(imported, module string) bool {
 	return strings.HasPrefix(imported, module+"/proto/") && strings.HasSuffix(imported, "connect")
+}
+
+func projectServiceMethods(t *testing.T, file string) map[string]bool {
+	t.Helper()
+	parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", file, err)
+	}
+	methods := map[string]bool{}
+	for _, decl := range parsed.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil || len(fn.Recv.List) == 0 {
+			continue
+		}
+		if !isReceiverNamed(fn.Recv.List[0].Type, "ProjectService") {
+			continue
+		}
+		if fn.Type.Params == nil || len(fn.Type.Params.List) == 0 || !fieldListContainsConnectRequest(fn.Type.Params) {
+			continue
+		}
+		methods[fn.Name.Name] = true
+	}
+	return methods
+}
+
+func isReceiverNamed(expr ast.Expr, name string) bool {
+	switch typed := expr.(type) {
+	case *ast.Ident:
+		return typed.Name == name
+	case *ast.StarExpr:
+		return isReceiverNamed(typed.X, name)
+	default:
+		return false
+	}
+}
+
+func fieldListContainsConnectRequest(fields *ast.FieldList) bool {
+	for _, field := range fields.List {
+		if strings.Contains(exprString(field.Type), "connect.Request[") {
+			return true
+		}
+	}
+	return false
+}
+
+func exprString(expr ast.Expr) string {
+	var b strings.Builder
+	if err := printer.Fprint(&b, token.NewFileSet(), expr); err != nil {
+		return ""
+	}
+	return b.String()
+}
+
+func projectTransportQueryPassthroughHandlers(t *testing.T, root string) map[string]bool {
+	t.Helper()
+	content, err := os.ReadFile(filepath.Join(root, "internal", "transport", "connect", "project_service.go"))
+	if err != nil {
+		t.Fatalf("read internal/transport/connect/project_service.go: %v", err)
+	}
+	text := string(content)
+	passthrough := map[string]string{
+		"GetProject":    "return h.service.GetProject(ctx, req)",
+		"ListProjects":  "return h.service.ListProjects(ctx, req)",
+		"RemoveProject": "return h.service.RemoveProject(ctx, req)",
+	}
+	result := make(map[string]bool, len(passthrough))
+	for method, marker := range passthrough {
+		result[method] = strings.Contains(text, marker)
+	}
+	return result
 }
 
 func goFileImports(t *testing.T, file string) []string {
