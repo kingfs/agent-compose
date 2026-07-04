@@ -687,7 +687,7 @@
     - 为避免污染 raw command `output.txt`，实时 follow 使用 `transcript.txt` 作为 `logs_path`，而 `ProjectRun.output` 保持 runtime command result 的 raw output。
   - 下一目标：8.3。
 
-- [ ] 8.3 统一 CLI command transcript 输出
+- [x] 8.3 统一 CLI command transcript 输出
 
   依赖：8.2。
 
@@ -712,10 +712,20 @@
   - 普通 prompt run、command run 和 exec 行为不退化。
 
   完成总结：
-  - 状态：待完成。
-  - 变更：待记录。
-  - 验证：待记录。
-  - 审计与例外：待记录。
+  - 状态：已完成。
+  - 变更：
+    - `run --command` 和 `exec` 继续共用 `writeTranscriptOrChunk`，文本模式优先按统一 `TranscriptEvent` 输出，并保留 legacy `chunk/is_stderr` fallback。
+    - 补强 `exec --json` 覆盖，确认 streaming transcript 不写入 JSON stdout/stderr；最终 JSON 仍保留机器可读 result 字段。
+    - 为 `exec` 增加预留 `-i/--interactive` flag，并明确返回 unsupported，避免误导为运行中 stdin、TTY 或 `ExecInteractive`。
+    - 补充 transcript helper 单测，覆盖 stderr transcript 与 legacy stdout chunk 的路由行为。
+  - 验证：
+    - `go test ./cmd/agent-compose -run 'TestIntegrationCLIExecStreamsAndSupportsJSON|TestCLIExecInteractiveReservedUnsupported|TestWriteTranscriptOrChunkRoutesTranscriptAndLegacyChunks'`：通过。
+    - `go test ./cmd/agent-compose ./pkg/agentcompose/api ./pkg/agentcompose/app`：通过。
+    - `task build`：通过。
+  - 审计与例外：
+    - 本阶段没有新增 proto 字段或重新生成 proto-client。
+    - 本阶段没有实现 `ExecInteractive`、TTY、PTY、WebSocket、bidi stream、terminal resize 或运行中 stdin。
+    - `exec -i/--interactive` 仅作为 reserved unsupported baseline；后续如实现交互 command，也必须保持“每轮一次 `ExecStream`/`RunAgentStream`”的边界。
   - 下一目标：9.1。
 
 ## 阶段 9：`run -i` prompt/command REPL

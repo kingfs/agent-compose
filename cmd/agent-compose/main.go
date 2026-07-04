@@ -613,6 +613,7 @@ func newRootCommand(out, errOut io.Writer, runDaemon daemonRunner) *cobra.Comman
 	// Deprecated: use `agent-compose exec <sandbox>` instead.
 	execCmd.Flags().StringVar(&execOptions.SessionID, "session-id", "", "Execute in a specific session")
 	execCmd.Flags().StringVar(&execOptions.Command, "command", "", "Shell command to execute in the sandbox")
+	execCmd.Flags().BoolVarP(&execOptions.Interactive, "interactive", "i", false, "Reserved for future interactive exec")
 	execCmd.Flags().StringVar(&execOptions.Cwd, "cwd", "", "Guest working directory")
 
 	imageListOptions := composeImageListOptions{}
@@ -778,11 +779,12 @@ type composePSOptions struct {
 }
 
 type composeExecOptions struct {
-	AgentName string
-	RunID     string
-	SessionID string
-	Command   string
-	Cwd       string
+	AgentName   string
+	RunID       string
+	SessionID   string
+	Command     string
+	Cwd         string
+	Interactive bool
 }
 
 type composeSandboxActionOutput struct {
@@ -1438,6 +1440,9 @@ func runComposePSCommand(cmd *cobra.Command, cli cliOptions, options composePSOp
 }
 
 func runComposeExecCommand(cmd *cobra.Command, cli cliOptions, options composeExecOptions, args []string) error {
+	if options.Interactive {
+		return commandExitError{Code: exitCodeUnsupported, Err: fmt.Errorf("exec -i/--interactive is not supported")}
+	}
 	_, normalized, projectID, err := resolveComposeProject(cli)
 	if err != nil {
 		return err

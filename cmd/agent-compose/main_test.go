@@ -2523,6 +2523,9 @@ agents:
 	if !strings.Contains(jsonErr, "agent-compose exec --session-id is deprecated") || strings.Contains(jsonOut, "deprecated") {
 		t.Fatalf("exec --session-id json stdout/stderr = %q / %q", jsonOut, jsonErr)
 	}
+	if strings.Contains(jsonErr, "exec stderr") {
+		t.Fatalf("exec --json leaked transcript stdout/stderr = %q / %q", jsonOut, jsonErr)
+	}
 	var decoded composeExecOutput
 	if err := json.Unmarshal([]byte(jsonOut), &decoded); err != nil {
 		t.Fatalf("exec JSON decode failed: %v\n%s", err, jsonOut)
@@ -2552,6 +2555,30 @@ agents:
 	}
 	if ambiguousOut != "" || !strings.Contains(ambiguousErr, "either with --command or positional arguments") {
 		t.Fatalf("exec --command ambiguous stdout/stderr = %q / %q", ambiguousOut, ambiguousErr)
+	}
+}
+
+func TestCLIExecInteractiveReservedUnsupported(t *testing.T) {
+	stdout, stderr, _, exitCode := executeCLICommand("exec", "sandbox-1", "-i")
+	if exitCode != exitCodeUnsupported {
+		t.Fatalf("exec -i exit code = %d, want %d; stderr=%q", exitCode, exitCodeUnsupported, stderr)
+	}
+	if stdout != "" || !strings.Contains(stderr, "exec -i/--interactive is not supported") {
+		t.Fatalf("exec -i stdout/stderr = %q / %q", stdout, stderr)
+	}
+}
+
+func TestWriteTranscriptOrChunkRoutesTranscriptAndLegacyChunks(t *testing.T) {
+	var stdout strings.Builder
+	var stderr strings.Builder
+	if err := writeTranscriptOrChunk(&stdout, &stderr, &agentcomposev2.TranscriptEvent{Text: "err\n", IsStderr: true}, "ignored\n", false); err != nil {
+		t.Fatalf("write transcript returned error: %v", err)
+	}
+	if err := writeTranscriptOrChunk(&stdout, &stderr, nil, "out\n", false); err != nil {
+		t.Fatalf("write legacy chunk returned error: %v", err)
+	}
+	if stdout.String() != "out\n" || stderr.String() != "err\n" {
+		t.Fatalf("stdout/stderr = %q / %q", stdout.String(), stderr.String())
 	}
 }
 
