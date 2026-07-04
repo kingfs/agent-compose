@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -70,9 +69,6 @@ func (h *SandboxHandler) RemoveSandbox(ctx context.Context, req *connect.Request
 		stopped = true
 	}
 	if err := h.store.RemoveSession(ctx, sandboxID); err != nil {
-		if os.IsNotExist(err) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	if h.dashboard != nil {

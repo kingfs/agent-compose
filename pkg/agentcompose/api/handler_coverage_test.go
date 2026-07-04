@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,18 @@ func TestPrepareStreamingHeadersPreservesNoTransform(t *testing.T) {
 	}
 	if got, want := headers.Get("X-Accel-Buffering"), "no"; got != want {
 		t.Fatalf("X-Accel-Buffering = %q, want %q", got, want)
+	}
+}
+
+func TestRemoveSandboxRemoveRaceRemainsInternal(t *testing.T) {
+	store := &apiSandboxStore{
+		session:   &domain.Session{Summary: domain.SessionSummary{ID: "sandbox-1", VMStatus: domain.VMStatusStopped}},
+		removeErr: os.ErrNotExist,
+	}
+	handler := NewSandboxHandler(&fakeSessionDelegate{}, store, nil)
+	_, err := handler.RemoveSandbox(context.Background(), connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{SandboxId: "sandbox-1"}))
+	if connect.CodeOf(err) != connect.CodeInternal {
+		t.Fatalf("RemoveSandbox error code = %v, want %v; err=%v", connect.CodeOf(err), connect.CodeInternal, err)
 	}
 }
 
@@ -287,6 +300,19 @@ func (r *apiExecRuntime) ExecStream(_ context.Context, _ *domain.Session, _ doma
 	r.spec = spec
 	writer(domain.ExecChunk{Text: "hi\n"})
 	return domain.ExecResult{Stdout: "hi\n", Output: "hi\n", ExitCode: 0, Success: true}, nil
+}
+
+type apiSandboxStore struct {
+	session   *domain.Session
+	removeErr error
+}
+
+func (s *apiSandboxStore) GetSession(context.Context, string) (*domain.Session, error) {
+	return s.session, nil
+}
+
+func (s *apiSandboxStore) RemoveSession(context.Context, string) error {
+	return s.removeErr
 }
 
 type apiProjectRunStore struct {
