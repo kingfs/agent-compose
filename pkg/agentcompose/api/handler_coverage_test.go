@@ -14,6 +14,8 @@ import (
 
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/execution"
+	"agent-compose/pkg/imagecache"
+	"agent-compose/pkg/images"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
 	agentcomposev1 "agent-compose/proto/agentcompose/v1"
@@ -85,6 +87,46 @@ func TestConnectErrorForDomainClassifiesReusableSentinels(t *testing.T) {
 	}
 }
 
+func TestImagePullInspectAndSkip(t *testing.T) {
+	ctx := context.Background()
+	local := testImageBackend{
+		inspect: images.InspectResult{Image: &agentcomposev2.Image{
+			ImageRef:    "guest:latest",
+			ResolvedRef: "guest@sha256:local",
+		}},
+	}
+	handler := NewImageHandler(fakeImageSelector{backend: &local})
+	resp, err := handler.PullImage(ctx, connect.NewRequest(&agentcomposev2.PullImageRequest{ImageRef: "guest:latest"}))
+	if err != nil {
+		t.Fatalf("PullImage local returned error: %v", err)
+	}
+	if local.pullCalls != 0 {
+		t.Fatalf("PullImage local pull calls = %d, want 0", local.pullCalls)
+	}
+	if resp.Msg.GetResolvedRef() != "guest@sha256:local" || len(resp.Msg.GetWarnings()) == 0 {
+		t.Fatalf("PullImage local response = %#v", resp.Msg)
+	}
+
+	missing := testImageBackend{
+		inspectErr: images.OpError{Op: "inspect image", ImageRef: "missing:latest", Err: imagecache.NewError(imagecache.ErrorKindNotFound, "inspect", "missing:latest", errors.New("missing"))},
+		pull: images.PullResult{Image: &agentcomposev2.Image{
+			ImageRef:    "missing:latest",
+			ResolvedRef: "missing@sha256:pulled",
+		}, ResolvedRef: "missing@sha256:pulled"},
+	}
+	handler = NewImageHandler(fakeImageSelector{backend: &missing})
+	resp, err = handler.PullImage(ctx, connect.NewRequest(&agentcomposev2.PullImageRequest{ImageRef: "missing:latest"}))
+	if err != nil {
+		t.Fatalf("PullImage missing returned error: %v", err)
+	}
+	if missing.pullCalls != 1 {
+		t.Fatalf("PullImage missing pull calls = %d, want 1", missing.pullCalls)
+	}
+	if resp.Msg.GetResolvedRef() != "missing@sha256:pulled" || len(resp.Msg.GetWarnings()) != 0 {
+		t.Fatalf("PullImage missing response = %#v", resp.Msg)
+	}
+}
+
 func TestKernelAndAgentUnaryHandlerWorkflows(t *testing.T) {
 	ctx := context.Background()
 	session := &domain.Session{Summary: domain.SessionSummary{ID: "session-1", VMStatus: domain.VMStatusRunning, CreatedAt: time.Now()}}
@@ -136,6 +178,31 @@ func TestKernelAndAgentUnaryHandlerWorkflows(t *testing.T) {
 	if err != nil || len(eventsResp.Msg.GetEvents()) != 1 {
 		t.Fatalf("ListSessionEvents resp=%#v err=%v", eventsResp, err)
 	}
+}
+
+type testImageBackend struct {
+	inspect    images.InspectResult
+	inspectErr error
+	pull       images.PullResult
+	pullErr    error
+	pullCalls  int
+}
+
+func (b *testImageBackend) ListImages(context.Context, images.ListRequest) (images.ListResult, error) {
+	return images.ListResult{}, nil
+}
+
+func (b *testImageBackend) PullImage(context.Context, images.PullRequest) (images.PullResult, error) {
+	b.pullCalls++
+	return b.pull, b.pullErr
+}
+
+func (b *testImageBackend) InspectImage(context.Context, images.InspectRequest) (images.InspectResult, error) {
+	return b.inspect, b.inspectErr
+}
+
+func (b *testImageBackend) RemoveImage(context.Context, images.RemoveRequest) (images.RemoveResult, error) {
+	return images.RemoveResult{}, nil
 }
 
 func TestExecHandlerSessionTargetWorkflow(t *testing.T) {

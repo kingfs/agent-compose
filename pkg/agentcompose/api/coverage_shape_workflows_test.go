@@ -790,7 +790,7 @@ func (fakeImageBackend) PullImage(context.Context, images.PullRequest) (images.P
 }
 
 func (fakeImageBackend) InspectImage(context.Context, images.InspectRequest) (images.InspectResult, error) {
-	return images.InspectResult{Image: &agentcomposev2.Image{ImageId: "img-1"}}, nil
+	return images.InspectResult{Image: &agentcomposev2.Image{ImageId: "img-1", ImageRef: "guest:latest", ResolvedRef: "guest@sha256:test"}}, nil
 }
 
 func (fakeImageBackend) RemoveImage(context.Context, images.RemoveRequest) (images.RemoveResult, error) {

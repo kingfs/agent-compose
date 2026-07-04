@@ -77,7 +77,7 @@
 
 ## 阶段 1：OCI image `pull` inspect-and-skip
 
-- [ ] 1.1 实现 driver-independent OCI image `pull <image>` inspect-and-skip
+- [x] 1.1 实现 driver-independent OCI image `pull <image>` inspect-and-skip
 
   依赖：0.1。
 
@@ -108,10 +108,19 @@
   - deprecated `image pull` 无行为分叉。
 
   完成总结：
-  - 状态：待完成。
-  - 变更：待记录。
-  - 验证：待记录。
-  - 审计与例外：待记录。
+  - 状态：已完成。
+  - 变更：
+    - `pkg/agentcompose/api.ImageHandler.PullImage` 在调用 backend pull 前先执行 `InspectImage`；本地命中时直接返回 succeeded，填充本地 image/resolved ref，并在 `warnings` 中记录 skipped/local already exists。
+    - inspect 返回 typed not found 时继续执行 pull；inspect 其他错误通过 `ConnectErrorForImageBackend("inspect image before pull", ...)` 返回，保留 image backend/store 上下文。
+    - CLI 文本输出统一走 `writeImagePullText`，有 skipped/already exists warning 时显示 `Skipped <image>` 并打印 warning；JSON 输出继续保留 `warnings`。
+    - 保持顶层 `pull` 与 deprecated `image pull` 共享同一 `PullImage` API 调用路径。
+  - 验证：
+    - `go test ./cmd/agent-compose ./pkg/agentcompose/api ./pkg/agentcompose/adapters ./pkg/images ./pkg/imagecache ./pkg/driver`：通过。
+    - `task build`：通过。
+  - 审计与例外：
+    - 本实现只改 image service/backend 调用链，没有在 Docker、BoxLite、MicroSandbox runtime driver interface 上新增 pull/image-store 语义。
+    - `pull` 请求和 v2 `ImageService.PullImage` 不包含 runtime driver 参数；runtime driver 选择不会参与 `pull <image>` 行为。
+    - deprecated `agent-compose image pull <image>` 仍复用 `runComposeImagePullCommand`，没有新增行为分叉。
   - 下一目标：2.1。
 
 ## 阶段 2：`run --rm` terminal 清理

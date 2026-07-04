@@ -2491,6 +2491,42 @@ func TestIntegrationCLIImagePullAliasesAndJSON(t *testing.T) {
 	}
 }
 
+func TestIntegrationCLIImagePullSkippedWarnings(t *testing.T) {
+	server := newComposeServiceStubServer(t, composeServiceStubs{
+		image: imageServiceStub{
+			pullImage: func(ctx context.Context, req *connect.Request[agentcomposev2.PullImageRequest]) (*connect.Response[agentcomposev2.PullImageResponse], error) {
+				return connect.NewResponse(&agentcomposev2.PullImageResponse{
+					Image:       testCLIImage("sha256:local123456789", req.Msg.GetImageRef()),
+					Status:      agentcomposev2.ImageOperationStatus_IMAGE_OPERATION_STATUS_SUCCEEDED,
+					ResolvedRef: "agent@sha256:local",
+					Warnings:    []string{"skipped pull: image agent:latest already exists locally"},
+				}), nil
+			},
+		},
+	})
+	defer server.Close()
+
+	stdout, stderr, _, exitCode := executeCLICommand("pull", "--host", server.URL, "agent:latest")
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("pull skipped code/stderr = %d / %q", exitCode, stderr)
+	}
+	if !strings.Contains(stdout, "Skipped agent:latest") || !strings.Contains(stdout, "already exists locally") || strings.Contains(stdout, "Pulled agent:latest") {
+		t.Fatalf("pull skipped stdout = %q", stdout)
+	}
+
+	jsonOut, jsonErr, _, jsonCode := executeCLICommand("pull", "--host", server.URL, "--json", "agent:latest")
+	if jsonCode != 0 || jsonErr != "" {
+		t.Fatalf("pull skipped --json code/stderr = %d / %q", jsonCode, jsonErr)
+	}
+	var decoded composeImagePullOutput
+	if err := json.Unmarshal([]byte(jsonOut), &decoded); err != nil {
+		t.Fatalf("pull skipped JSON decode failed: %v\n%s", err, jsonOut)
+	}
+	if len(decoded.Warnings) != 1 || !strings.Contains(decoded.Warnings[0], "already exists locally") {
+		t.Fatalf("pull skipped JSON = %#v", decoded)
+	}
+}
+
 func TestIntegrationCLIPullProjectImages(t *testing.T) {
 	composePath := writeComposeFile(t, t.TempDir(), `
 name: cli-pull-project

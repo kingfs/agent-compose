@@ -1509,7 +1509,7 @@ func runComposePullCommand(cmd *cobra.Command, cli cliOptions, options composeIm
 		}
 		output.Images = append(output.Images, item)
 		if !cli.JSON {
-			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Pulled %s\nResolved: %s\n", item.ImageRef, firstNonEmptyString(item.ResolvedRef, "-")); err != nil {
+			if err := writeImagePullText(cmd.OutOrStdout(), item); err != nil {
 				return err
 			}
 		}
@@ -1561,8 +1561,7 @@ func runComposeImagePullCommand(cmd *cobra.Command, cli cliOptions, options comp
 		}
 		return writeCommandOutput(cmd.OutOrStdout(), append(data, '\n'))
 	}
-	_, err = fmt.Fprintf(cmd.OutOrStdout(), "Pulled %s\nResolved: %s\n", output.ImageRef, firstNonEmptyString(output.ResolvedRef, "-"))
-	return err
+	return writeImagePullText(cmd.OutOrStdout(), output)
 }
 
 func pullImage(ctx context.Context, client agentcomposev2connect.ImageServiceClient, imageRef string, platform *agentcomposev2.ImagePlatform) (composeImagePullOutput, error) {
@@ -1574,6 +1573,32 @@ func pullImage(ctx context.Context, client agentcomposev2connect.ImageServiceCli
 		return composeImagePullOutput{}, err
 	}
 	return composeImagePullOutputFromResponse(resp.Msg), nil
+}
+
+func writeImagePullText(out io.Writer, output composeImagePullOutput) error {
+	status := "Pulled"
+	if imagePullSkipped(output) {
+		status = "Skipped"
+	}
+	if _, err := fmt.Fprintf(out, "%s %s\nResolved: %s\n", status, output.ImageRef, firstNonEmptyString(output.ResolvedRef, "-")); err != nil {
+		return err
+	}
+	for _, warning := range output.Warnings {
+		if _, err := fmt.Fprintf(out, "Warning: %s\n", warning); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func imagePullSkipped(output composeImagePullOutput) bool {
+	for _, warning := range output.Warnings {
+		normalized := strings.ToLower(strings.TrimSpace(warning))
+		if strings.Contains(normalized, "skipped") || strings.Contains(normalized, "already exists") {
+			return true
+		}
+	}
+	return false
 }
 
 func runComposeImageRemoveCommand(cmd *cobra.Command, cli cliOptions, options composeImageRemoveOptions, imageRef string) error {
