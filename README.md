@@ -40,7 +40,20 @@ proxy assumptions.
 
 ```text
 cmd/agent-compose/             daemon and CLI entrypoint
-pkg/agentcompose/              sessions, projects, loaders, proxy, stores, APIs
+pkg/agentcompose/app/          service graph, route registration, background managers
+pkg/agentcompose/api/          Connect handlers and API/protobuf conversion helpers
+pkg/agentcompose/adapters/     daemon runtime/session/loader/capability adapters
+pkg/agentcompose/proxy/        Jupyter, workspace, and runtime LLM HTTP proxy routes
+pkg/model/                     domain records, validation, stable IDs, JSON helpers
+pkg/storage/                   session and config persistence helpers
+pkg/loaders/                   loader engine, scheduling, command, and payload helpers
+pkg/projects/                  project normalization and managed-resource builders
+pkg/runs/                      project run coordinator and run/session helpers
+pkg/sessions/                  session stream broker and runtime state helpers
+pkg/execution/                 cell, agent execution, artifact, and driver conversion helpers
+pkg/llms/                      daemon LLM client and runtime facade helpers
+pkg/events/                    event/webhook helpers
+pkg/images/                    daemon image store service helpers
 pkg/driver/                    Docker, BoxLite, and Microsandbox runtime drivers
 pkg/auth/                      authentication middleware and login flows
 pkg/config/                    environment configuration

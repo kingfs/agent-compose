@@ -2,8 +2,22 @@ package driver
 
 import "testing"
 
+func TestRuntimeDriverWorkflow(t *testing.T) {
+	TestDockerRuntimeSessionProxyStateUsesContainerNameAndGuestPort(t)
+	TestPrepareRuntimeMountManifestForDockerIncludesRequiredMountsOnly(t)
+	TestPrepareRuntimeMountManifestCreatesSourcesAndWritesFile(t)
+	TestPrepareRuntimeMountManifestForDirectoryOnlyDriversMountsSingleSessionDirectory(t)
+	testRuntimeMountManifestDriverSpecificStartPreparationWorkflow(t)
+	testDockerImageRefMatchingInternals(t)
+	testConsumeDockerPullStream(t)
+	testExecOutputFilterWorkflows(t)
+}
+
 func TestIntegrationRuntimeDriverWorkflow(t *testing.T) {
 	TestDockerRuntimeSessionProxyStateUsesContainerNameAndGuestPort(t)
+	TestPrepareRuntimeMountManifestForDockerIncludesRequiredMountsOnly(t)
+	TestPrepareRuntimeMountManifestCreatesSourcesAndWritesFile(t)
+	TestPrepareRuntimeMountManifestForDirectoryOnlyDriversMountsSingleSessionDirectory(t)
 	testRuntimeMountManifestDriverSpecificStartPreparationWorkflow(t)
 	testDockerImageRefMatchingInternals(t)
 	testConsumeDockerPullStream(t)
@@ -12,6 +26,9 @@ func TestIntegrationRuntimeDriverWorkflow(t *testing.T) {
 
 func TestE2ERuntimeDriverWorkflow(t *testing.T) {
 	TestDockerRuntimeSessionProxyStateUsesContainerNameAndGuestPort(t)
+	TestPrepareRuntimeMountManifestForDockerIncludesRequiredMountsOnly(t)
+	TestPrepareRuntimeMountManifestCreatesSourcesAndWritesFile(t)
+	TestPrepareRuntimeMountManifestForDirectoryOnlyDriversMountsSingleSessionDirectory(t)
 	testRuntimeMountManifestDriverSpecificStartPreparationWorkflow(t)
 	testDockerImageRefMatchingInternals(t)
 	testConsumeDockerPullStream(t)
