@@ -202,3 +202,5 @@ directory-only home target is not a mount point /root
 ```
 
 该结果命中本方案停止条件：不得静默退回 `/root -> /data/home` symlink。BoxLite 方向在确认 runtime 能授予 guest 执行 bind mount 所需能力，或产品重新决策 `/root` 暴露方案前，不应标记完成。
+
+同日复验 `sg kvm -c 'IMAGE_REGISTRY=registry-mirrors.dev.in.chaitin.net SMOKE_RUNTIME_DRIVERS=boxlite task test:runtime-smoke'` 仍在相同 guest bootstrap 步骤失败，说明该问题不是 host KVM 权限或默认 registry 拉取的一次性失败。已复核当前 `build/boxlite/include/boxlite.h` 和 `pkg/driver/boxlite_cgo.go` 中的 BoxLite C options 暴露面，未发现 privileged、capability 或等价的 guest mount 权限开关可在当前实现边界内启用。
