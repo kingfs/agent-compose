@@ -214,7 +214,7 @@ func runtimeSmokeMarkerCommand() string {
 	return "if [ -n \"${SMOKE_MARKER:-}\" ]; then " +
 		"test -f /root/.claude.json; " +
 		"test -f /root/.gitconfig; " +
-		"printf ok > /root/.agent-compose-smoke-home; " +
+		"printf ok > /root/.codex/runtime-mount-smoke-home.txt; " +
 		"printf ok > \"${SMOKE_MARKER}\"; " +
 		"fi"
 }

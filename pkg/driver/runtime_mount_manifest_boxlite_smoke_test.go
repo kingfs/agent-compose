@@ -71,20 +71,7 @@ func assertBoxLiteRuntimeSmokeGuestPaths(t *testing.T, ctx context.Context, runt
 		t.Fatalf("getBox returned error: %v", err)
 	}
 	defer box.free()
-	script := `
-set -eu
-mountpoint -q /root
-test ! -L /root
-test "$(stat -c '%d:%i' /root)" = "$(stat -c '%d:%i' /data/home)"
-test -f /root/.codex/config.toml
-test -f /root/.gitconfig
-test -f /root/.claude.json
-test "$(readlink /workspace)" = "/data/workspace"
-cd /workspace
-printf ok > /root/.agent-compose-smoke-home
-printf ok > /data/state/runtime-mount-smoke.txt
-`
-	result, err := runtime.executeBox(ctx, box, ExecSpec{Command: "sh", Args: []string{"-lc", script}, Cwd: "/"}, nil)
+	result, err := runtime.executeBox(ctx, box, ExecSpec{Command: "sh", Args: []string{"-lc", runtimeSmokeGuestPathAssertionScript()}, Cwd: "/"}, nil)
 	if err != nil {
 		t.Fatalf("boxlite guest path assertion command returned error: %v", err)
 	}

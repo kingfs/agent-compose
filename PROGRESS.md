@@ -557,16 +557,16 @@
       - 真实 BoxLite/Microsandbox smoke 尚未更新或运行；按队列留给 7.4。
     - 下一目标：7.4。
 
-- [ ] 7.4 更新真实 runtime smoke 覆盖
+- [x] 7.4 更新真实 runtime smoke 覆盖
   - 依赖：7.3。
   - 工作内容：
     - 更新 BoxLite smoke，验证真实 `/root` + 声明 home 条目 symlink。
     - 更新 Microsandbox smoke，验证 EnsureSession 和 exec guard。
     - 更新共享 smoke helper，不再要求 `/root` 是 mount point。
   - 可并行子任务：
-    - [ ] 可并行：更新 BoxLite smoke。
-    - [ ] 可并行：更新 Microsandbox smoke。
-    - [ ] 可并行：更新共享 smoke helper 与 Taskfile 正则审计。
+    - [x] 可并行：更新 BoxLite smoke。
+    - [x] 可并行：更新 Microsandbox smoke。
+    - [x] 可并行：更新共享 smoke helper 与 Taskfile 正则审计。
   - 测试方案：
     - `SMOKE_RUNTIME_DRIVERS=boxlite task test:runtime-smoke`
     - `SMOKE_RUNTIME_DRIVERS=microsandbox task test:runtime-smoke`
@@ -576,10 +576,28 @@
     - 两个 driver 的 smoke 都证明声明 home 条目持久化到 host `<session>/home`。
     - OCI image smoke 仍按既有 Taskfile 范围执行。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
+    - 状态：已完成。
+    - 变更：
+      - BoxLite smoke 复用 `runtimeSmokeGuestPathAssertionScript()`，通过 `EnsureSession` 后的内部 `executeBox` 检查 guest path，避免 public `Exec` guard 掩盖 lifecycle bootstrap 缺失。
+      - Microsandbox smoke 在 `EnsureSession` 后调用 public `runtime.Exec(...)` 执行同一 guest path 断言，同时覆盖 exec 前 bootstrap guard。
+      - 共享 smoke helper 不再要求 `/root` 是 mount point，也不再验证 `/root` 与 `/data/home` 同 inode；改为验证 `/root` 是真实目录且不是整体 symlink，并逐项验证声明 home 条目指向 `/data/home/...`。
+      - smoke 写入 home marker 的位置从 `/root/.agent-compose-smoke-home` 改为声明 home 条目 `/root/.codex/runtime-mount-smoke-home.txt`，host 侧断言对应 `<session>/home/.codex/runtime-mount-smoke-home.txt`。
+      - `runtimeSmokeMarkerCommand()` 同步写入声明 home 条目，保持 Jupyter 启动 marker 与新 v2 home 暴露语义一致。
+      - 复核 `Taskfile.yml` 中 `RuntimeMountManifestDirectoryOnlyStarts|UsesGoContainerRegistryOCIImage` 正则仍覆盖 BoxLite/Microsandbox 两个 smoke 测试名。
+    - 验证：
+      - `go test -tags boxlitecgo ./pkg/driver -run '^TestSmokeBoxLite(RuntimeMountManifestDirectoryOnlyStarts|UsesGoContainerRegistryOCIImage)$' -count=1`：通过（未设置 `SMOKE_RUNTIME_DRIVERS`，真实 smoke skip，完成编译）。
+      - `go test ./pkg/driver -run '^TestSmokeMicrosandbox(RuntimeMountManifestDirectoryOnlyStarts|UsesGoContainerRegistryOCIImage)$' -count=1`：通过（未设置 `SMOKE_RUNTIME_DRIVERS`，真实 smoke skip，完成编译）。
+      - `SMOKE_KEEP_TMP=1 IMAGE_REGISTRY=registry-mirrors.dev.in.chaitin.net SMOKE_RUNTIME_DRIVERS=microsandbox task test:runtime-smoke`：当前 shell 下失败；保留 `/tmp/agent-compose-smoke-664363959`，`runtime.log` 显示 `Error creating the Kvm object: Error(13)`，证明失败发生在 bootstrap 前且为 KVM 访问权限问题。
+      - `sg kvm -c 'SMOKE_KEEP_TMP=1 IMAGE_REGISTRY=registry-mirrors.dev.in.chaitin.net SMOKE_RUNTIME_DRIVERS=microsandbox task test:runtime-smoke'`：通过 `TestSmokeMicrosandboxRuntimeMountManifestDirectoryOnlyStarts`；`TestSmokeMicrosandboxUsesGoContainerRegistryOCIImage` 因未设置 `SMOKE_OCI_IMAGE_REF` skip。
+      - `sg kvm -c 'IMAGE_REGISTRY=registry-mirrors.dev.in.chaitin.net SMOKE_RUNTIME_DRIVERS=boxlite task test:runtime-smoke'`：通过 `TestSmokeBoxLiteRuntimeMountManifestDirectoryOnlyStarts`；`TestSmokeBoxLiteUsesGoContainerRegistryOCIImage` 因未设置 `SMOKE_OCI_IMAGE_REF` skip。
+      - `go test ./pkg/driver -count=1`：通过。
+      - `go test -tags boxlitecgo ./pkg/driver -count=1`：通过。
+      - `git diff --check`：通过。
+    - 审计与例外：
+      - 本任务只更新真实 runtime smoke、共享 smoke helper 和进度记录；未修改 API、CLI、proto、数据库 schema、配置项、Docker compose、`GUEST_HOME`、`HOME` 注入或 JS runtime provider 行为。
+      - BoxLite/Microsandbox 真实 smoke 均在 `sg kvm` 组上下文下通过；当前普通 shell 的 Microsandbox 失败为 `/dev/kvm` 权限类环境问题，不是 v2 symlink bootstrap 回归。
+      - 未设置 `SMOKE_OCI_IMAGE_REF`，因此 OCI image smoke 按既有测试逻辑 skip；未将该 skip 计为通过。
+      - 真实 smoke 已证明 directory-only bootstrap 不依赖 Jupyter readiness，并且声明 home 条目写入会持久化到 host `<session>/home`。
     - 下一目标：7.5。
 
 - [ ] 7.5 运行全量质量门禁并收口文档
