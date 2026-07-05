@@ -83,6 +83,10 @@ func (r *microsandboxRuntime) EnsureSession(ctx context.Context, session *Sessio
 	}
 	defer r.releaseSandboxHandle(name, sandbox)
 
+	if err := r.ensureDirectoryOnlyGuestSessionBootstrap(ctx, sandbox, session, name); err != nil {
+		return SessionVMInfo{}, err
+	}
+
 	needLaunch := created || restarted
 	if jupyterEnabled(proxyState) && !needLaunch {
 		probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -262,6 +266,32 @@ func (r *microsandboxRuntime) ExecStream(ctx context.Context, session *Session, 
 	}
 	result.Success = result.ExitCode == 0
 	return result, nil
+}
+
+func (r *microsandboxRuntime) ensureDirectoryOnlyGuestSessionBootstrap(ctx context.Context, sandbox *microsandbox.Sandbox, session *Session, sandboxName string) error {
+	spec := directoryOnlyGuestSessionBootstrapExecSpec(r.config)
+	output, err := sandbox.Exec(ctx, spec.Command, spec.Args, r.execOptions(ctx, spec)...)
+	result := ExecResult{}
+	if output != nil {
+		result = ExecResult{
+			ExitCode: output.ExitCode(),
+			Stdout:   output.Stdout(),
+			Stderr:   output.Stderr(),
+			Output:   output.Stdout() + output.Stderr(),
+			Success:  output.Success(),
+		}
+	}
+	sessionID := ""
+	if session != nil {
+		sessionID = session.Summary.ID
+	}
+	if err != nil {
+		return formatDirectoryOnlyGuestSessionBootstrapError(RuntimeDriverMicrosandbox, sessionID, sandboxName, result, err)
+	}
+	if !result.Success {
+		return formatDirectoryOnlyGuestSessionBootstrapError(RuntimeDriverMicrosandbox, sessionID, sandboxName, result, nil)
+	}
+	return nil
 }
 
 func (r *microsandboxRuntime) Stats(ctx context.Context, session *Session, vmState VMState) (SandboxStats, error) {

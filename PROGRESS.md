@@ -218,7 +218,7 @@
 
 参考文档：[docs/plan/directory-only-runtime-bootstrap-implementation-plan.md](docs/plan/directory-only-runtime-bootstrap-implementation-plan.md#阶段-4接入-microsandbox-lifecycle-和-exec-guard)
 
-- [ ] 4.1 在 Microsandbox EnsureSession 中执行 bootstrap
+- [x] 4.1 在 Microsandbox EnsureSession 中执行 bootstrap
   - 依赖：2.2。
   - 工作内容：
     - 在 `pkg/driver/microsandbox_runtime.go` 增加 Microsandbox 专用 bootstrap 执行方法。
@@ -226,8 +226,8 @@
     - 保证 Jupyter launch 之前已完成 bootstrap。
     - bootstrap 使用 cwd `/`，错误包含 driver、session id 或 sandbox name、stdout/stderr 摘要。
   - 可并行子任务：
-    - [ ] 可并行：实现 Microsandbox bootstrap 执行 wrapper。
-    - [ ] 可并行：补 Microsandbox EnsureSession 行为测试设计。
+    - [x] 可并行：实现 Microsandbox bootstrap 执行 wrapper。
+    - [x] 可并行：补 Microsandbox EnsureSession 行为测试设计。
   - 测试方案：
     - `go test ./pkg/driver -run 'Test.*Microsandbox.*Ensure|Test.*Bootstrap'`
     - `go test ./pkg/driver`
@@ -235,10 +235,21 @@
     - Microsandbox 无 Jupyter `EnsureSession` 不再依赖 `launchJupyter` 才创建 guest compatible paths。
     - bootstrap 失败时 `EnsureSession` 返回错误，session 不被视为 ready。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
+    - 状态：已完成。
+    - 变更：
+      - 在 `pkg/driver/microsandbox_runtime.go` 增加 `ensureDirectoryOnlyGuestSessionBootstrap`，通过 `sandbox.Exec` 执行 directory-only bootstrap。
+      - `EnsureSession` 在 `getOrCreateSandbox` 返回后立即执行 bootstrap，覆盖 created、restarted 和 existing running sandbox，再进入 Jupyter launch/readiness 逻辑。
+      - bootstrap exec 复用 `directoryOnlyGuestSessionBootstrapExecSpec` 和 `execOptions(ctx, spec)`，固定 cwd `/`，避免 `/workspace` 尚未就绪时 chdir 失败。
+      - bootstrap 失败时复用 `formatDirectoryOnlyGuestSessionBootstrapError`，返回包含 driver、session id、sandbox/runtime id、exit code、stdout/stderr 摘要或底层 exec error 的诊断错误。
+      - 增加 Microsandbox 命名的 focused tests，覆盖 bootstrap exec spec 和错误上下文。
+    - 验证：
+      - `go test ./pkg/driver -run 'Test.*Microsandbox.*Ensure|Test.*Bootstrap'`：通过。
+      - `go test ./pkg/driver`：通过。
+      - `git diff --check`：通过。
+    - 审计与例外：
+      - 本任务只接入 Microsandbox `EnsureSession` lifecycle bootstrap；`Exec`/`ExecStream` 前 guard 尚未接入，按 4.2 继续。
+      - 未新增 API、CLI、proto、数据库 schema、配置项、Docker manifest 语义或 JS runtime 主修复。
+      - 真实 Microsandbox smoke 未在本任务运行；真实 runtime bind mount 能力和 exec guard 行为按阶段 5 验证。
     - 下一目标：4.2。
 
 - [ ] 4.2 在 Microsandbox Exec/ExecStream 前执行 bootstrap guard
