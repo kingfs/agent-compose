@@ -78,19 +78,28 @@
 
 参考文档：[实施计划 阶段 2](docs/plan/runtime-cache-lifecycle-implementation-plan.md#阶段-2runtime-cache-领域包)
 
-- [ ] 2.1 建立 `pkg/runtimecache` 核心模型和 filter
+- [x] 2.1 建立 `pkg/runtimecache` 核心模型和 filter
   - 依赖：1.2。
   - 工作内容：新增 `pkg/runtimecache`，定义 domain/status/item/reference/filter/list/prune/remove/result；实现 driver、domain/type、status、older-than、cache-id filter。
   - 可并行子任务：
-    - [ ] 可并行：梳理 `pkg/images`、`pkg/sessions` 现有 owner package 风格。
-    - [ ] 可并行：为 filter 和 enum 设计 table-driven test cases。
+    - [x] 可并行：梳理 `pkg/images`、`pkg/sessions` 现有 owner package 风格。
+    - [x] 可并行：为 filter 和 enum 设计 table-driven test cases。
   - 测试方案：`go test ./pkg/runtimecache`，覆盖每个 filter 参数、组合 filter、空 filter、无匹配项、非法枚举或非法 duration。
   - 验收标准：核心包不导入 `connectrpc.com/connect`；filter 结果稳定；未知值不会导致误删。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
+    - 状态：已完成。
+    - 变更：
+      - 新增 `pkg/runtimecache` owner package，定义 driver、domain、type、status 常量，以及 `Item`、`Reference`、`Filter`、`ListRequest`、`ListResult`、`PruneRequest`、`RemoveRequest`、`Result`。
+      - 实现 `NormalizeDriver`、`NormalizeDomain`、`NormalizeType`、`NormalizeStatus`、domain/type 映射和 `FilterItems`。
+      - `FilterItems` 覆盖 driver、domain、type、status、older-than、cache-id 和组合 filter，保持输入顺序稳定。
+      - 增加 table-driven tests，覆盖空 filter、无匹配项、非法 driver/domain/type/status/duration，以及未知 item 值不匹配 typed filters。
+    - 验证：
+      - `./scripts/with-go-toolchain.sh go test -count=1 ./pkg/runtimecache`
+      - `rg -n "connectrpc|connect\\." pkg/runtimecache || true`
+    - 审计与例外：
+      - `pkg/runtimecache` 不导入 `connectrpc.com/connect`。
+      - 本任务只实现模型和 filter；稳定 `cache_id` 生成/解析、path safety、size/warning 机制按任务 2.2 实现。
+      - dry-run/prune/remove 保护语义按任务 2.3 实现，本任务仅预留 request/result 类型。
     - 下一目标：2.2 实现 cache_id 和安全删除基础。
 
 - [ ] 2.2 实现 `cache_id`、path safety 和 size/warning 机制
