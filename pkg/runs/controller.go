@@ -401,6 +401,9 @@ func (c *Controller) executeProjectRunCommand(ctx context.Context, run domain.Pr
 		if sendErr != nil {
 			return
 		}
+		if !chunk.IsStderr {
+			return
+		}
 		if err := appendProjectRunLogChunk(logsPath, chunk); err != nil {
 			sendErr = err
 			return

@@ -143,6 +143,9 @@ func (h *ExecHandler) executeProjectCommand(ctx context.Context, req *agentcompo
 		if sendErr != nil {
 			return
 		}
+		if !chunk.IsStderr {
+			return
+		}
 		if err := appendExecTranscriptChunk(transcriptPath, chunk); err != nil {
 			sendErr = err
 			return

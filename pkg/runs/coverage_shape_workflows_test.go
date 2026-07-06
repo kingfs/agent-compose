@@ -411,8 +411,9 @@ func TestRunsControllerRunProjectAgentCommandWorkflow(t *testing.T) {
 	if run.Status != domain.ProjectRunStatusSucceeded || run.Output != "command output\n" || run.ArtifactsDir == "" || run.LogsPath == "" {
 		t.Fatalf("command run = %#v", run)
 	}
-	if data, err := os.ReadFile(run.LogsPath); err != nil || !strings.Contains(string(data), "$ bash -lc") || !strings.Contains(string(data), "command output\n") {
-		t.Fatalf("command run logs_path content = %q err=%v", string(data), err)
+	transcriptData, err := os.ReadFile(filepath.Join(run.ArtifactsDir, "transcript.txt"))
+	if err != nil || !strings.Contains(string(transcriptData), "$ bash -lc") || !strings.Contains(string(transcriptData), "command output\n") || strings.Contains(string(transcriptData), execution.CommandResultPrefix) {
+		t.Fatalf("command transcript artifact = %q err=%v", string(transcriptData), err)
 	}
 	requestData, err := os.ReadFile(filepath.Join(run.ArtifactsDir, "command-request.json"))
 	if err != nil || !strings.Contains(string(requestData), `"mode": "shell"`) || !strings.Contains(string(requestData), `"script": "echo command"`) {
@@ -421,7 +422,7 @@ func TestRunsControllerRunProjectAgentCommandWorkflow(t *testing.T) {
 	if data, err := os.ReadFile(filepath.Join(run.ArtifactsDir, "output.txt")); err != nil || string(data) != "command output\n" {
 		t.Fatalf("command output artifact = %q err=%v", string(data), err)
 	}
-	if !started || len(chunks) != 3 || runtime.spec.Command != "sh" || !strings.Contains(strings.Join(runtime.spec.Args, " "), "agent-compose-runtime exec") {
+	if !started || len(chunks) != 2 || strings.Contains(chunks[0].Text+chunks[1].Text, execution.CommandResultPrefix) || runtime.spec.Command != "sh" || !strings.Contains(strings.Join(runtime.spec.Args, " "), "agent-compose-runtime exec") {
 		t.Fatalf("started=%v chunks=%#v spec=%#v", started, chunks, runtime.spec)
 	}
 	second, secondExecErr, secondErr := controller.RunProjectAgent(ctx, RunAgentRequest{
@@ -1026,8 +1027,8 @@ type fakeControllerRuntime struct {
 
 func (r *fakeControllerRuntime) ExecStream(_ context.Context, _ *domain.Session, _ domain.VMState, spec domain.ExecSpec, writer domain.ExecStreamWriter) (domain.ExecResult, error) {
 	r.spec = spec
-	writer(domain.ExecChunk{Text: "$ bash -lc 'echo command'\n"})
-	writer(domain.ExecChunk{Text: "command output\n"})
+	writer(domain.ExecChunk{Text: "$ bash -lc 'echo command'\n", IsStderr: true})
+	writer(domain.ExecChunk{Text: "command output\n", IsStderr: true})
 	payload := fakeRuntimeCommandPayload(domain.RuntimeCommandResult{Stdout: "command output\n", Output: "command output\n", ExitCode: 0, Success: true})
 	writer(domain.ExecChunk{Text: payload})
 	return domain.ExecResult{Stdout: payload, Output: "$ bash -lc 'echo command'\ncommand output\n" + payload, ExitCode: 0, Success: true}, nil
