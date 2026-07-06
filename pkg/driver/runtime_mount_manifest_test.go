@@ -267,6 +267,7 @@ func TestDirectoryOnlyGuestSessionBootstrapUsesDataMountRoot(t *testing.T) {
 		"if [ -L '/root' ]; then rm -f '/root'; mkdir -p '/root';",
 		"if [ ! -d '/root' ]; then echo \"refusing to replace non-directory /root\" >&2; exit 1; fi;",
 		"test -d '/root' || { echo \"directory-only home target is not a directory /root\" >&2; exit 1; }",
+		"rm -rf '/root/.codex'; ln -s '/data/home/.codex' '/root/.codex'",
 		"ln -s '/data/home/.codex' '/root/.codex'",
 		"ln -s '/data/home/.claude' '/root/.claude'",
 		"ln -s '/data/home/.opencode' '/root/.opencode'",
@@ -300,6 +301,24 @@ func TestDirectoryOnlyGuestSessionBootstrapUsesDataMountRoot(t *testing.T) {
 	assertSubstringOrder(t, command, "test -d '/data/home'", "rm -f '/root'")
 	assertSubstringOrder(t, command, "test -d '/data/home'", "ln -s '/data/home/.codex' '/root/.codex'")
 	assertSubstringOrder(t, command, "test -d '/root' ||", "ln -s '/data/home/.codex' '/root/.codex'")
+}
+
+func TestDirectoryOnlyGuestSessionBootstrapReplacesImageHomeTargets(t *testing.T) {
+	command := directoryOnlyGuestSessionBootstrapCommand(testRuntimeMountConfig())
+	for _, required := range []string{
+		"rm -rf '/root/.codex'; ln -s '/data/home/.codex' '/root/.codex'",
+		"rm -rf '/root/.claude'; ln -s '/data/home/.claude' '/root/.claude'",
+		"rm -rf '/root/.opencode'; ln -s '/data/home/.opencode' '/root/.opencode'",
+		"rm -rf '/root/.claude.json'; ln -s '/data/home/.claude.json' '/root/.claude.json'",
+		"rm -rf '/root/.gitconfig'; ln -s '/data/home/.gitconfig' '/root/.gitconfig'",
+	} {
+		if !strings.Contains(command, required) {
+			t.Fatalf("bootstrap command should replace image target with session symlink %q: %s", required, command)
+		}
+	}
+	if strings.Contains(command, "refusing to replace existing directory-only symlink target /root/.codex") {
+		t.Fatalf("bootstrap command still refuses an image-provided /root/.codex directory: %s", command)
+	}
 }
 
 func assertSubstringOrder(t *testing.T, text, before, after string) {
