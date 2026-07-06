@@ -490,6 +490,16 @@ for incomplete scans, and performs deletion only through inventory-generated
 safe paths. `pkg/runtimecache` owns the cache model, filters, path safety, and
 dry-run/remove rules, and it does not import Connect.
 
+The current daemon controller is composed from `runtimecache.Source`
+implementations. The always-registered source scans materialized image cache via
+`pkg/imagecache` metadata and `<DATA_ROOT>/image-cache`. Driver sources are
+added by `pkg/driver.NewRuntimeCacheSources`: BoxLite contributes
+runtime-derived cache items when the `boxlitecgo` build tag is enabled, and
+Microsandbox contributes session-ephemeral items for cgo builds. The
+Microsandbox app-level source marks references as unknown until full session or
+SDK state is resolved, so those items are listed but protected from removal by
+default.
+
 Cache domains:
 
 - `oci-image-store`: OCI image metadata/layout owned by image cache.
@@ -500,6 +510,12 @@ Cache domains:
   BoxLite image artifacts.
 - `session-ephemeral-state`: per-session runtime state, such as Microsandbox
   docker disks and sandbox state.
+
+`oci-image-store` exists in the shared model for domain filtering and future
+inventory expansion, but the current deletion owner for OCI image metadata and
+refs is still `ImageService`. `CacheService` currently manages materialized
+image cache, driver runtime-derived cache, and session-ephemeral state; `rmi`
+continues to leave those domains untouched.
 
 Protection is conservative:
 
