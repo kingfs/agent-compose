@@ -2510,6 +2510,7 @@ type SchedulerSpec struct {
 	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	Triggers      []*TriggerSpec         `protobuf:"bytes,2,rep,name=triggers,proto3" json:"triggers,omitempty"`
 	Script        string                 `protobuf:"bytes,3,opt,name=script,proto3" json:"script,omitempty"`
+	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2561,6 +2562,13 @@ func (x *SchedulerSpec) GetTriggers() []*TriggerSpec {
 func (x *SchedulerSpec) GetScript() string {
 	if x != nil {
 		return x.Script
+	}
+	return ""
+}
+
+func (x *SchedulerSpec) GetName() string {
+	if x != nil {
+		return x.Name
 	}
 	return ""
 }
@@ -6487,11 +6495,12 @@ const file_proto_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x06branch\x18\x03 \x01(\tR\x06branch\x12\x12\n" +
 	"\x04path\x18\x04 \x01(\tR\x04path\"!\n" +
 	"\vNetworkSpec\x12\x12\n" +
-	"\x04mode\x18\x01 \x01(\tR\x04mode\"{\n" +
+	"\x04mode\x18\x01 \x01(\tR\x04mode\"\x8f\x01\n" +
 	"\rSchedulerSpec\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x128\n" +
 	"\btriggers\x18\x02 \x03(\v2\x1c.agentcompose.v2.TriggerSpecR\btriggers\x12\x16\n" +
-	"\x06script\x18\x03 \x01(\tR\x06script\"\xd0\x01\n" +
+	"\x06script\x18\x03 \x01(\tR\x06script\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\"\xd0\x01\n" +
 	"\vTriggerSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +

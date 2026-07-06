@@ -1787,6 +1787,76 @@ agents:
 	}
 }
 
+func TestIntegrationCLIRunScriptSchedulerName(t *testing.T) {
+	composePath := writeComposeFile(t, t.TempDir(), `
+name: cli-run-script-trigger
+agents:
+  architect:
+    provider: codex
+    scheduler:
+      name: on-gitlab-push
+      script: |
+        scheduler.on("webhook.gitlab.push", "on-gitlab-push", async function onGitlabPush(event) {
+          return scheduler.agent("review gitlab push");
+        });
+`)
+	var sawRequest bool
+	server := newComposeServiceStubServer(t, composeServiceStubs{
+		run: runServiceStub{
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+				sawRequest = true
+				if req.Msg.GetAgentName() != "architect" || req.Msg.GetTriggerId() != "on-gitlab-push" || req.Msg.GetPrompt() != "" {
+					t.Fatalf("RunAgentStream script trigger request = %#v", req.Msg)
+				}
+				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
+					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+					RunId:     "run-script-trigger",
+					Run: &agentcomposev2.RunSummary{
+						RunId:     "run-script-trigger",
+						ProjectId: req.Msg.GetProjectId(),
+						AgentName: "architect",
+						Status:    agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED,
+						SessionId: "sandbox-script-trigger",
+					},
+				})
+			},
+			getRun: func(ctx context.Context, req *connect.Request[agentcomposev2.GetRunRequest]) (*connect.Response[agentcomposev2.GetRunResponse], error) {
+				return connect.NewResponse(&agentcomposev2.GetRunResponse{Run: testRunDetail(req.Msg.GetProjectId(), "run-script-trigger", "architect", "sandbox-script-trigger", agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED, 0, "")}), nil
+			},
+		},
+	})
+	defer server.Close()
+
+	stdout, stderr, _, exitCode := executeCLICommand("run", "--host", server.URL, "--file", composePath, "architect", "on-gitlab-push")
+	if exitCode != 0 || stdout != "" || stderr != "" {
+		t.Fatalf("run script trigger code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
+	}
+	if !sawRequest {
+		t.Fatal("RunAgentStream was not called")
+	}
+}
+
+func TestCLIRunScriptSchedulerRequiresName(t *testing.T) {
+	composePath := writeComposeFile(t, t.TempDir(), `
+name: cli-run-script-trigger-missing-name
+agents:
+  architect:
+    provider: codex
+    scheduler:
+      script: |
+        scheduler.on("webhook.gitlab.push", "on-gitlab-push", async function onGitlabPush(event) {
+          return scheduler.agent("review gitlab push");
+        });
+`)
+	stdout, stderr, _, exitCode := executeCLICommand("run", "--host", "http://127.0.0.1:1", "--file", composePath, "architect", "on-gitlab-push")
+	if exitCode != exitCodeUsage || stdout != "" {
+		t.Fatalf("run script trigger missing name code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
+	}
+	if !strings.Contains(stderr, `agent "architect" has no configured triggers`) {
+		t.Fatalf("run script trigger missing name stderr = %q", stderr)
+	}
+}
+
 func TestIntegrationCLIRunTriggerWarnings(t *testing.T) {
 	composePath := writeComposeFile(t, t.TempDir(), `
 name: cli-run-trigger-warning
@@ -4385,6 +4455,7 @@ agents:
     driver:
       boxlite: {}
     scheduler:
+      name: interval-review
       script: |
         scheduler.interval("interval-review", function intervalReview() {}, %d);
 `, name, intervalMs)

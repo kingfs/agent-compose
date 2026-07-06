@@ -322,6 +322,7 @@ message SchedulerSpec {
   bool enabled = 1;
   repeated TriggerSpec triggers = 2;
   string script = 3;
+  string name = 4;
 }
 
 message TriggerSpec {

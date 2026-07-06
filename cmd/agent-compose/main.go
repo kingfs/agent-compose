@@ -1245,7 +1245,7 @@ func runComposeRunCommand(cmd *cobra.Command, cli cliOptions, options composeRun
 		if !ok {
 			return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("agent %q is not configured in this project", agentName)}
 		}
-		if agent.Scheduler == nil || len(agent.Scheduler.Triggers) == 0 {
+		if agent.Scheduler == nil || (len(agent.Scheduler.Triggers) == 0 && strings.TrimSpace(agent.Scheduler.Name) == "") {
 			return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("agent %q has no configured triggers; use --prompt or --command", agentName)}
 		}
 		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("run requires a trigger name, --prompt, or --command")}
@@ -1554,7 +1554,7 @@ func resolveComposeRunTriggerName(normalized *compose.NormalizedProjectSpec, pro
 	if !ok {
 		return "", commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("agent %q is not configured in this project", agentName)}
 	}
-	if agent.Scheduler == nil || len(agent.Scheduler.Triggers) == 0 {
+	if agent.Scheduler == nil || (len(agent.Scheduler.Triggers) == 0 && strings.TrimSpace(agent.Scheduler.Name) == "") {
 		return "", commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("agent %q has no configured triggers; use --prompt or --command", agentName)}
 	}
 	for index, trigger := range agent.Scheduler.Triggers {
@@ -1565,6 +1565,9 @@ func resolveComposeRunTriggerName(normalized *compose.NormalizedProjectSpec, pro
 			}
 			return id, nil
 		}
+	}
+	if strings.TrimSpace(agent.Scheduler.Script) != "" && strings.TrimSpace(agent.Scheduler.Name) == triggerName {
+		return triggerName, nil
 	}
 	return "", commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("trigger %q is not configured for agent %q", triggerName, agentName)}
 }

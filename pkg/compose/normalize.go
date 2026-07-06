@@ -60,6 +60,7 @@ type NormalizedDriverSpec struct {
 
 type NormalizedSchedulerSpec struct {
 	Enabled  bool                    `yaml:"enabled" json:"enabled"`
+	Name     string                  `yaml:"name,omitempty" json:"name,omitempty"`
 	Script   string                  `yaml:"script,omitempty" json:"script,omitempty"`
 	Triggers []NormalizedTriggerSpec `yaml:"triggers,omitempty" json:"triggers,omitempty"`
 }
@@ -273,7 +274,11 @@ func normalizeSchedulerSpec(path string, scheduler *SchedulerSpec) (*NormalizedS
 	if script != "" && len(scheduler.Triggers) > 0 {
 		return nil, &ValidationError{Path: path, Message: "scheduler script and triggers are mutually exclusive"}
 	}
-	normalized := &NormalizedSchedulerSpec{Enabled: enabled, Script: script}
+	name := strings.TrimSpace(scheduler.Name)
+	if name != "" && script == "" {
+		return nil, &ValidationError{Path: path + ".name", Message: "scheduler name requires script"}
+	}
+	normalized := &NormalizedSchedulerSpec{Enabled: enabled, Name: name, Script: script}
 	for i, trigger := range scheduler.Triggers {
 		normalizedTrigger, err := normalizeTriggerSpec(fmt.Sprintf("%s.triggers[%d]", path, i), trigger)
 		if err != nil {

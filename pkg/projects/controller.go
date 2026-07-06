@@ -435,29 +435,52 @@ func (c *Controller) projectManagedSchedulerBuildsFromSpec(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	inlineScripts := make(map[string]string, len(spec.Agents))
+	type inlineSchedulerScript struct {
+		name   string
+		script string
+	}
+	inlineScripts := make(map[string]inlineSchedulerScript, len(spec.Agents))
 	for _, agent := range spec.Agents {
 		if agent.Scheduler == nil {
 			continue
 		}
 		if script := strings.TrimSpace(agent.Scheduler.Script); script != "" {
-			inlineScripts[agent.Name] = agent.Scheduler.Script
+			inlineScripts[agent.Name] = inlineSchedulerScript{name: strings.TrimSpace(agent.Scheduler.Name), script: agent.Scheduler.Script}
 		}
 	}
 	for i := range builds {
-		script := inlineScripts[builds[i].Scheduler.AgentName]
-		if strings.TrimSpace(script) == "" {
+		inlineScript := inlineScripts[builds[i].Scheduler.AgentName]
+		if strings.TrimSpace(inlineScript.script) == "" {
 			continue
 		}
-		validation, err := c.validateInlineSchedulerScript(ctx, builds[i].Scheduler.AgentName, script)
+		validation, err := c.validateInlineSchedulerScript(ctx, builds[i].Scheduler.AgentName, inlineScript.script)
 		if err != nil {
 			return nil, err
+		}
+		if inlineScript.name != "" && !loaderValidationHasTriggerID(validation, inlineScript.name) {
+			return nil, &managedSchedulerBuildError{
+				path:    "agents." + builds[i].Scheduler.AgentName + ".scheduler.name",
+				message: fmt.Sprintf("%q does not match any trigger registered by scheduler script", inlineScript.name),
+			}
 		}
 		builds[i].ValidationTriggers = validation.Triggers
 		builds[i].Loader.Triggers = validation.Triggers
 		builds[i].Scheduler.TriggerCount = len(validation.Triggers)
 	}
 	return builds, nil
+}
+
+func loaderValidationHasTriggerID(validation loaders.LoaderValidationResult, id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	for _, trigger := range validation.Triggers {
+		if strings.TrimSpace(trigger.ID) == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Controller) validateManagedSchedulers(ctx context.Context, normalized NormalizedProject) []ValidationIssue {

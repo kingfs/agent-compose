@@ -471,6 +471,7 @@ name: inline-script
 agents:
   reviewer:
     scheduler:
+      name: hourly-review
       script: |
         scheduler.interval("hourly-review", "1h", { prompt: "review changes" });
         export async function main(payload) {
@@ -488,6 +489,9 @@ agents:
 	}
 	if !strings.Contains(scheduler.Script, `scheduler.interval("hourly-review"`) {
 		t.Fatalf("scheduler script = %q, want inline qjs", scheduler.Script)
+	}
+	if scheduler.Name != "hourly-review" {
+		t.Fatalf("scheduler name = %q, want hourly-review", scheduler.Name)
 	}
 	if strings.HasPrefix(scheduler.Script, "\n") || strings.HasSuffix(scheduler.Script, "\n") {
 		t.Fatalf("scheduler script = %q, want trimmed script", scheduler.Script)
@@ -519,6 +523,27 @@ agents:
 	}
 	if got := len(scheduler.Triggers); got != 0 {
 		t.Fatalf("scheduler triggers = %d, want 0", got)
+	}
+}
+
+func TestNormalizeRejectsSchedulerNameWithoutScript(t *testing.T) {
+	spec := mustParseCompose(t, `
+name: named-scheduler
+agents:
+  reviewer:
+    scheduler:
+      name: nightly-review
+      triggers:
+        - cron: "0 1 * * *"
+          prompt: review nightly
+`)
+
+	_, err := Normalize(spec, NormalizeOptions{})
+	if err == nil {
+		t.Fatalf("expected Normalize to fail")
+	}
+	if got := err.Error(); !strings.Contains(got, "agents.reviewer.scheduler.name") || !strings.Contains(got, "requires script") {
+		t.Fatalf("error = %q, want scheduler name requires script error", got)
 	}
 }
 

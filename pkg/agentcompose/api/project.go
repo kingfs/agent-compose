@@ -262,6 +262,7 @@ func SchedulerSpecToProto(scheduler *compose.NormalizedSchedulerSpec) *agentcomp
 	}
 	return &agentcomposev2.SchedulerSpec{
 		Enabled:  scheduler.Enabled,
+		Name:     scheduler.Name,
 		Triggers: triggers,
 		Script:   scheduler.Script,
 	}
@@ -434,6 +435,9 @@ func SchedulerYAMLShape(scheduler *agentcomposev2.SchedulerSpec) map[string]any 
 		return nil
 	}
 	raw := map[string]any{"enabled": scheduler.GetEnabled()}
+	if strings.TrimSpace(scheduler.GetName()) != "" {
+		raw["name"] = scheduler.GetName()
+	}
 	triggers := make([]map[string]any, 0, len(scheduler.GetTriggers()))
 	for _, trigger := range scheduler.GetTriggers() {
 		triggers = append(triggers, TriggerYAMLShape(trigger))

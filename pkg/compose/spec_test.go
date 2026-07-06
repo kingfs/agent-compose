@@ -109,6 +109,7 @@ agents:
     provider: codex
     scheduler:
       enabled: true
+      name: hourly-review
       script: |
         scheduler.interval("hourly-review", function hourlyReview() {
           return scheduler.agent("Review the latest workspace state.");
@@ -123,6 +124,9 @@ agents:
 	}
 	if !strings.Contains(agent.Scheduler.Script, `scheduler.interval("hourly-review"`) {
 		t.Fatalf("scheduler script = %q, want inline qjs", agent.Scheduler.Script)
+	}
+	if agent.Scheduler.Name != "hourly-review" {
+		t.Fatalf("scheduler name = %q, want hourly-review", agent.Scheduler.Name)
 	}
 	if got := len(agent.Scheduler.Triggers); got != 0 {
 		t.Fatalf("trigger count = %d, want 0", got)

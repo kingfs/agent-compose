@@ -36,6 +36,7 @@ type JupyterSpec struct {
 
 type SchedulerSpec struct {
 	Enabled  *bool         `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Name     string        `yaml:"name,omitempty" json:"name,omitempty"`
 	Triggers []TriggerSpec `yaml:"triggers,omitempty" json:"triggers,omitempty"`
 	Script   string        `yaml:"script,omitempty" json:"script,omitempty"`
 }
@@ -250,6 +251,7 @@ func validateStringList(node *yaml.Node, path string) error {
 func validateScheduler(node *yaml.Node, path string) error {
 	return validateMapping(node, path, map[string]nodeValidator{
 		"enabled":  validateBool,
+		"name":     validateScalar,
 		"triggers": validateTriggerList,
 		"script":   validateScalar,
 	})

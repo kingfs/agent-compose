@@ -34,6 +34,7 @@ agents:
       enabled: true
       guest_port: 8888
     scheduler:
+      name: daily
       script: |
         export default { triggers: [{ name: "daily", cron: "0 0 * * *", prompt: "run" }] }
 `))
@@ -70,6 +71,33 @@ agents:
 	}
 	if dryRun.Applied || len(dryRun.Agents) != 1 || len(dryRun.Schedulers) != 1 || len(dryRun.Changes) < 4 {
 		t.Fatalf("dryRun = %#v", dryRun)
+	}
+	rawBadSchedulerName, err := compose.Parse([]byte(`
+name: coverage-project
+agents:
+  worker:
+    provider: codex
+    scheduler:
+      name: missing-trigger
+      script: |
+        export default { triggers: [{ name: "daily", cron: "0 0 * * *", prompt: "run" }] }
+`))
+	if err != nil {
+		t.Fatalf("Parse bad scheduler name returned error: %v", err)
+	}
+	normalizedBadSchedulerNameSpec, err := compose.Normalize(rawBadSchedulerName, compose.NormalizeOptions{ProjectDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("Normalize bad scheduler name returned error: %v", err)
+	}
+	badSchedulerNameResult, err := controller.ApplyProject(ctx, ApplyRequest{
+		Normalized: NormalizedProject{Spec: normalizedBadSchedulerNameSpec, SourcePath: "/repo/bad-agent-compose.yaml"},
+		DryRun:     true,
+	})
+	if err != nil || len(badSchedulerNameResult.Issues) != 1 {
+		t.Fatalf("ApplyProject bad scheduler name result=%#v err=%v", badSchedulerNameResult, err)
+	}
+	if badSchedulerNameResult.Issues[0].Path != "agents.worker.scheduler.name" || !strings.Contains(badSchedulerNameResult.Issues[0].Message, `"missing-trigger" does not match any trigger`) {
+		t.Fatalf("ApplyProject bad scheduler name issues = %#v", badSchedulerNameResult.Issues)
 	}
 	if !strings.Contains(dryRun.Agents[0].SpecJSON, `"jupyter"`) {
 		t.Fatalf("project agent spec json = %s, want jupyter config", dryRun.Agents[0].SpecJSON)

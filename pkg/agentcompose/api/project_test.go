@@ -19,6 +19,7 @@ func TestProjectSpecToProtoIncludesSchedulerScript(t *testing.T) {
 			},
 			Scheduler: &compose.NormalizedSchedulerSpec{
 				Enabled: true,
+				Name:    "hourly-review",
 				Script:  script,
 			},
 		}},
@@ -31,6 +32,9 @@ func TestProjectSpecToProtoIncludesSchedulerScript(t *testing.T) {
 	scheduler := response.GetAgents()[0].GetScheduler()
 	if scheduler.GetScript() != script {
 		t.Fatalf("scheduler script = %q, want %q", scheduler.GetScript(), script)
+	}
+	if scheduler.GetName() != "hourly-review" {
+		t.Fatalf("scheduler name = %q, want hourly-review", scheduler.GetName())
 	}
 	if got := len(scheduler.GetTriggers()); got != 0 {
 		t.Fatalf("scheduler triggers = %d, want 0", got)
