@@ -5,8 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
+
 	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
+	agentcomposev1 "agent-compose/proto/agentcompose/v1"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -45,6 +48,9 @@ func testCLIConfigAndOutputWorkflow(t *testing.T) {
 	TestLogsJSONFollowIsUsageError(t)
 	TestInvalidHostWritesStderrAndUsageExitCode(t)
 	testComposeProjectPureHelpers(t)
+	testComposeProjectOutputHelpers(t)
+	testComposeRunLogAndExecHelpers(t)
+	testComposeImageStatsAndSessionHelpers(t)
 }
 
 func testComposeProjectPureHelpers(t *testing.T) {
@@ -194,4 +200,341 @@ func testComposeProjectPureHelpers(t *testing.T) {
 		t.Fatalf("project change helpers returned unexpected values")
 	}
 	_ = domain.SessionSummary{ID: "compile-check"}
+}
+
+func testComposeProjectOutputHelpers(t *testing.T) {
+	t.Helper()
+	project := &agentcomposev2.Project{
+		Summary: &agentcomposev2.ProjectSummary{
+			ProjectId:       "project-1",
+			Name:            "Project",
+			SourcePath:      "/repo/agent-compose.yml",
+			CurrentRevision: 5,
+			SpecHash:        "hash",
+			AgentCount:      2,
+			SchedulerCount:  1,
+			RunningRunCount: 1,
+			LatestRunId:     "run-latest",
+			CreatedAt:       "created",
+			UpdatedAt:       "updated",
+			RemovedAt:       "",
+		},
+		Agents: []*agentcomposev2.ProjectAgent{
+			{AgentName: "reviewer", ManagedAgentId: "agent-1", Provider: "codex", Model: "gpt", Image: "guest:latest", Driver: "docker", SchedulerEnabled: true},
+			{AgentName: "runner", ManagedAgentId: "agent-2"},
+		},
+		Schedulers: []*agentcomposev2.ProjectScheduler{
+			{AgentName: "reviewer", SchedulerId: "scheduler-1", ManagedLoaderId: "loader-1", Enabled: true, TriggerCount: 2},
+		},
+	}
+	output := composeProjectOutputFromProject(project)
+	if output.Project.ID != "project-1" || len(output.Agents) != 2 || len(output.Schedulers) != 1 || !output.Agents[0].SchedulerEnabled {
+		t.Fatalf("composeProjectOutputFromProject = %#v", output)
+	}
+	if summary := composeProjectSummaryOutput(project.GetSummary()); summary.Name != "Project" || summary.CurrentRevision != 5 {
+		t.Fatalf("composeProjectSummaryOutput = %#v", summary)
+	}
+	if agent := composeProjectAgentOutputFromProto(project.GetAgents()[0]); agent.Provider != "codex" || agent.Driver != "docker" {
+		t.Fatalf("composeProjectAgentOutputFromProto = %#v", agent)
+	}
+	if scheduler := composeProjectSchedulerOutputFromProto(project.GetSchedulers()[0]); scheduler.ManagedLoaderID != "loader-1" || scheduler.TriggerCount != 2 {
+		t.Fatalf("composeProjectSchedulerOutputFromProto = %#v", scheduler)
+	}
+
+	filter, err := composePSStatusFilter(composePSOptions{Status: " running,failed ,, "})
+	if err != nil || !filter["running"] || !filter["failed"] {
+		t.Fatalf("composePSStatusFilter filter=%#v err=%v", filter, err)
+	}
+	filter, err = composePSStatusFilter(composePSOptions{All: true})
+	if err != nil || filter != nil {
+		t.Fatalf("composePSStatusFilter all filter=%#v err=%v", filter, err)
+	}
+	filter, err = composePSStatusFilter(composePSOptions{})
+	if err != nil || len(filter) != 1 || !filter["running"] {
+		t.Fatalf("composePSStatusFilter default filter=%#v err=%v", filter, err)
+	}
+
+	newerRun := &agentcomposev2.RunSummary{RunId: "run-new", ProjectId: "project-1", SessionId: "session-1", UpdatedAt: "2026-07-02T00:00:00Z"}
+	olderRun := &agentcomposev2.RunSummary{RunId: "run-old", ProjectId: "project-1", SessionId: "session-1", CreatedAt: "2026-07-01T00:00:00Z"}
+	bySession := latestRunsBySession([]*agentcomposev2.RunSummary{
+		olderRun,
+		{RunId: "missing-session"},
+		newerRun,
+	})
+	if bySession["session-1"].GetRunId() != "run-new" {
+		t.Fatalf("latestRunsBySession = %#v", bySession)
+	}
+	session := &agentcomposev1.SessionSummary{
+		SessionId:     "session-1",
+		TriggerSource: "manual project-1 run",
+		Tags: []*agentcomposev1.SessionTag{
+			{Name: " project_id ", Value: " project-1 "},
+			{Name: "", Value: "ignored"},
+		},
+	}
+	if !composePSSessionBelongsToProject(session, project, bySession) {
+		t.Fatalf("expected session to belong to project")
+	}
+	if tags := sessionTagsMap(session.GetTags()); tags["project_id"] != "project-1" {
+		t.Fatalf("sessionTagsMap = %#v", tags)
+	}
+
+	var out bytes.Buffer
+	psOutput := composePSOutput{Project: output.Project, Sandboxes: []composePSSandboxOutput{{
+		Sandbox: "session-1", Agent: "reviewer", Status: "running", Run: "run-new", CreatedAt: "created", UpdatedAt: "updated", Driver: "docker", Image: "guest", Workspace: "/repo",
+	}}}
+	if err := writePSText(&out, psOutput, true); err != nil {
+		t.Fatalf("writePSText verbose returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "WORKSPACE") || !strings.Contains(out.String(), "session-1") {
+		t.Fatalf("verbose ps output = %q", out.String())
+	}
+	out.Reset()
+	if err := writePSText(&out, psOutput, false); err != nil {
+		t.Fatalf("writePSText returned error: %v", err)
+	}
+	if strings.Contains(out.String(), "WORKSPACE") || !strings.Contains(out.String(), "reviewer") {
+		t.Fatalf("ps output = %q", out.String())
+	}
+}
+
+func testComposeRunLogAndExecHelpers(t *testing.T) {
+	t.Helper()
+	summary := &agentcomposev2.RunSummary{
+		RunId:       "run-1",
+		ProjectId:   "project-1",
+		ProjectName: "Project",
+		AgentName:   "reviewer",
+		Source:      agentcomposev2.RunSource_RUN_SOURCE_SCHEDULER,
+		Status:      agentcomposev2.RunStatus_RUN_STATUS_FAILED,
+		SessionId:   "session-1",
+		ExitCode:    7,
+		Error:       "failed",
+		StartedAt:   "started",
+		UpdatedAt:   "updated",
+		CompletedAt: "completed",
+		DurationMs:  12,
+		Warnings:    []string{"first", "duplicate"},
+	}
+	detail := &agentcomposev2.RunDetail{
+		Summary:      summary,
+		Prompt:       "prompt",
+		Output:       "line1\nline2\nline3\n",
+		ResultJson:   `{"ok":false}`,
+		LogsPath:     "/tmp/logs",
+		ArtifactsDir: "/tmp/artifacts",
+		CleanupError: "cleanup",
+		Driver:       "docker",
+		ImageRef:     "guest",
+		Warnings:     []string{"duplicate", "second"},
+	}
+	output := composeRunOutputFromDetailWithOptions(detail, composeLogsOptions{TailLines: 2})
+	if output.Status != "failed" || output.Source != "scheduler" || output.Output != "line2\nline3\n" || len(output.Warnings) != 3 {
+		t.Fatalf("composeRunOutputFromDetailWithOptions = %#v", output)
+	}
+	if summaryOutput := composeRunOutputFromSummary(summary, "Fallback", "agent-compose logs"); summaryOutput.ProjectName != "Project" || summaryOutput.LogsCommand == "" {
+		t.Fatalf("composeRunOutputFromSummary = %#v", summaryOutput)
+	}
+	if !runSummaryFailed(summary) || !runSummaryTerminal(summary) || runSummaryExitCode(summary) != 7 {
+		t.Fatalf("run summary helpers returned unexpected values")
+	}
+	pending := &agentcomposev2.RunSummary{Status: agentcomposev2.RunStatus_RUN_STATUS_PENDING, ExitCode: 126}
+	if runSummaryFailed(pending) || runSummaryTerminal(pending) || runSummaryExitCode(pending) != exitCodeGeneral {
+		t.Fatalf("pending run summary helpers returned unexpected values")
+	}
+	if runStatusText(agentcomposev2.RunStatus_RUN_STATUS_RUNNING) != "running" ||
+		runStatusText(agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED) != "succeeded" ||
+		runStatusText(agentcomposev2.RunStatus_RUN_STATUS_CANCELED) != "canceled" ||
+		runStatusText(agentcomposev2.RunStatus_RUN_STATUS_UNSPECIFIED) != "unspecified" ||
+		runSourceText(agentcomposev2.RunSource_RUN_SOURCE_API) != "api" ||
+		runSourceText(agentcomposev2.RunSource_RUN_SOURCE_MANUAL) != "manual" ||
+		runSourceText(agentcomposev2.RunSource_RUN_SOURCE_UNSPECIFIED) != "unspecified" {
+		t.Fatalf("run status/source helpers returned unexpected values")
+	}
+	if got := tailLogOutput("a\nb\nc", 2); got != "b\nc" {
+		t.Fatalf("tailLogOutput = %q", got)
+	}
+	if got := runLogTimestamp(summary); got != "completed" {
+		t.Fatalf("runLogTimestamp = %q", got)
+	}
+
+	var out bytes.Buffer
+	if err := writeLogDetails(&out, []*agentcomposev2.RunDetail{detail}, map[string]int{}, composeLogsOptions{TailLines: 1, Timestamp: true}); err != nil {
+		t.Fatalf("writeLogDetails returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "reviewer | completed line3") {
+		t.Fatalf("log details = %q", out.String())
+	}
+	out.Reset()
+	if err := writeLogsForRun(&out, detail, true, composeLogsOptions{TailLines: 1}); err != nil {
+		t.Fatalf("writeLogsForRun json returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), `"run_id": "run-1"`) || !strings.Contains(out.String(), "line3") {
+		t.Fatalf("json logs = %q", out.String())
+	}
+	out.Reset()
+	if err := writePrefixedRunOutput(&out, &agentcomposev2.RunSummary{RunId: "fallback"}, "last-line", false); err != nil {
+		t.Fatalf("writePrefixedRunOutput returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "fallback | last-line\n") {
+		t.Fatalf("prefixed output = %q", out.String())
+	}
+
+	execOutput := composeExecOutputFromResult(&agentcomposev2.ExecResult{
+		ExecId:    "exec-1",
+		SessionId: "session-1",
+		RunId:     "run-1",
+		Command:   &agentcomposev2.ExecCommand{Command: "bash", Args: []string{"-lc", "echo ok"}},
+		Cwd:       "/repo",
+		ExitCode:  9,
+		Success:   false,
+		Stdout:    "out",
+		Stderr:    "err",
+		Output:    "outerr",
+		Error:     "boom",
+	})
+	if execOutput.Command != "bash" || len(execOutput.Args) != 2 || execOutput.ExitCode != 9 || execOutput.Output != "outerr" {
+		t.Fatalf("composeExecOutputFromResult = %#v", execOutput)
+	}
+	if got := detachedRunLogsCommand(cliOptions{Host: "unix:///tmp/socket path", ComposeFile: "compose file.yml", ProjectName: "project"}, "run '1'"); !strings.Contains(got, "'unix:///tmp/socket path'") || !strings.Contains(got, "'run '\"'\"'1'\"'\"''") {
+		t.Fatalf("detachedRunLogsCommand = %q", got)
+	}
+	if got := shellQuoteCLIArg(""); got != "''" {
+		t.Fatalf("shellQuoteCLIArg empty = %q", got)
+	}
+	if got := appendUniqueStrings([]string{" first ", "second"}, "second", "", "third"); len(got) != 3 || got[0] != "first" || got[2] != "third" {
+		t.Fatalf("appendUniqueStrings = %#v", got)
+	}
+}
+
+func testComposeImageStatsAndSessionHelpers(t *testing.T) {
+	t.Helper()
+	value := 42.5
+	metric := func(unit string, status agentcomposev2.MetricStatus) *agentcomposev2.MetricValue {
+		return &agentcomposev2.MetricValue{Value: &value, Unit: unit, Status: status, Message: "metric-message"}
+	}
+	stats := composeStatsOutputFromProto(&agentcomposev2.SandboxStats{
+		SandboxId:        "session-1",
+		Driver:           "docker",
+		SampledAt:        "sampled",
+		CpuPercent:       metric("percent", agentcomposev2.MetricStatus_METRIC_STATUS_OK),
+		MemoryUsageBytes: metric("bytes", agentcomposev2.MetricStatus_METRIC_STATUS_OK),
+		MemoryLimitBytes: metric("bytes", agentcomposev2.MetricStatus_METRIC_STATUS_UNAVAILABLE),
+		MemoryPercent:    metric("percent", agentcomposev2.MetricStatus_METRIC_STATUS_UNKNOWN),
+		NetworkRxBytes:   metric("bytes", agentcomposev2.MetricStatus_METRIC_STATUS_OK),
+		NetworkTxBytes:   metric("bytes", agentcomposev2.MetricStatus_METRIC_STATUS_OK),
+		BlockReadBytes:   metric("bytes", agentcomposev2.MetricStatus_METRIC_STATUS_OK),
+		BlockWriteBytes:  metric("bytes", agentcomposev2.MetricStatus_METRIC_STATUS_OK),
+		UptimeSeconds:    metric("seconds", agentcomposev2.MetricStatus_METRIC_STATUS_OK),
+	})
+	if stats.Sandbox != "session-1" || stats.CPUPercent.Status != "ok" || stats.MemoryLimitBytes.Status != "unavailable" || stats.MemoryPercent.Status != "unknown" {
+		t.Fatalf("composeStatsOutputFromProto = %#v", stats)
+	}
+	if nilStats := composeStatsOutputFromProto(nil); nilStats.Sandbox != "" {
+		t.Fatalf("nil stats = %#v", nilStats)
+	}
+	if nilMetric := composeMetricOutputFromProto(nil); nilMetric.Status != "unknown" {
+		t.Fatalf("nil metric = %#v", nilMetric)
+	}
+	var out bytes.Buffer
+	if err := writeStatsText(&out, []composeStatsOutput{stats}); err != nil {
+		t.Fatalf("writeStatsText returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "42.50") || !strings.Contains(out.String(), "42s") || !strings.Contains(out.String(), "-") {
+		t.Fatalf("stats text = %q", out.String())
+	}
+	if formatMetricForText(composeMetricOutput{Status: "ok", Unit: "bytes", Value: &value}) != "42" ||
+		formatMetricForText(composeMetricOutput{Status: "unavailable", Unit: "bytes", Value: &value}) != "-" {
+		t.Fatalf("formatMetricForText returned unexpected values")
+	}
+
+	image := &agentcomposev2.Image{
+		ImageId:            "sha256:1234567890abcdef",
+		ImageRef:           "guest:latest",
+		ResolvedRef:        "guest@sha256:abc",
+		RepoTags:           []string{"guest:latest"},
+		RepoDigests:        []string{"guest@sha256:abc"},
+		Store:              agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_OCI_CACHE,
+		AvailabilityStatus: agentcomposev2.ImageAvailabilityStatus_IMAGE_AVAILABILITY_STATUS_AVAILABLE,
+		Platform:           &agentcomposev2.ImagePlatform{Os: "linux", Architecture: "amd64"},
+		SizeBytes:          123,
+		VirtualSizeBytes:   456,
+		CreatedAt:          "created",
+		InspectedAt:        "inspected",
+		Dangling:           true,
+		ContainerCount:     2,
+		Labels:             map[string]string{"a": "b"},
+	}
+	store := &agentcomposev2.ImageStoreStatus{Store: agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_DOCKER_DAEMON, Available: true, Endpoint: "unix:///var/run/docker.sock"}
+	imageList := composeImageListOutputFromResponse(&agentcomposev2.ListImagesResponse{
+		Images:      []*agentcomposev2.Image{image},
+		TotalCount:  1,
+		HasMore:     true,
+		NextOffset:  10,
+		StoreStatus: store,
+	})
+	if len(imageList.Images) != 1 || imageList.StoreStatus.Store != "docker" || !imageList.HasMore || imageList.Images[0].Platform != "linux/amd64" {
+		t.Fatalf("composeImageListOutputFromResponse = %#v", imageList)
+	}
+	pull := composeImagePullOutputFromResponse(&agentcomposev2.PullImageResponse{
+		Image:       image,
+		Status:      agentcomposev2.ImageOperationStatus_IMAGE_OPERATION_STATUS_FAILED,
+		ResolvedRef: "guest@sha256:abc",
+		Progress: []*agentcomposev2.ImagePullProgress{
+			{Id: "layer-1", Status: "downloading", Progress: "50%", CurrentBytes: 5, TotalBytes: 10},
+		},
+		Warnings: []string{"warn"},
+	})
+	if pull.Status != "failed" || len(pull.Progress) != 1 || pull.ImageRef != "guest:latest" {
+		t.Fatalf("composeImagePullOutputFromResponse = %#v", pull)
+	}
+	inspect := composeImageInspectOutputFromResponse(&agentcomposev2.InspectImageResponse{Image: image, StoreStatus: store})
+	remove := composeImageRemoveOutputFromResponse(&agentcomposev2.RemoveImageResponse{ImageRef: "guest:latest", UntaggedRefs: []string{"guest:latest"}, DeletedIds: []string{"sha256:123"}, Warnings: []string{"warn"}})
+	if inspect.Image.ImageID == "" || remove.DeletedIDs[0] != "sha256:123" {
+		t.Fatalf("inspect=%#v remove=%#v", inspect, remove)
+	}
+	out.Reset()
+	if err := writeImagesText(&out, imageList.Images); err != nil {
+		t.Fatalf("writeImagesText returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "1234567890ab") || !strings.Contains(out.String(), "guest:latest") {
+		t.Fatalf("images text = %q", out.String())
+	}
+	if imagePlatformText(&agentcomposev2.ImagePlatform{Os: "linux"}) != "linux" ||
+		shortImageID("short") != "short" ||
+		cloneStringMapForCLI(nil) != nil {
+		t.Fatalf("image helper edge cases returned unexpected values")
+	}
+
+	session := composeSessionOutputFromSummary(&agentcomposev1.SessionSummary{
+		SessionId:     "session-1",
+		Title:         "title",
+		Driver:        "docker",
+		VmStatus:      " RUNNING ",
+		WorkspacePath: "/repo",
+		ProxyPath:     "/proxy",
+		GuestImage:    "guest",
+		TriggerSource: "manual",
+		CreatedAt:     "created",
+		UpdatedAt:     "updated",
+		CellCount:     3,
+		EventCount:    4,
+		Tags: []*agentcomposev1.SessionTag{
+			{Name: "agent", Value: "reviewer"},
+			{Name: " ", Value: "ignored"},
+		},
+	})
+	if session.VMStatus != "running" || session.Tags["agent"] != "reviewer" || session.EventCount != 4 {
+		t.Fatalf("composeSessionOutputFromSummary = %#v", session)
+	}
+	if commandExitCode(nil) != 0 ||
+		commandExitCode(commandExitError{Code: exitCodeUsage, Err: connect.NewError(connect.CodeInvalidArgument, nil)}) != exitCodeUsage ||
+		commandExitCode(connect.NewError(connect.CodeInternal, nil)) != exitCodeGeneral {
+		t.Fatalf("commandExitCode returned unexpected values")
+	}
+	if commandExitCode(commandExitErrorForConnect(connect.NewError(connect.CodeUnimplemented, nil))) != exitCodeUnsupported ||
+		commandExitCode(commandExitErrorForConnect(connect.NewError(connect.CodeUnavailable, nil))) != exitCodeUnavailable ||
+		commandExitCode(commandExitErrorForConnect(connect.NewError(connect.CodeNotFound, nil))) != exitCodeUsage {
+		t.Fatalf("commandExitErrorForConnect returned unexpected values")
+	}
 }

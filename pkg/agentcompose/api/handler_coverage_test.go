@@ -48,6 +48,7 @@ func TestIntegrationAPIHandlerRuntimeWorkflows(t *testing.T) {
 	t.Run("image pull inspect and skip", TestImagePullInspectAndSkip)
 	t.Run("kernel and agent unary handlers", TestKernelAndAgentUnaryHandlerWorkflows)
 	t.Run("exec session target", TestExecHandlerSessionTargetWorkflow)
+	t.Run("exec run selector and stream sender", TestExecHandlerRunSelectorAndStreamSenderWorkflow)
 	t.Run("exec selector errors", TestExecHandlerSelectorErrors)
 	t.Run("project and run store backed handlers", TestProjectAndRunHandlersStoreBackedWorkflows)
 	t.Run("follow run logs offsets tail and final", TestFollowRunLogsStreamsOffsetsTailAndFinal)
@@ -334,6 +335,107 @@ func TestExecHandlerSessionTargetWorkflow(t *testing.T) {
 	}
 }
 
+func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
+	ctx := context.Background()
+	sessionRoot := t.TempDir()
+	running := &domain.Session{Summary: domain.SessionSummary{ID: "session-running", VMStatus: domain.VMStatusRunning, WorkspacePath: filepath.Join(sessionRoot, "workspace")}}
+	store := &apiExecWorkflowSessionStore{
+		sessions: map[string]*domain.Session{
+			"session-running": running,
+			"session-second":  {Summary: domain.SessionSummary{ID: "session-second", VMStatus: domain.VMStatusRunning, WorkspacePath: filepath.Join(sessionRoot, "workspace-2")}},
+			"session-stopped": {Summary: domain.SessionSummary{ID: "session-stopped", VMStatus: domain.VMStatusStopped}},
+		},
+		vm: domain.VMState{Driver: "docker"},
+	}
+	projects := &apiExecWorkflowProjectStore{
+		projects: []domain.ProjectRecord{
+			{ID: "project-1", Name: "Project", SourcePath: "/repo/one"},
+			{ID: "project-2", Name: "Project", SourcePath: "/repo/two"},
+		},
+		runs: []domain.ProjectRunRecord{
+			{RunID: "run-1", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", SessionID: "session-running"},
+			{RunID: "run-second", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", SessionID: "session-second"},
+			{RunID: "run-stopped", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", SessionID: "session-stopped"},
+			{RunID: "run-nosession", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker"},
+		},
+	}
+	runtime := &apiExecRuntime{}
+	handler := NewExecHandler(&appconfig.Config{}, store, projects, func(*domain.Session) (ExecRuntime, error) {
+		return runtime, nil
+	})
+
+	var events []*agentcomposev2.ExecStreamResponse
+	resp, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
+		Target:    &agentcomposev2.ExecRequest_RunId{RunId: "run-1"},
+		Command:   &agentcomposev2.ExecCommand{Command: "echo", Args: []string{"hi"}},
+		Cwd:       "/custom",
+		Env:       []*agentcomposev2.EnvVarSpec{{Name: "A", Value: "B"}},
+		TimeoutMs: 1000,
+	}, "exec-run", func(event *agentcomposev2.ExecStreamResponse) error {
+		events = append(events, event)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("executeProjectCommand run target returned error: %v", err)
+	}
+	if resp.GetRunId() != "run-1" || resp.GetSessionId() != "session-running" || resp.GetCwd() != "/custom" || len(events) < 2 {
+		t.Fatalf("run target resp=%#v events=%#v", resp, events)
+	}
+	if events[0].GetEventType() != agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_STARTED ||
+		events[1].GetEventType() != agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_OUTPUT ||
+		events[1].GetTranscript().GetText() == "" {
+		t.Fatalf("stream events = %#v", events)
+	}
+	transcript, err := os.ReadFile(filepath.Join(sessionRoot, "state", "exec", "exec-run", "transcript.txt"))
+	if err != nil || !strings.Contains(string(transcript), "hi\n") {
+		t.Fatalf("transcript = %q err=%v", string(transcript), err)
+	}
+
+	if _, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
+		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSessionSelector{ProjectId: "project-1", AgentName: "worker"}},
+		Command: &agentcomposev2.ExecCommand{Command: "echo"},
+	}, "exec-ambiguous", nil); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("expected multiple running selector error, got %v", err)
+	}
+	projects.runs = projects.runs[:1]
+	selectorResp, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
+		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSessionSelector{ProjectId: "project-1", AgentName: "worker"}},
+		Command: &agentcomposev2.ExecCommand{Command: "echo"},
+	}, "exec-selector", nil)
+	if err != nil {
+		t.Fatalf("selector command returned error: %v", err)
+	}
+	if selectorResp.GetRunId() != "run-1" || selectorResp.GetSessionId() != "session-running" {
+		t.Fatalf("selector resp = %#v", selectorResp)
+	}
+	projects.runs = nil
+	if _, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
+		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSessionSelector{ProjectId: "project-1", AgentName: "worker"}},
+		Command: &agentcomposev2.ExecCommand{Command: "echo"},
+	}, "exec-missing", nil); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("expected no running session selector error, got %v", err)
+	}
+	projects.runs = []domain.ProjectRunRecord{
+		{RunID: "run-stopped", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", SessionID: "session-stopped"},
+		{RunID: "run-nosession", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker"},
+	}
+	if _, err := handler.Exec(ctx, connect.NewRequest(&agentcomposev2.ExecRequest{
+		Target:  &agentcomposev2.ExecRequest_RunId{RunId: "run-nosession"},
+		Command: &agentcomposev2.ExecCommand{Command: "echo"},
+	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("expected no session run error, got %v", err)
+	}
+	if _, err := handler.Exec(ctx, connect.NewRequest(&agentcomposev2.ExecRequest{
+		Target:  &agentcomposev2.ExecRequest_RunId{RunId: "run-stopped"},
+		Command: &agentcomposev2.ExecCommand{Command: "echo"},
+	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("expected stopped run session error, got %v", err)
+	}
+	if _, err := handler.resolveProjectRef(ctx, &agentcomposev2.ProjectRef{Name: "Project"}); !errors.Is(err, domain.ErrAmbiguous) {
+		t.Fatalf("expected ambiguous project ref error, got %v", err)
+	}
+}
+
 func TestExecHandlerSelectorErrors(t *testing.T) {
 	handler := NewExecHandler(&appconfig.Config{}, &apiExecSessionStore{}, apiExecProjectStore{err: sql.ErrNoRows}, func(*domain.Session) (ExecRuntime, error) {
 		return &apiExecRuntime{}, nil
@@ -585,6 +687,70 @@ func (s apiExecProjectStore) ListProjects(context.Context, domain.ProjectListOpt
 
 func (s apiExecProjectStore) ListProjectSessionRuns(context.Context, domain.ProjectSessionRelationFilter) ([]domain.ProjectRunRecord, error) {
 	return nil, s.err
+}
+
+type apiExecWorkflowSessionStore struct {
+	sessions map[string]*domain.Session
+	vm       domain.VMState
+}
+
+func (s *apiExecWorkflowSessionStore) GetSession(_ context.Context, id string) (*domain.Session, error) {
+	session := s.sessions[id]
+	if session == nil {
+		return nil, sql.ErrNoRows
+	}
+	return session, nil
+}
+
+func (s *apiExecWorkflowSessionStore) GetVMState(string) (domain.VMState, error) {
+	return s.vm, nil
+}
+
+type apiExecWorkflowProjectStore struct {
+	projects []domain.ProjectRecord
+	runs     []domain.ProjectRunRecord
+}
+
+func (s *apiExecWorkflowProjectStore) GetProject(_ context.Context, id string) (domain.ProjectRecord, error) {
+	for _, project := range s.projects {
+		if project.ID == id {
+			return project, nil
+		}
+	}
+	return domain.ProjectRecord{}, sql.ErrNoRows
+}
+
+func (s *apiExecWorkflowProjectStore) GetProjectRun(_ context.Context, id string) (domain.ProjectRunRecord, error) {
+	for _, run := range s.runs {
+		if run.RunID == id {
+			return run, nil
+		}
+	}
+	return domain.ProjectRunRecord{}, sql.ErrNoRows
+}
+
+func (s *apiExecWorkflowProjectStore) ListProjects(_ context.Context, options domain.ProjectListOptions) (domain.ProjectListResult, error) {
+	var projects []domain.ProjectRecord
+	for _, project := range s.projects {
+		if options.Query == "" || strings.Contains(project.Name, options.Query) {
+			projects = append(projects, project)
+		}
+	}
+	return domain.ProjectListResult{Projects: projects, TotalCount: len(projects)}, nil
+}
+
+func (s *apiExecWorkflowProjectStore) ListProjectSessionRuns(_ context.Context, filter domain.ProjectSessionRelationFilter) ([]domain.ProjectRunRecord, error) {
+	var runs []domain.ProjectRunRecord
+	for _, run := range s.runs {
+		if filter.ProjectID != "" && run.ProjectID != filter.ProjectID {
+			continue
+		}
+		if filter.AgentName != "" && run.AgentName != filter.AgentName {
+			continue
+		}
+		runs = append(runs, run)
+	}
+	return runs, nil
 }
 
 type apiExecRuntime struct {

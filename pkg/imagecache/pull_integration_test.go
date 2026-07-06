@@ -109,6 +109,10 @@ func TestIntegrationPullFromLocalRegistryWritesOCILayoutAndMetadata(t *testing.T
 	}
 }
 
+func TestE2EPullFromLocalRegistryWritesOCILayoutAndMetadata(t *testing.T) {
+	TestIntegrationPullFromLocalRegistryWritesOCILayoutAndMetadata(t)
+}
+
 func TestIntegrationPullMissingPlatformDoesNotUpdateMetadata(t *testing.T) {
 	ctx := context.Background()
 	server := httptest.NewServer(registry.New())
@@ -152,6 +156,10 @@ func TestIntegrationPullMissingPlatformDoesNotUpdateMetadata(t *testing.T) {
 	if len(metadata.Images) != 0 {
 		t.Fatalf("metadata was updated after failed pull: %#v", metadata.Images)
 	}
+}
+
+func TestE2EPullMissingPlatformDoesNotUpdateMetadata(t *testing.T) {
+	TestIntegrationPullMissingPlatformDoesNotUpdateMetadata(t)
 }
 
 func newPullTestCache(t *testing.T, insecureRegistry string) *Cache {

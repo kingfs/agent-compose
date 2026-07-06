@@ -94,6 +94,10 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 	}
 }
 
+func TestE2ERuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
+	TestRuntimeConfigAndEnvHelperWorkflows(t)
+}
+
 func TestClientConfigAndSelectionWorkflows(t *testing.T) {
 	ctx := context.Background()
 	store := llmCoverageEnvStore{items: []domain.SessionEnvVar{{Name: "LLM_API_ENDPOINT", Value: "https://example.test"}, {Name: "LLM_API_PROTOCOL", Value: "chat"}}}
@@ -123,6 +127,10 @@ func TestClientConfigAndSelectionWorkflows(t *testing.T) {
 	if priority := ProviderSelectionPriority(ProviderScopeSessionEnv); priority != 2 {
 		t.Fatalf("session env priority = %d", priority)
 	}
+}
+
+func TestE2EClientConfigAndSelectionWorkflows(t *testing.T) {
+	TestClientConfigAndSelectionWorkflows(t)
 }
 
 type llmCoverageEnvStore struct {

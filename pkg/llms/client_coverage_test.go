@@ -95,3 +95,7 @@ func TestGenerateResponsesAndChatCompletionsWorkflows(t *testing.T) {
 		}
 	})
 }
+
+func TestE2EGenerateResponsesAndChatCompletionsWorkflows(t *testing.T) {
+	TestGenerateResponsesAndChatCompletionsWorkflows(t)
+}
