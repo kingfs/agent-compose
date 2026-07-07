@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     flex \
     gperf \
     git \
+    libbz2-dev \
     libcap-dev \
     libclang-dev \
     libelf-dev \
@@ -77,6 +78,7 @@ done
 
 cd /tmp/boxlite-src
 sed -i 's/\.args(\["-fsSL", "-o", dest.to_str().unwrap(), url\])/.args(["--http1.1", "--retry", "5", "--retry-all-errors", "--retry-delay", "2", "-fsSL", "-o", dest.to_str().unwrap(), url])/' src/deps/libkrun-sys/build.rs
+sed -i 's/-C link-arg=-Wl,--allow-multiple-definition"/-C link-arg=-Wl,--allow-multiple-definition -C link-arg=-lbz2"/' scripts/build/build-shim.sh
 for attempt in 1 2 3 4 5; do
   (cd src/deps/libgvproxy-sys/gvproxy-bridge && go mod download) && break
   if [ "$attempt" = 5 ]; then
