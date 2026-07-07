@@ -10,8 +10,6 @@ FROM scratch AS microsandbox-local
 COPY build/microsandbox /out
 
 FROM ${REGISTRY_MIRROR}/library/debian:bookworm AS go-build
-ARG VERSION=0
-ARG TARGETARCH
 ARG GOPROXY
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
@@ -34,6 +32,8 @@ COPY cmd ./cmd
 COPY pkg ./pkg
 COPY assets ./assets
 COPY proto ./proto
+ARG VERSION=0
+ARG TARGETARCH
 RUN target_arch="${TARGETARCH:-$(dpkg --print-architecture)}" && CGO_ENABLED=1 GOOS=linux GOARCH=${target_arch} go build -ldflags "-X agent-compose/pkg/config.BuildVersion=${VERSION}" -tags 'netgo,osusergo,boxlitecgo' -o /out/agent-compose ./cmd/agent-compose
 
 FROM scratch AS agent-compose-artifact

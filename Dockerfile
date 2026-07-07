@@ -42,8 +42,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 RUN set -e;     target_arch="${TARGETARCH:-$(dpkg --print-architecture)}";     case "${target_arch}" in       amd64) MICROSANDBOX_ARCH=x86_64 ;;       arm64) MICROSANDBOX_ARCH=aarch64 ;;       *) echo "unsupported Microsandbox target arch: ${target_arch}" >&2; exit 1 ;;     esac;     base="https://github.com/superradcompany/microsandbox/releases/download/${MICROSANDBOX_VERSION}";     mkdir -p /tmp/microsandbox/extract /out/bin /out/lib;     cd /tmp/microsandbox;     curl --http1.1 --retry 5 --retry-all-errors --retry-delay 2 -fsSL -O "${base}/microsandbox-linux-${MICROSANDBOX_ARCH}.tar.gz";     curl --http1.1 --retry 5 --retry-all-errors --retry-delay 2 -fsSL -O "${base}/agentd-${MICROSANDBOX_ARCH}";     curl --http1.1 --retry 5 --retry-all-errors --retry-delay 2 -fsSL -O "${base}/libmicrosandbox_go_ffi-linux-${target_arch}.so";     curl --http1.1 --retry 5 --retry-all-errors --retry-delay 2 -fsSL -O "${base}/checksums.sha256";     sha256sum -c --ignore-missing checksums.sha256;     tar -xzf "microsandbox-linux-${MICROSANDBOX_ARCH}.tar.gz" -C /tmp/microsandbox/extract;     install -m755 /tmp/microsandbox/extract/msb /out/bin/msb;     install -m755 "agentd-${MICROSANDBOX_ARCH}" /out/bin/agentd;     krunfw="$(find /tmp/microsandbox/extract -maxdepth 1 -type f -name 'libkrunfw.so.*' | sort | tail -n 1)";     test -n "${krunfw}";     krunfw_name="$(basename "${krunfw}")";     install -m644 "${krunfw}" "/out/lib/${krunfw_name}";     ln -sf "${krunfw_name}" /out/lib/libkrunfw.so.5;     ln -sf libkrunfw.so.5 /out/lib/libkrunfw.so;     install -m644 "libmicrosandbox_go_ffi-linux-${target_arch}.so" /out/lib/libmicrosandbox_go_ffi.so;     strip --strip-unneeded /out/lib/libmicrosandbox_go_ffi.so 2>/dev/null || true
 
 FROM ${REGISTRY_MIRROR}/library/debian:bookworm AS go-build
-ARG VERSION=0
-ARG TARGETARCH
 ARG GOPROXY
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
@@ -66,6 +64,8 @@ COPY cmd ./cmd
 COPY pkg ./pkg
 COPY assets ./assets
 COPY proto ./proto
+ARG VERSION=0
+ARG TARGETARCH
 RUN target_arch="${TARGETARCH:-$(dpkg --print-architecture)}" && CGO_ENABLED=1 GOOS=linux GOARCH=${target_arch} go build -ldflags "-X agent-compose/pkg/config.BuildVersion=${VERSION}" -tags 'netgo,osusergo,boxlitecgo' -o /out/agent-compose ./cmd/agent-compose
 
 FROM scratch AS agent-compose-artifact
