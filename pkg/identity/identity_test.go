@@ -37,7 +37,7 @@ func TestNewRandomID(t *testing.T) {
 func TestIDValidationRejectsInvalidForms(t *testing.T) {
 	for _, value := range []string{
 		"",
-		"project-demo-123456789abc",
+		"not-a-sha256-identity",
 		"sha256:123",
 		"sha256:" + strings.Repeat("g", 64),
 		"SHA256:" + strings.Repeat("a", 64),
