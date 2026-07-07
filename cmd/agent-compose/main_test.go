@@ -2183,6 +2183,11 @@ agents:
 			want: "cannot be combined with --json",
 		},
 		{
+			name: "tty without interactive",
+			args: []string{"run", "--file", composePath, "reviewer", "-t", "--command", "bash"},
+			want: "run -t/--tty requires -i/--interactive",
+		},
+		{
 			name: "prompt and command",
 			args: []string{"run", "--file", composePath, "reviewer", "-i", "--prompt", "--command"},
 			want: "requires exactly one of --prompt or --command",
@@ -2202,6 +2207,14 @@ agents:
 				t.Fatalf("run -i stdout/stderr = %q / %q, want %q", stdout, stderr, tc.want)
 			}
 		})
+	}
+
+	stdout, stderr, _, exitCode := executeCLICommand("run", "--file", composePath, "reviewer", "-it", "--command", "bash")
+	if exitCode != exitCodeUnsupported {
+		t.Fatalf("run -it exit code = %d, want %d; stderr=%q", exitCode, exitCodeUnsupported, stderr)
+	}
+	if stdout != "" || !strings.Contains(stderr, "bidirectional command streaming") {
+		t.Fatalf("run -it stdout/stderr = %q / %q", stdout, stderr)
 	}
 }
 
@@ -3790,8 +3803,32 @@ func TestCLIExecInteractiveReservedUnsupported(t *testing.T) {
 	if exitCode != exitCodeUnsupported {
 		t.Fatalf("exec -i exit code = %d, want %d; stderr=%q", exitCode, exitCodeUnsupported, stderr)
 	}
-	if stdout != "" || !strings.Contains(stderr, "exec -i/--interactive is not supported") {
+	if stdout != "" || !strings.Contains(stderr, "bidirectional exec streaming") {
 		t.Fatalf("exec -i stdout/stderr = %q / %q", stdout, stderr)
+	}
+
+	stdout, stderr, _, exitCode = executeCLICommand("exec", "sandbox-1", "-t")
+	if exitCode != exitCodeUsage {
+		t.Fatalf("exec -t exit code = %d, want %d; stderr=%q", exitCode, exitCodeUsage, stderr)
+	}
+	if stdout != "" || !strings.Contains(stderr, "exec -t/--tty requires -i/--interactive") {
+		t.Fatalf("exec -t stdout/stderr = %q / %q", stdout, stderr)
+	}
+
+	stdout, stderr, _, exitCode = executeCLICommand("exec", "sandbox-1", "-it")
+	if exitCode != exitCodeUnsupported {
+		t.Fatalf("exec -it exit code = %d, want %d; stderr=%q", exitCode, exitCodeUnsupported, stderr)
+	}
+	if stdout != "" || !strings.Contains(stderr, "bidirectional exec streaming") {
+		t.Fatalf("exec -it stdout/stderr = %q / %q", stdout, stderr)
+	}
+
+	stdout, stderr, _, exitCode = executeCLICommand("exec", "sandbox-1", "-i", "--json")
+	if exitCode != exitCodeUsage {
+		t.Fatalf("exec -i --json exit code = %d, want %d; stderr=%q", exitCode, exitCodeUsage, stderr)
+	}
+	if stdout != "" || !strings.Contains(stderr, "exec -i/--interactive cannot be combined with --json") {
+		t.Fatalf("exec -i --json stdout/stderr = %q / %q", stdout, stderr)
 	}
 }
 

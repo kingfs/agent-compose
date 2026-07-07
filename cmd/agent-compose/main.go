@@ -491,7 +491,8 @@ func newRootCommand(out, errOut io.Writer, runDaemon daemonRunner) *cobra.Comman
 	runCmd.Flags().BoolVar(&runOptions.Jupyter, "jupyter", false, "Enable Jupyter for this run")
 	runCmd.Flags().BoolVar(&runOptions.JupyterExpose, "jupyter-expose", false, "Mark the Jupyter proxy endpoint for this run as user-accessible")
 	runCmd.Flags().BoolVarP(&runOptions.Detach, "detach", "d", false, "Start the run in the daemon and return immediately")
-	runCmd.Flags().BoolVarP(&runOptions.Interactive, "interactive", "i", false, "Reserved for future interactive runs")
+	runCmd.Flags().BoolVarP(&runOptions.Interactive, "interactive", "i", false, "Read repeated prompts or commands from stdin")
+	runCmd.Flags().BoolVarP(&runOptions.TTY, "tty", "t", false, "Allocate a pseudo-TTY for an interactive command run")
 	runCmd.Flags().Lookup("prompt").NoOptDefVal = optionalRunModeFlagNoValue
 	runCmd.Flags().Lookup("command").NoOptDefVal = optionalRunModeFlagNoValue
 	hideOptionalFlagNoValueInUsage(runCmd, "prompt", "command")
@@ -682,7 +683,8 @@ func newRootCommand(out, errOut io.Writer, runDaemon daemonRunner) *cobra.Comman
 	// Deprecated: use `agent-compose exec <sandbox>` instead.
 	execCmd.Flags().StringVar(&execOptions.RunID, "run-id", "", "Deprecated target selection by run; use exec <sandbox>")
 	execCmd.Flags().StringVar(&execOptions.Command, "command", "", "Shell command to execute in the sandbox")
-	execCmd.Flags().BoolVarP(&execOptions.Interactive, "interactive", "i", false, "Reserved for future interactive exec")
+	execCmd.Flags().BoolVarP(&execOptions.Interactive, "interactive", "i", false, "Attach stdin for interactive exec")
+	execCmd.Flags().BoolVarP(&execOptions.TTY, "tty", "t", false, "Allocate a pseudo-TTY for interactive exec")
 	execCmd.Flags().StringVar(&execOptions.Cwd, "cwd", "", "Guest working directory")
 
 	imageListOptions := composeImageListOptions{}
@@ -900,6 +902,7 @@ type composeRunOptions struct {
 	JupyterExpose bool
 	Detach        bool
 	Interactive   bool
+	TTY           bool
 }
 
 type composeSchedulerTriggerOptions struct {
@@ -934,6 +937,7 @@ type composeExecOptions struct {
 	Command     string
 	Cwd         string
 	Interactive bool
+	TTY         bool
 }
 
 type composeSandboxActionOutput struct {
@@ -1577,6 +1581,12 @@ func runComposeRunCommand(cmd *cobra.Command, cli cliOptions, options composeRun
 	}
 	if len(args) == 0 {
 		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("run requires an agent")}
+	}
+	if normalizedOptions.TTY && !normalizedOptions.Interactive {
+		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("run -t/--tty requires -i/--interactive")}
+	}
+	if normalizedOptions.Interactive && normalizedOptions.TTY {
+		return commandExitError{Code: exitCodeUnsupported, Err: fmt.Errorf("run -i/--interactive and -t/--tty require bidirectional command streaming and are not supported yet")}
 	}
 	if normalizedOptions.Detach && normalizedOptions.Interactive {
 		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("run -d/--detach cannot be combined with -i/--interactive")}
@@ -2388,8 +2398,14 @@ func runComposePSCommand(cmd *cobra.Command, cli cliOptions, options composePSOp
 }
 
 func runComposeExecCommand(cmd *cobra.Command, cli cliOptions, options composeExecOptions, args []string) error {
+	if options.TTY && !options.Interactive {
+		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("exec -t/--tty requires -i/--interactive")}
+	}
+	if options.Interactive && cli.JSON {
+		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("exec -i/--interactive cannot be combined with --json")}
+	}
 	if options.Interactive {
-		return commandExitError{Code: exitCodeUnsupported, Err: fmt.Errorf("exec -i/--interactive is not supported")}
+		return commandExitError{Code: exitCodeUnsupported, Err: fmt.Errorf("exec -i/--interactive and -t/--tty require bidirectional exec streaming and are not supported yet")}
 	}
 	_, normalized, projectID, err := resolveComposeProject(cli)
 	if err != nil {
