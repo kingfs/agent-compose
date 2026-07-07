@@ -63,6 +63,7 @@ type HostProjectAgentRequest struct {
 	TriggerID        string
 	OutputSchemaJSON string
 	ClientRequestID  string
+	Volumes          []domain.VolumeMountSpec
 }
 
 type HostProjectAgentRunner interface {
@@ -263,6 +264,7 @@ func (h *RuntimeHost) ProjectAgent(ctx context.Context, prompt string, request d
 		TriggerID:        h.run.TriggerID,
 		OutputSchemaJSON: request.OutputSchema,
 		ClientRequestID:  firstHostNonEmpty(h.run.ID, uuid.NewString()),
+		Volumes:          request.Volumes,
 	})
 	if err != nil {
 		return domain.LoaderAgentResult{}, err
@@ -297,6 +299,7 @@ func (h *RuntimeHost) Command(ctx context.Context, request domain.LoaderCommandR
 		WorkspaceID:    request.WorkspaceID,
 		JupyterEnabled: request.JupyterEnabled,
 		SessionEnv:     request.SessionEnv,
+		Volumes:        request.Volumes,
 	}
 	session, eventType, err := h.ensureCommandSession(ctx, agentRequest, cleanupSession)
 	if err != nil {
@@ -471,7 +474,8 @@ func AgentRequestOverridesSession(request domain.LoaderAgentRequest, includeTitl
 		strings.TrimSpace(request.Driver) != "" ||
 		strings.TrimSpace(request.GuestImage) != "" ||
 		strings.TrimSpace(request.WorkspaceID) != "" ||
-		len(domain.NormalizeEnvItems(request.SessionEnv)) > 0
+		len(domain.NormalizeEnvItems(request.SessionEnv)) > 0 ||
+		len(request.Volumes) > 0
 }
 
 func firstHostNonEmpty(values ...string) string {
