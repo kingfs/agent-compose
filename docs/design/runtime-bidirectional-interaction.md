@@ -10,7 +10,7 @@
 - notebook cell
 - loader script 中的 `scheduler.exec` / `scheduler.shell`
 - loader script 中的 `scheduler.agent`
-- runtime 内 agent/loader 访问 daemon LLM facade
+- runtime 内 agent 访问 daemon LLM facade
 - workspace 文件上传下载、session RPC、run log/cell stream/session watch
 
 这些链路的输入/输出模式并不一致。`exec`、`run --command`、loader command 会先把结构化请求写成 `command-request.json`，再在 guest 中执行 `agent-compose-runtime exec --request-file ...`。agent prompt 会把 prompt/schema/system prompt 写成文件，再执行 `agent-compose-runtime prompt --message-file ...`。cell 会把 source 写成脚本文件，再直接执行解释器。输出则主要依赖 `ExecStream`、`RunAgentStream`、`ExecuteCellStream`、`WatchSession`、`FollowRunLogs` 这类 server-stream 或文件 tail。
@@ -18,6 +18,8 @@
 这种模式已经能支撑批处理式执行，但它把 daemon 到 runtime 的交互固定成“一次性启动参数 + 单向输出流”。当我们要支持 `run/exec -i/-t`、统一 loader command、减少 `request.json` 文件协议、支持 runtime wrapper 与 daemon 更直接地交换结构化事件时，现有边界会变得分散且难以扩展。
 
 本文从全局视角重新设计 daemon 与 runtime 之间的统一双向流协议。目标不是只为 CLI `-it` 增加一个特例，而是收敛 runtime 执行面的输入/输出交互模型。
+
+这里的“统一”指 daemon 内部看到统一的 `RuntimeInteraction` 语义，不要求所有 driver 都用完全相同的底层 transport。Docker hijack、Microsandbox event stream、BoxLite stream、guest wrapper framed protocol 可以是不同 transport，但都必须被 adapter 归一成同一组 start/stdin/stdout/stderr/resize/signal/result/artifact 事件。否则只是新增另一条特例链路，不能解决当前执行面分散的问题。
 
 ## 目标
 
@@ -296,6 +298,24 @@ guest process or guest runtime wrapper
 3. artifact 仍落盘，但 artifact 不再是控制协议的唯一载体。
 4. request/result 从“必须通过文件交换”变为“stream 首包/尾包为准，文件是审计副本”。
 
+## 合理性与边界判断
+
+统一双向流的收益主要来自“生命周期内交互”的一致性，而不是把所有 IO 都搬进一个管道。判断某条链路是否应该合并，使用以下标准：
+
+1. 是否需要在同一个 runtime operation 生命周期内持续交换输入、输出、控制事件或结构化结果。
+2. 是否需要 daemon 统一处理 timeout、cancel、artifact、stdout/stderr、exit code、capability unsupported。
+3. 是否以 runtime 内进程或 runtime wrapper 为执行主体。
+4. 是否会因继续使用文件协议导致 EOF、resize、result、event、artifact mirror 语义不清。
+
+满足这些条件的链路，例如 command、cell、agent prompt 的 daemon-runtime 部分，适合迁移。反之，workspace 大文件、daemon 内 session RPC、loader state/event/topic、runtime LLM facade HTTP/SSE 不应强行合并。它们不是同一个进程生命周期内的 stdin/stdout/control 交互，迁移后只会把协议变复杂。
+
+因此本设计的边界是：
+
+- runtime operation control plane 统一。
+- runtime bulk data plane 不统一。
+- client-facing watch/tail API 不强制统一。
+- daemon 内部 host capability 不强制统一。
+
 ## 协议分层
 
 建议分三层，而不是为每个入口做一套 RPC。
@@ -361,6 +381,13 @@ daemon 到 runtime 的执行可以有两种实现方式：
 
 长期目标是让 driver 只负责建立字节通道，operation 语义尽量由 `agent-compose-runtime` wrapper 处理。
 
+这里需要避免一个潜在矛盾：文档同时提出 driver-native stream 和 guest wrapper stream，看起来像两套协议。实际设计应要求二者在 daemon adapter 以上表现为同一 `RuntimeInteraction`：
+
+- driver-native stream 由 adapter 把 Docker/Microsandbox/BoxLite 的 native stdout/stderr/exit/resize API 翻译成 `RuntimeOutputFrame`。
+- guest wrapper stream 由 wrapper 直接读写 framed protocol，adapter 只负责搬运 frame。
+- 上层 controller、loader、cell、agent runner 不感知底层 transport 差异。
+- transport 选择只能由 capability 和 operation kind 决定，不能让业务层散落 `if docker && tty` 这类判断。
+
 ## 建议的 daemon-runtime 事件协议
 
 建议新增一个 framed protocol，可以承载在：
@@ -372,9 +399,16 @@ daemon 到 runtime 的执行可以有两种实现方式：
 事件 envelope：
 
 ```proto
+enum RuntimeFrameDirection {
+  RUNTIME_FRAME_DIRECTION_UNSPECIFIED = 0;
+  RUNTIME_FRAME_DIRECTION_DAEMON_TO_RUNTIME = 1;
+  RUNTIME_FRAME_DIRECTION_RUNTIME_TO_DAEMON = 2;
+}
+
 message RuntimeStreamFrame {
   string stream_id = 1;
   uint64 seq = 2;
+  RuntimeFrameDirection direction = 3;
   oneof frame {
     RuntimeStart start = 10;
     RuntimeStdin stdin = 11;
@@ -402,6 +436,7 @@ message RuntimeStart {
   repeated EnvVar env = 4;
   RuntimeIOOptions io = 5;
   RuntimeArtifactOptions artifacts = 6;
+  RuntimeProtocolOptions protocol = 7;
   oneof spec {
     CommandSpec command = 20;
     ShellSpec shell = 21;
@@ -417,6 +452,12 @@ message RuntimeIOOptions {
   uint32 cols = 4;
   int64 timeout_ms = 5;
   int64 max_output_bytes = 6;
+}
+
+message RuntimeProtocolOptions {
+  uint32 version = 1;
+  repeated string required_features = 2;
+  repeated string optional_features = 3;
 }
 ```
 
@@ -486,14 +527,64 @@ message RuntimeResult {
 协议规则：
 
 1. 第一帧必须是 `start`。
-2. `tty=true` 必须满足 `attach_stdin=true`，除非未来明确支持只读 TTY。
-3. `tty=true` 时 runtime 主要发送 `stdout`，stderr 由 PTY 合流。
-4. `attach_stdin=false` 时 runtime 必须关闭子进程 stdin；等待 stdin 的程序应按 EOF 行为退出或继续但不可卡在 daemon 持有的空管道上。
-5. `stdin_eof` 表示 daemon 不再发送 stdin。
-6. `signal` 可表达 SIGINT/SIGTERM/KILL，driver 不支持时返回 structured error。
-7. `resize` 只对 TTY operation 有效。
-8. `result` 是 operation 的最终结果。`result` 后只能发送 heartbeat/transport close，不应再发送 stdout/stderr。
-9. artifact 可 inline 小数据；大文件只发路径和 metadata。
+2. `start` 只能由 daemon 发往 runtime。
+3. `stdin`、`stdin_eof`、`signal`、`resize` 只能由 daemon 发往 runtime。
+4. `stdout`、`stderr`、`event`、`artifact`、`result`、`error` 只能由 runtime 发往 daemon。
+5. `tty=true` 必须满足 `attach_stdin=true`，除非未来明确支持只读 TTY。
+6. `tty=true` 时 runtime 主要发送 `stdout`，stderr 由 PTY 合流。
+7. `attach_stdin=false` 时 runtime 必须关闭子进程 stdin；等待 stdin 的程序应按 EOF 行为退出或继续但不可卡在 daemon 持有的空管道上。
+8. `stdin_eof` 表示 daemon 不再发送 stdin。runtime 收到后必须关闭子进程 stdin，而不是只停止读 frame。
+9. `signal` 可表达 SIGINT/SIGTERM/KILL，driver 不支持时返回 structured error。
+10. `resize` 只对 TTY operation 有效。
+11. `result` 是 operation 的最终结果。`result` 后只能发送 heartbeat/transport close，不应再发送 stdout/stderr。
+12. artifact 可 inline 小数据；大文件只发路径和 metadata。
+13. `seq` 在每个方向单调递增，用于日志定位和测试断言；第一阶段不要求重传。
+14. `version` 不匹配或缺少 required feature 时，runtime 必须在启动目标进程前返回 `RuntimeError`。
+15. optional feature 不支持时可以忽略，但 runtime 应通过 `RuntimeEvent` 汇报实际启用能力，便于 daemon 记录和调试。
+
+## 生命周期状态机
+
+为了避免不同入口各自解释 stream，需要显式定义状态机：
+
+```text
+Created
+  -> Started          daemon sends start
+  -> Running          runtime acknowledges by first stdout/stderr/event or started event
+  -> StdinClosed      daemon sends stdin_eof or attach_stdin=false
+  -> Terminating      daemon sends signal/cancel or context deadline
+  -> Completed        runtime sends result(success or non-zero exit)
+  -> Failed           runtime sends error or transport fails before result
+  -> Closed           transport closed and daemon has persisted projection
+```
+
+状态规则：
+
+- `Completed` 是业务完成，必须有 `RuntimeResult`。
+- `Failed` 是协议、transport、wrapper 或 driver 失败，可以没有 `RuntimeResult`，daemon 需要用已收集 stdout/stderr 合成失败结果。
+- `context cancel` 必须转成 runtime cancel，并关闭 stdin/attach connection。
+- client disconnect 不等同于 operation 成功；对于 foreground interactive operation 应 cancel runtime，对于 detached/background operation 应由入口策略决定是否继续。
+- timeout 属于 daemon 控制事件，优先发送 SIGTERM，宽限期后 SIGKILL 或 driver 等价操作。
+
+这个状态机是闭环关键：每个 operation 必须最终落到 `Completed` 或 `Failed`，并被 daemon 投影成现有 run/cell/exec/loader 的结果与 artifact。
+
+## 外层投影闭环
+
+统一 daemon-runtime stream 后，daemon 仍要负责把 runtime frame 投影到现有业务模型：
+
+| Runtime frame | exec | run --command | cell | loader command | agent prompt |
+| --- | --- | --- | --- | --- | --- |
+| stdout/stderr | ExecStream chunk、transcript | RunAgentStream chunk、run log | cell output、session stream | cell output、loader result capture | agent run transcript |
+| event | ExecStream transcript event 或内部日志 | run event/log | session event | loader event | agent event |
+| artifact | exec artifact | run artifact | cell artifact | loader command artifact | prompt/result artifact |
+| result | ExecResult | ProjectRun transition | NotebookCell final state | LoaderCommandResult | AgentRunResult |
+| error | failed ExecResult | failed run transition | failed cell | failed LoaderCommandResult | failed AgentRunResult |
+
+闭环要求：
+
+- runtime frame 是事实来源。
+- 现有 artifact 文件是 projection，不再是唯一事实来源。
+- projection 必须幂等，避免 stream retry 或 daemon crash recovery 时重复写坏状态。
+- TTY operation 的 stdout/stderr projection 必须标记 `tty=true`，不能假装 stderr 可可靠拆分。
 
 ## 迁移策略
 
@@ -519,6 +610,8 @@ driver adapter 增加：
 
 旧 `ExecStream` 先保留，并可由 `RunInteraction` 包一层实现，或继续并行存在。
 
+第一阶段还必须补一个底层能力：当前 `ExecStream` 只有 stdout/stderr 回调，没有 daemon -> runtime 输入方向。即使先不暴露外部 `-it`，wrapper stream 也需要 driver 能启动 wrapper 后写 stdin、读 stdout/stderr、关闭 stdin、取消进程。因此 contract 不能只新增高层 `RunInteraction`，还要在 driver adapter 中定义“可双向附着进程”的最小能力，或由各 driver 直接实现 `RunInteraction`。
+
 ### 阶段 2：迁移 command request
 
 优先迁移：
@@ -538,6 +631,13 @@ driver adapter 增加：
 - daemon 可保存 `runtime-start.json`。
 - runtime 可保存 normalized request。
 - result 通过 stream `RuntimeResult` 返回，同时写 `command-result.json` 作为审计副本。
+
+兼容策略：
+
+- 第一阶段保留 `command-request.json` 文件名，内容从 `RuntimeStart` mirror 生成。
+- 新增 `runtime-start.json` 只能作为补充，不能立即替换旧文件名。
+- `ParseCommandExecResult` 这类旧解析逻辑应逐步下沉到 projection 层，不能继续依赖 stdout 中的特殊 payload。
+- daemon crash recovery 可以优先读取 artifact 中的 `command-result.json`，但正常在线路径以 stream result 为准。
 
 ### 阶段 3：迁移 agent prompt
 
@@ -604,6 +704,8 @@ Docker 映射：
 - artifact/result 需要 daemon 自己收集。
 - agent/cell 等复杂 operation 不适合直接走 native command。
 
+driver-native 虽然不经过 guest wrapper framed protocol，但仍必须返回 `RuntimeInteraction` frame。也就是说 native path 不是“绕过统一协议”，而是由 adapter 负责把 native IO 翻译成统一 frame。否则 `exec -it` 会再次变成一条孤立链路。
+
 ### Guest wrapper stream
 
 适用：
@@ -621,6 +723,14 @@ agent-compose-runtime session --protocol runtime-stream-v1
 ```
 
 然后通过 stdin/stdout 交换 framed frame。stderr 可保留为 wrapper diagnostic，或也纳入 frame。
+
+这里必须固定 stdio 约定，否则很容易与现有 stdout/stderr 捕获冲突：
+
+- wrapper stdout 只输出 framed protocol，不允许混入人类可读日志。
+- wrapper stdin 只接收 framed protocol。
+- wrapper stderr 可以作为 wrapper diagnostic，但 daemon 必须把它作为 transport diagnostic，而不是目标进程 stderr。
+- 目标进程 stdout/stderr 必须被 wrapper 封装成 `RuntimeStdout` / `RuntimeStderr` frame。
+- 如果 wrapper 自身崩溃且只留下 stderr diagnostic，daemon 应生成 `RuntimeError` 并合成失败 result。
 
 优点：
 
@@ -705,6 +815,12 @@ loader script API 不直接暴露 `-i/-t`，但 `scheduler.exec/shell` 可以在
 
 旧 server-stream API 应继续保留，直到 UI/CLI/SDK 完成迁移。
 
+外部 `--prompt -i` 的语义需要单独迁移决策。当前全局设计只要求 `--prompt -t` 互斥，不在协议层禁止 `--prompt -i`。如果 CLI 当前已有 `run -i` 逐行提交 prompt/command 的行为，后续改为“stdin attach”会破坏用户预期。因此：
+
+- `--command -i` 可以定义为 process stdin attach。
+- `--prompt -i` 应继续表示入口层读取 prompt，或明确改名/新增模式。
+- agent interactive session 应使用独立命令或显式 flag，不能偷换 `--prompt -i` 含义。
+
 ### runtime artifact 兼容性
 
 从 request file 转 stream 后，artifact 仍应保留：
@@ -736,6 +852,27 @@ Microsandbox 当前已有 event stream 形态，但是否支持 stdin/TTY/resize
 - capability 不足时返回 unsupported。
 - 不要静默降级成普通 `ExecStream`。
 - CLI 错误必须明确说明当前 driver 不支持哪项能力。
+
+建议 capability 用结构化矩阵表达，而不是若干 bool 零散判断：
+
+```go
+type RuntimeInteractionCapabilities struct {
+	WrapperStream bool
+	NativeExec    bool
+	Stdin         bool
+	StdinEOF      bool
+	TTY           bool
+	Resize        bool
+	Signal        bool
+	Artifacts     bool
+}
+```
+
+operation 选择 transport 时先做 capability resolution：
+
+- command non-TTY 优先 wrapper stream，缺失时可回退 native exec，但必须保证 result/artifact projection 等价。
+- command TTY 优先 native exec，缺失时只有 wrapper pty 能力完整才可使用 wrapper stream。
+- agent/cell 需要 wrapper stream；不能回退 native exec，除非 daemon 重新实现对应 wrapper 逻辑。
 
 ### 安全与资源
 
