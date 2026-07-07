@@ -250,13 +250,14 @@ func (s *Store) RemoveSession(_ context.Context, id string) error {
 	if err := validateSessionIDForRemove(id); err != nil {
 		return err
 	}
-	unlock := s.lockSession(id)
-	defer unlock()
-
 	path := s.sessionDir(id)
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("stat session dir %s: %w", id, err)
 	}
+
+	unlock := s.lockSession(id)
+	defer unlock()
+
 	if err := os.RemoveAll(path); err != nil {
 		return fmt.Errorf("remove session dir %s: %w", id, err)
 	}

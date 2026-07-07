@@ -62,12 +62,16 @@ func TestRemoveSessionRejectsUnsafeIDs(t *testing.T) {
 
 func TestRemoveSessionMissingDirectoryReturnsError(t *testing.T) {
 	store := newRemoveSessionTestStore(t)
-	err := store.RemoveSession(context.Background(), "missing-session")
+	sessionID := "missing-session"
+	err := store.RemoveSession(context.Background(), sessionID)
 	if err == nil {
 		t.Fatal("RemoveSession missing session returned nil error")
 	}
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("RemoveSession missing error = %v, want not exist", err)
+	}
+	if _, ok := store.sessionLocks.Load(sessionID); ok {
+		t.Fatalf("missing session created a lock entry")
 	}
 }
 
