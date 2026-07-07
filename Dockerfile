@@ -3,9 +3,10 @@ ARG GOPROXY=https://goproxy.cn,direct
 
 FROM ${REGISTRY_MIRROR}/library/golang:1-alpine AS golang-toolchain
 
-FROM ${REGISTRY_MIRROR}/library/debian:bookworm AS boxlite-build
+FROM ${REGISTRY_MIRROR}/library/rust:1.88-trixie AS boxlite-build
 ARG BOXLITE_VERSION=v0.9.7
 ARG TARGETARCH
+ARG GOPROXY
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ARG ALL_PROXY
@@ -15,9 +16,108 @@ ENV HTTPS_PROXY=${HTTPS_PROXY}
 ENV ALL_PROXY=${ALL_PROXY}
 ENV NO_PROXY=${NO_PROXY}
 ENV no_proxy=${NO_PROXY}
+ENV GOPROXY=${GOPROXY}
+COPY --from=golang-toolchain /usr/local/go /usr/local/go
+ENV RUSTUP_TOOLCHAIN=1.88.0
+ENV PATH=/usr/local/cargo/bin:/usr/local/go/bin:${PATH}
 RUN if [ -f /etc/apt/sources.list ]; then       sed -i -e 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list &&       sed -i -e 's|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list;     fi &&     if [ -f /etc/apt/sources.list.d/debian.sources ]; then       sed -i -e 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources &&       sed -i -e 's|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources;     fi
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl python3 tar &&     rm -rf /var/lib/apt/lists/*
-RUN set -e;     target_arch="${TARGETARCH:-$(dpkg --print-architecture)}";     case "${target_arch}" in       amd64) BOXLITE_ARCH=x64 ;;       arm64) BOXLITE_ARCH=arm64 ;;       *) echo "unsupported BoxLite target arch: ${target_arch}" >&2; exit 1 ;;     esac;     mkdir -p /tmp/boxlite/runtime /tmp/boxlite/sdk /out/include /out/lib /out/runtime &&     BOXLITE_RUNTIME_NAME=boxlite-runtime-${BOXLITE_VERSION}-linux-${BOXLITE_ARCH}-gnu.tar.gz &&     BOXLITE_C_NAME=boxlite-c-${BOXLITE_VERSION}-linux-${BOXLITE_ARCH}-gnu.tar.gz &&     curl --http1.1 --retry 5 --retry-all-errors --retry-delay 2 -fsSL -o /tmp/boxlite/${BOXLITE_RUNTIME_NAME} https://github.com/boxlite-ai/boxlite/releases/download/${BOXLITE_VERSION}/${BOXLITE_RUNTIME_NAME} &&     curl --http1.1 --retry 5 --retry-all-errors --retry-delay 2 -fsSL -o /tmp/boxlite/${BOXLITE_C_NAME} https://github.com/boxlite-ai/boxlite/releases/download/${BOXLITE_VERSION}/${BOXLITE_C_NAME} &&     tar -xzf /tmp/boxlite/${BOXLITE_RUNTIME_NAME} -C /tmp/boxlite/runtime &&     tar -xzf /tmp/boxlite/${BOXLITE_C_NAME} -C /tmp/boxlite/sdk &&     cp -a /tmp/boxlite/runtime/boxlite-runtime/. /out/runtime/ &&     cp /tmp/boxlite/sdk/*/include/boxlite.h /out/include/boxlite.h &&     cp -a /tmp/boxlite/sdk/*/lib/libboxlite.* /out/lib/
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    bc \
+    binutils \
+    bison \
+    build-essential \
+    ca-certificates \
+    cmake \
+    curl \
+    file \
+    flex \
+    gperf \
+    git \
+    libcap-dev \
+    libclang-dev \
+    libelf-dev \
+    libssl-dev \
+    llvm \
+    meson \
+    musl-tools \
+    ninja-build \
+    patchelf \
+    pkg-config \
+    protobuf-compiler \
+    python3 \
+    python3-pip \
+    python3-pyelftools \
+    python3-venv \
+    tar \
+    wget && \
+    rm -rf /var/lib/apt/lists/*
+RUN <<'EOF' bash
+set -euo pipefail
+
+target_arch="${TARGETARCH:-$(dpkg --print-architecture)}"
+case "${target_arch}" in
+  amd64) MUSL_ARCH=x86_64 ;;
+  arm64) MUSL_ARCH=aarch64 ;;
+  *) echo "unsupported BoxLite target arch: ${target_arch}" >&2; exit 1 ;;
+esac
+
+if ! command -v "${MUSL_ARCH}-linux-musl-gcc" >/dev/null 2>&1; then
+  ln -sf "$(command -v musl-gcc)" "/usr/local/bin/${MUSL_ARCH}-linux-musl-gcc"
+fi
+
+for attempt in 1 2 3 4 5; do
+  git -c http.version=HTTP/1.1 clone --branch "${BOXLITE_VERSION}" --depth 1 --recurse-submodules --shallow-submodules https://github.com/boxlite-ai/boxlite.git /tmp/boxlite-src && break
+  rm -rf /tmp/boxlite-src
+  if [ "$attempt" = 5 ]; then
+    exit 1
+  fi
+  sleep $((attempt * 5))
+done
+
+cd /tmp/boxlite-src
+sed -i 's/\.args(\["-fsSL", "-o", dest.to_str().unwrap(), url\])/.args(["--http1.1", "--retry", "5", "--retry-all-errors", "--retry-delay", "2", "-fsSL", "-o", dest.to_str().unwrap(), url])/' src/deps/libkrun-sys/build.rs
+for attempt in 1 2 3 4 5; do
+  (cd src/deps/libgvproxy-sys/gvproxy-bridge && go mod download) && break
+  if [ "$attempt" = 5 ]; then
+    exit 1
+  fi
+  sleep $((attempt * 5))
+done
+
+cargo build --release -p boxlite-c
+bash scripts/build/build-runtime.sh --profile release --dest-dir /out/runtime
+
+mkdir -p /out/include /out/lib
+cp sdks/c/include/boxlite.h /out/include/boxlite.h
+cp -a target/release/libboxlite.* /out/lib/
+
+file /out/runtime/boxlite-shim | tee /tmp/boxlite-shim.file
+if grep -q 'dynamically linked' /tmp/boxlite-shim.file; then
+  echo "invalid BoxLite shim build: expected static shim" >&2
+  exit 1
+fi
+
+cat >/tmp/agent-compose-dlopen-libkrunfw.c <<'C_EOF'
+#include <dlfcn.h>
+#include <stdio.h>
+int main(void) {
+  void *handle = dlopen("libkrunfw.so.5", RTLD_NOW | RTLD_LOCAL);
+  if (!handle) {
+    fprintf(stderr, "dlopen libkrunfw.so.5 failed: %s\n", dlerror());
+    return 1;
+  }
+  if (!dlsym(handle, "krunfw_get_kernel")) {
+    fprintf(stderr, "dlsym krunfw_get_kernel failed: %s\n", dlerror());
+    return 1;
+  }
+  return 0;
+}
+C_EOF
+
+gcc -O2 -static -o /tmp/agent-compose-dlopen-libkrunfw /tmp/agent-compose-dlopen-libkrunfw.c -ldl
+LD_LIBRARY_PATH=/out/runtime /tmp/agent-compose-dlopen-libkrunfw
+EOF
 
 # Fetch the prebuilt microsandbox artifacts for the target architecture. The Go
 # FFI library (libmicrosandbox_go_ffi) ships as a release asset, so there is no
