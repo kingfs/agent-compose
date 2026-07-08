@@ -32,6 +32,7 @@ import (
 	"agent-compose/pkg/sessions"
 	"agent-compose/pkg/storage/configstore"
 	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/volumes"
 	"agent-compose/pkg/workspaces"
 	"agent-compose/proto/agentcompose/v1/agentcomposev1connect"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
@@ -57,6 +58,7 @@ func RegisterDependencies(di do.Injector) {
 	do.Provide(di, NewCapabilityProvider)
 	do.Provide(di, NewImageBackends)
 	do.Provide(di, NewCacheController)
+	do.Provide(di, NewVolumeManager)
 	do.Provide(di, NewCapProxyServer)
 	do.Provide(di, loaders.NewBus)
 	do.Provide(di, sessions.NewStreamBroker)
@@ -157,6 +159,9 @@ func RegisterRoutes(di do.Injector) {
 	cacheHandler := api.NewCacheHandler(do.MustInvoke[*runtimecache.Controller](di))
 	path, handler = agentcomposev2connect.NewCacheServiceHandler(cacheHandler)
 	app.Any(path+"*", echo.WrapHandler(handler))
+	volumeHandler := api.NewVolumeHandler(do.MustInvoke[*volumes.Manager](di))
+	path, handler = agentcomposev2connect.NewVolumeServiceHandler(volumeHandler)
+	app.Any(path+"*", echo.WrapHandler(handler))
 	sandboxHandler := api.NewSandboxHandler(
 		do.MustInvoke[*adapters.SessionRPCBridge](di),
 		do.MustInvoke[*sessionstore.Store](di),
@@ -236,6 +241,14 @@ func NewCacheController(di do.Injector) (*runtimecache.Controller, error) {
 	return &runtimecache.Controller{Sources: sources}, nil
 }
 
+func NewVolumeManager(di do.Injector) (*volumes.Manager, error) {
+	config := do.MustInvoke[*appconfig.Config](di)
+	store := do.MustInvoke[*configstore.ConfigStore](di)
+	manager := volumes.NewManager(store, volumes.NewLocalDriver(config))
+	manager.Sessions = do.MustInvoke[*sessionstore.Store](di)
+	return manager, nil
+}
+
 func NewRuntimeProvider(di do.Injector) (adapters.RuntimeProvider, error) {
 	return adapters.NewRuntimeProvider(do.MustInvoke[*appconfig.Config](di))
 }
@@ -298,6 +311,7 @@ func NewLoaderSessionRunner(di do.Injector) (*adapters.LoaderSessionRunner, erro
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[*adapters.SessionDriver](di),
 		do.MustInvoke[capabilities.Provider](di),
+		do.MustInvoke[*volumes.Manager](di),
 		do.MustInvoke[*sessions.StreamBroker](di),
 		do.MustInvoke[*loaders.Bus](di),
 	), nil

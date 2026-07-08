@@ -1,6 +1,8 @@
 package driver
 
 import (
+	"fmt"
+
 	appconfig "agent-compose/pkg/config"
 	"encoding/json"
 	"os"
@@ -106,6 +108,246 @@ func TestPrepareRuntimeMountManifestForDockerIncludesRequiredMountsOnly(t *testi
 				t.Fatalf("manifest exposed forbidden host path %q", mount.HostPath)
 			}
 		}
+	}
+}
+
+func TestPrepareRuntimeMountManifestForDockerIncludesSessionVolumeMounts(t *testing.T) {
+	root := t.TempDir()
+	volumeSource := t.TempDir()
+	session := testRuntimeMountSession(root)
+	session.VolumeMounts = []SessionVolumeMount{{
+		ID:       "mount-cache",
+		Type:     "volume",
+		Source:   "cache",
+		Target:   "/cache",
+		ReadOnly: true,
+		VolumeID: "vol-cache",
+		Driver:   "local",
+		HostPath: volumeSource,
+	}}
+	manifest, err := prepareRuntimeMountManifest(testRuntimeMountConfig(), session, RuntimeDriverDocker)
+	if err != nil {
+		t.Fatalf("prepareRuntimeMountManifest returned error: %v", err)
+	}
+	var found bool
+	for _, mount := range manifest.Mounts {
+		if mount.GuestPath != "/cache" {
+			continue
+		}
+		found = true
+		if mount.HostPath != volumeSource || mount.Type != "bind" || !mount.ReadOnly {
+			t.Fatalf("volume mount = %+v", mount)
+		}
+	}
+	if !found {
+		t.Fatalf("manifest missing /cache volume mount: %+v", manifest.Mounts)
+	}
+}
+
+func TestPrepareRuntimeMountManifestForDockerPreservesVolumeMountEdges(t *testing.T) {
+	root := t.TempDir()
+	sharedSource := t.TempDir()
+	nestedSource := t.TempDir()
+	readonlySource := t.TempDir()
+	session := testRuntimeMountSession(root)
+	session.VolumeMounts = []SessionVolumeMount{
+		{
+			ID:       "mount-shared-a",
+			Type:     "volume",
+			Source:   "shared-cache",
+			Target:   "/mnt/shared-a",
+			VolumeID: "vol-shared",
+			Driver:   "local",
+			HostPath: sharedSource,
+		},
+		{
+			ID:       "mount-shared-b",
+			Type:     "volume",
+			Source:   "shared-cache",
+			Target:   "/mnt/shared-b",
+			VolumeID: "vol-shared",
+			Driver:   "local",
+			HostPath: sharedSource,
+		},
+		{
+			ID:       "mount-nested",
+			Type:     "volume",
+			Source:   "nested-cache",
+			Target:   "/mnt/nested/parent/child",
+			VolumeID: "vol-nested",
+			Driver:   "local",
+			HostPath: nestedSource,
+		},
+		{
+			ID:       "mount-readonly",
+			Type:     "volume",
+			Source:   "readonly-cache",
+			Target:   "/mnt/readonly",
+			ReadOnly: true,
+			VolumeID: "vol-readonly",
+			Driver:   "local",
+			HostPath: readonlySource,
+		},
+	}
+	manifest, err := prepareRuntimeMountManifest(testRuntimeMountConfig(), session, RuntimeDriverDocker)
+	if err != nil {
+		t.Fatalf("prepareRuntimeMountManifest returned error: %v", err)
+	}
+	got := map[string]RuntimeMount{}
+	for _, mount := range manifest.Mounts {
+		got[mount.GuestPath] = mount
+	}
+	for _, guestPath := range []string{"/mnt/shared-a", "/mnt/shared-b", "/mnt/nested/parent/child", "/mnt/readonly"} {
+		if got[guestPath].GuestPath == "" {
+			t.Fatalf("manifest missing volume target %s: %+v", guestPath, manifest.Mounts)
+		}
+	}
+	if got["/mnt/shared-a"].HostPath != sharedSource || got["/mnt/shared-b"].HostPath != sharedSource {
+		t.Fatalf("shared mounts = %+v %+v, want same host path %s", got["/mnt/shared-a"], got["/mnt/shared-b"], sharedSource)
+	}
+	if got["/mnt/shared-a"].ReadOnly || got["/mnt/shared-b"].ReadOnly {
+		t.Fatalf("shared mounts unexpectedly readonly: %+v %+v", got["/mnt/shared-a"], got["/mnt/shared-b"])
+	}
+	if got["/mnt/nested/parent/child"].HostPath != nestedSource || got["/mnt/nested/parent/child"].ReadOnly {
+		t.Fatalf("nested mount = %+v", got["/mnt/nested/parent/child"])
+	}
+	if got["/mnt/readonly"].HostPath != readonlySource || !got["/mnt/readonly"].ReadOnly {
+		t.Fatalf("readonly mount = %+v", got["/mnt/readonly"])
+	}
+}
+
+func TestPrepareRuntimeMountManifestForMicrosandboxIncludesSessionVolumeMounts(t *testing.T) {
+	root := t.TempDir()
+	volumeSource := t.TempDir()
+	session := testRuntimeMountSession(root)
+	session.VolumeMounts = []SessionVolumeMount{{
+		ID:       "mount-cache",
+		Type:     "bind",
+		Source:   "./cache",
+		Target:   "/cache",
+		HostPath: volumeSource,
+	}}
+	manifest, err := prepareRuntimeMountManifest(testRuntimeMountConfig(), session, RuntimeDriverMicrosandbox)
+	if err != nil {
+		t.Fatalf("prepareRuntimeMountManifest returned error: %v", err)
+	}
+	got := map[string]RuntimeMount{}
+	for _, mount := range manifest.Mounts {
+		got[mount.GuestPath] = mount
+	}
+	if got[directoryOnlyGuestSessionPath].HostPath != root {
+		t.Fatalf("microsandbox session mount = %+v", got[directoryOnlyGuestSessionPath])
+	}
+	if got["/cache"].HostPath != volumeSource || got["/cache"].ReadOnly {
+		t.Fatalf("microsandbox volume mount = %+v", got["/cache"])
+	}
+}
+
+func TestPrepareRuntimeMountManifestForBoxliteUsesVolumeBridge(t *testing.T) {
+	root := t.TempDir()
+	volumeSource := t.TempDir()
+	session := testRuntimeMountSession(root)
+	session.VolumeMounts = []SessionVolumeMount{{
+		ID:       "mount-a8f37c92e51b4d10",
+		Type:     "bind",
+		Source:   "./cache",
+		Target:   "/cache",
+		ReadOnly: true,
+		HostPath: volumeSource,
+	}}
+	var mounted []struct {
+		source   string
+		target   string
+		readOnly bool
+	}
+	originalMounter := boxliteVolumeBridgeMounter
+	boxliteVolumeBridgeMounter = func(sourcePath string, targetPath string, readOnly bool) error {
+		mounted = append(mounted, struct {
+			source   string
+			target   string
+			readOnly bool
+		}{source: sourcePath, target: targetPath, readOnly: readOnly})
+		return nil
+	}
+	t.Cleanup(func() {
+		boxliteVolumeBridgeMounter = originalMounter
+	})
+	manifest, err := prepareRuntimeMountManifest(testRuntimeMountConfig(), session, RuntimeDriverBoxlite)
+	if err != nil {
+		t.Fatalf("prepareRuntimeMountManifest returned error: %v", err)
+	}
+	if len(manifest.Mounts) != 1 || manifest.Mounts[0].GuestPath != directoryOnlyGuestSessionPath || manifest.Mounts[0].HostPath != root {
+		t.Fatalf("boxlite manifest mounts = %+v, want single session dir mount", manifest.Mounts)
+	}
+	bridgePath := filepath.Join(root, "volumes", "mount-a8f37c92e51b4d10")
+	info, err := os.Stat(bridgePath)
+	if err != nil {
+		t.Fatalf("stat boxlite volume bridge path: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("boxlite volume bridge path mode = %s, want directory", info.Mode())
+	}
+	if len(mounted) != 1 {
+		t.Fatalf("boxlite volume bridge mount calls = %+v, want one", mounted)
+	}
+	if mounted[0].source != volumeSource || mounted[0].target != bridgePath || !mounted[0].readOnly {
+		t.Fatalf("boxlite volume bridge mount call = %+v, want %s -> %s ro", mounted[0], volumeSource, bridgePath)
+	}
+	for _, mount := range manifest.Mounts {
+		if mount.GuestPath == "/cache" {
+			t.Fatalf("boxlite manifest should not contain direct volume mount: %+v", manifest.Mounts)
+		}
+	}
+}
+
+func TestPrepareRuntimeMountManifestForBoxliteRollsBackBridgeMountsOnFailure(t *testing.T) {
+	root := t.TempDir()
+	firstSource := t.TempDir()
+	secondSource := t.TempDir()
+	session := testRuntimeMountSession(root)
+	session.VolumeMounts = []SessionVolumeMount{
+		{
+			ID:       "mount-first",
+			Type:     "bind",
+			Source:   "./first",
+			Target:   "/first",
+			HostPath: firstSource,
+		},
+		{
+			ID:       "mount-second",
+			Type:     "bind",
+			Source:   "./second",
+			Target:   "/second",
+			HostPath: secondSource,
+		},
+	}
+	var mounted []string
+	var unmounted []string
+	originalMounter := boxliteVolumeBridgeMounter
+	originalUnmounter := boxliteVolumeBridgeUnmounter
+	boxliteVolumeBridgeMounter = func(_, targetPath string, _ bool) error {
+		mounted = append(mounted, targetPath)
+		if len(mounted) == 2 {
+			return fmt.Errorf("mount failed")
+		}
+		return nil
+	}
+	boxliteVolumeBridgeUnmounter = func(targetPath string) error {
+		unmounted = append(unmounted, targetPath)
+		return nil
+	}
+	t.Cleanup(func() {
+		boxliteVolumeBridgeMounter = originalMounter
+		boxliteVolumeBridgeUnmounter = originalUnmounter
+	})
+	_, err := prepareRuntimeMountManifest(testRuntimeMountConfig(), session, RuntimeDriverBoxlite)
+	if err == nil {
+		t.Fatal("prepareRuntimeMountManifest returned nil error")
+	}
+	firstBridge := filepath.Join(root, "volumes", "mount-first")
+	secondBridge := filepath.Join(root, "volumes", "mount-second")
+	if len(unmounted) != 2 || unmounted[0] != secondBridge || unmounted[1] != firstBridge {
+		t.Fatalf("rollback unmounted = %#v, want [%s %s]", unmounted, secondBridge, firstBridge)
 	}
 }
 
@@ -301,6 +543,30 @@ func TestDirectoryOnlyGuestSessionBootstrapUsesDataMountRoot(t *testing.T) {
 	assertSubstringOrder(t, command, "test -d '/data/home'", "rm -f '/root'")
 	assertSubstringOrder(t, command, "test -d '/data/home'", "ln -s '/data/home/.codex' '/root/.codex'")
 	assertSubstringOrder(t, command, "test -d '/root' ||", "ln -s '/data/home/.codex' '/root/.codex'")
+}
+
+func TestBoxliteDirectoryOnlyGuestSessionBootstrapIncludesVolumeSymlinks(t *testing.T) {
+	root := t.TempDir()
+	session := testRuntimeMountSession(root)
+	session.VolumeMounts = []SessionVolumeMount{{
+		ID:       "mount-a8f37c92e51b4d10",
+		Type:     "volume",
+		Source:   "cache",
+		Target:   "/cache",
+		HostPath: t.TempDir(),
+	}}
+	command := directoryOnlyGuestSessionBootstrapCommandForSession(testRuntimeMountConfig(), session)
+	for _, required := range []string{
+		"ln -s '/data/volumes/mount-a8f37c92e51b4d10' '/cache'",
+		"test \"$(readlink '/cache')\" = '/data/volumes/mount-a8f37c92e51b4d10'",
+	} {
+		if !strings.Contains(command, required) {
+			t.Fatalf("bootstrap command missing volume symlink %q: %s", required, command)
+		}
+	}
+	if strings.Contains(command, "mount --bind") {
+		t.Fatalf("bootstrap command should not use bind mount for boxlite volume symlink: %s", command)
+	}
 }
 
 func TestDirectoryOnlyGuestSessionBootstrapReplacesImageHomeTargets(t *testing.T) {

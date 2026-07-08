@@ -21,6 +21,7 @@ import (
 	"agent-compose/pkg/sessions"
 	"agent-compose/pkg/storage/configstore"
 	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/volumes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -43,6 +44,7 @@ func NewRunController(di do.Injector) (*runs.Controller, error) {
 		Images:       imageBackends.Auto,
 		LoaderEngine: do.MustInvoke[loaders.LoaderEngine](di),
 		Cap:          do.MustInvoke[capabilities.Provider](di),
+		Volumes:      do.MustInvoke[*volumes.Manager](di),
 		Streams:      do.MustInvoke[*sessions.StreamBroker](di),
 		Bus:          do.MustInvoke[*loaders.Bus](di),
 		Dashboard:    dashboardHub,
@@ -145,6 +147,7 @@ func runAgentRequestFromProto(msg *agentcomposev2.RunAgentRequest) runs.RunAgent
 		OutputSchemaJSON: msg.GetOutputSchemaJson(),
 		CleanupPolicy:    msg.GetCleanupPolicy(),
 		Jupyter:          msg.GetJupyter(),
+		Volumes:          volumeMountSpecsFromProto(msg.GetVolumes()),
 	}
 }
 
@@ -155,6 +158,22 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func volumeMountSpecsFromProto(values []*agentcomposev2.VolumeMountSpec) []domain.VolumeMountSpec {
+	out := make([]domain.VolumeMountSpec, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		out = append(out, domain.VolumeMountSpec{
+			Type:     value.GetType(),
+			Source:   value.GetSource(),
+			Target:   value.GetTarget(),
+			ReadOnly: value.GetReadOnly(),
+		})
+	}
+	return out
 }
 
 func runConnectError(err error) error {

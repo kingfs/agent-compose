@@ -63,12 +63,20 @@ type LoaderValidator interface {
 	Refresh(ctx context.Context) error
 }
 
+type VolumeManager interface {
+	Ensure(ctx context.Context, item domain.VolumeRecord) (domain.VolumeRecord, bool, error)
+	Inspect(ctx context.Context, nameOrID string) (domain.VolumeRecord, error)
+	ReplaceProjectVolumes(ctx context.Context, projectID string, links map[string]domain.ProjectVolumeLink) error
+	RemoveProjectVolumes(ctx context.Context, projectID string) error
+}
+
 type Controller struct {
 	config    *appconfig.Config
 	store     ControllerStore
 	sessions  SessionStore
 	images    images.Backend
 	loaders   LoaderValidator
+	volumes   VolumeManager
 	stop      func(context.Context, *domain.Session) error
 	defaultDR string
 }
@@ -79,6 +87,7 @@ type ControllerDependencies struct {
 	Sessions    SessionStore
 	Images      images.Backend
 	Loaders     LoaderValidator
+	Volumes     VolumeManager
 	StopSession func(context.Context, *domain.Session) error
 }
 
@@ -93,6 +102,7 @@ func NewController(deps ControllerDependencies) *Controller {
 		sessions:  deps.Sessions,
 		images:    deps.Images,
 		loaders:   deps.Loaders,
+		volumes:   deps.Volumes,
 		stop:      deps.StopSession,
 		defaultDR: defaultDriver,
 	}
@@ -173,6 +183,9 @@ func (c *Controller) ApplyProject(ctx context.Context, req ApplyRequest) (ApplyR
 	}
 	if err := images.EnsureProjectAgentImages(ctx, c.config, c.images, normalized.Spec.Name, agentRecords); err != nil {
 		return ApplyResult{}, fmt.Errorf("%w: apply project %s: %w", ErrUnavailable, normalized.Spec.Name, err)
+	}
+	if err := c.ensureProjectVolumes(ctx, project, normalized.Spec); err != nil {
+		return ApplyResult{}, fmt.Errorf("%w: apply project %s: %w", ErrInvalidRequest, normalized.Spec.Name, err)
 	}
 
 	existingProject, projectFound, err := c.store.GetProjectIfExists(ctx, project.ID, true)
@@ -332,6 +345,11 @@ func (c *Controller) RemoveProject(ctx context.Context, req RemoveRequest) (Remo
 			Name:         project.Name,
 			Message:      "removed by project down",
 		})
+		if c.volumes != nil {
+			if err := c.volumes.RemoveProjectVolumes(ctx, project.ID); err != nil {
+				return RemoveResult{Project: project, Changes: changes}, err
+			}
+		}
 	}
 	agents, err := c.store.ListProjectAgents(ctx, project.ID)
 	if err != nil {

@@ -34,6 +34,7 @@ type runtimeMountSpec struct {
 	hostPath  string
 	guestPath string
 	isFile    bool
+	readOnly  bool
 }
 
 type directoryOnlyExposure string
@@ -161,6 +162,11 @@ func buildRuntimeMountManifest(config *appconfig.Config, session *Session, drive
 	if err := validateRuntimeDriver(driver); err != nil {
 		return RuntimeMountManifest{}, err
 	}
+	if driver == RuntimeDriverBoxlite {
+		if err := prepareBoxliteVolumeBridge(session); err != nil {
+			return RuntimeMountManifest{}, err
+		}
+	}
 	specs := runtimeMountSpecsForDriver(config, session, driver)
 	mounts := make([]RuntimeMount, 0, len(specs))
 	for _, spec := range specs {
@@ -175,7 +181,7 @@ func buildRuntimeMountManifest(config *appconfig.Config, session *Session, drive
 			HostPath:  hostPath,
 			GuestPath: filepath.Clean(spec.guestPath),
 			Type:      "bind",
-			ReadOnly:  false,
+			ReadOnly:  spec.readOnly,
 		})
 	}
 	return RuntimeMountManifest{Version: runtimeMountManifestVersion, Driver: driver, Mounts: mounts}, nil
@@ -189,8 +195,10 @@ func runtimeMountSpecsForDriver(config *appconfig.Config, session *Session, driv
 	switch resolveRuntimeDriver(driver) {
 	case RuntimeDriverDocker:
 		return runtimeMountSpecsForDocker(config, session)
-	case RuntimeDriverBoxlite, RuntimeDriverMicrosandbox:
-		return runtimeMountSpecsForDirectoryOnlyRuntime(config, session)
+	case RuntimeDriverBoxlite:
+		return runtimeMountSpecsForBoxlite(config, session)
+	case RuntimeDriverMicrosandbox:
+		return runtimeMountSpecsForMicrosandbox(config, session)
 	default:
 		return nil
 	}
@@ -231,16 +239,41 @@ func runtimeMountSpecsForDocker(config *appconfig.Config, session *Session) []ru
 			isFile:    entry.isFile,
 		})
 	}
-	return specs
+	return append(specs, sessionVolumeMountSpecs(session)...)
 }
 
-func runtimeMountSpecsForDirectoryOnlyRuntime(config *appconfig.Config, session *Session) []runtimeMountSpec {
+func runtimeMountSpecsForBoxlite(config *appconfig.Config, session *Session) []runtimeMountSpec {
 	if len(runtimeMountEntries(config)) == 0 {
 		return nil
 	}
 	return []runtimeMountSpec{
 		{hostPath: hostSessionDir(session), guestPath: directoryOnlyGuestSessionPath},
 	}
+}
+
+func runtimeMountSpecsForMicrosandbox(config *appconfig.Config, session *Session) []runtimeMountSpec {
+	specs := runtimeMountSpecsForBoxlite(config, session)
+	return append(specs, sessionVolumeMountSpecs(session)...)
+}
+
+func sessionVolumeMountSpecs(session *Session) []runtimeMountSpec {
+	if session == nil || len(session.VolumeMounts) == 0 {
+		return nil
+	}
+	specs := make([]runtimeMountSpec, 0, len(session.VolumeMounts))
+	for _, mount := range session.VolumeMounts {
+		hostPath := strings.TrimSpace(mount.HostPath)
+		guestPath := filepath.Clean(strings.TrimSpace(mount.Target))
+		if hostPath == "" || guestPath == "." || guestPath == "" {
+			continue
+		}
+		specs = append(specs, runtimeMountSpec{
+			hostPath:  hostPath,
+			guestPath: guestPath,
+			readOnly:  mount.ReadOnly,
+		})
+	}
+	return specs
 }
 
 func ensureRuntimeMountSource(spec runtimeMountSpec) error {

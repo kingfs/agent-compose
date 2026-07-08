@@ -10,7 +10,11 @@ import (
 )
 
 func SessionDetailToProto(session *domain.Session) *agentcomposev1.SessionDetail {
-	resp := &agentcomposev1.SessionDetail{Summary: SessionSummaryToProto(&session.Summary), WorkspaceId: session.WorkspaceID, Workspace: SessionWorkspaceToProto(session.Workspace)}
+	resp := &agentcomposev1.SessionDetail{
+		Summary:     SessionSummaryToProto(&session.Summary),
+		WorkspaceId: session.WorkspaceID,
+		Workspace:   SessionWorkspaceToProto(session.Workspace),
+	}
 	for _, item := range session.EnvItems {
 		value := item.Value
 		if item.Secret && value != "" {
