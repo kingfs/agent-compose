@@ -123,9 +123,8 @@ func NewAgentDefinitionFromSpec(project domain.ProjectRecord, revision int64, ag
 	}, nil
 }
 
-
 type agentDefinitionConfigPayload struct {
-	Jupyter *compose.JupyterSpec                         `json:"jupyter,omitempty"`
+	Jupyter *compose.JupyterSpec                       `json:"jupyter,omitempty"`
 	MCPs    map[string]compose.NormalizedMCPServerSpec `json:"mcps,omitempty"`
 }
 
@@ -138,7 +137,7 @@ func agentDefinitionConfigJSON(agent compose.NormalizedAgentSpec, projectMCPs ma
 		return "{}", nil
 	}
 	data, err := MarshalCanonicalJSON(struct {
-		Jupyter *compose.JupyterSpec                         `json:"jupyter,omitempty"`
+		Jupyter *compose.JupyterSpec                       `json:"jupyter,omitempty"`
 		MCPs    map[string]compose.NormalizedMCPServerSpec `json:"mcps,omitempty"`
 	}{
 		Jupyter: payload.Jupyter,

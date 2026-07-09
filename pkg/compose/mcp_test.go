@@ -94,7 +94,7 @@ agents:
 `)
 
 	normalized, err := Normalize(spec, NormalizeOptions{Env: map[string]string{
-		"MCP_TOKEN": "mcp-secret",
+		"MCP_TOKEN":  "mcp-secret",
 		"DOCS_TOKEN": "docs-secret",
 		"DOCS_PATH":  "mcp",
 	}})

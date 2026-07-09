@@ -170,7 +170,8 @@ describe("runner execution", () => {
       const runner = new ClaudeRunner({
         ...runnerOptions(root, "catalog body", "claude"),
         mcpConfig: {
-          filesystem: { type: "stdio", command: "npx", args: ["-y", "server"] },
+          filesystem: { type: "local", command: "npx", args: ["-y", "server"] },
+          docs: { type: "remote", transport: "http", url: "https://docs.example/mcp", headers: { Authorization: { value: "Bearer token" } } },
         },
       });
       await runner.runPrompt("prompt");
@@ -178,6 +179,7 @@ describe("runner execution", () => {
         strictMcpConfig: true,
         mcpServers: {
           filesystem: { type: "stdio", command: "npx", args: ["-y", "server"] },
+          docs: { type: "http", url: "https://docs.example/mcp", headers: { Authorization: { value: "Bearer token" } } },
         },
       });
     });

@@ -9,7 +9,7 @@ import (
 )
 
 type AgentConfigPayload struct {
-	Jupyter *compose.JupyterSpec                        `json:"jupyter,omitempty"`
+	Jupyter *compose.JupyterSpec                       `json:"jupyter,omitempty"`
 	MCPs    map[string]compose.NormalizedMCPServerSpec `json:"mcps,omitempty"`
 }
 

@@ -44,8 +44,11 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 	if err := WriteCodexMCPConfig(session, mcps); err != nil {
 		t.Fatalf("WriteCodexMCPConfig returned error: %v", err)
 	}
+	if err := WriteCodexMCPConfig(session, mcps); err != nil {
+		t.Fatalf("second WriteCodexMCPConfig returned error: %v", err)
+	}
 	codexConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
-	if err != nil || !strings.Contains(string(codexConfig), `[mcp_servers.filesystem]`) || !strings.Contains(string(codexConfig), `[mcp_servers.docs.http_headers]`) {
+	if err != nil || strings.Count(string(codexConfig), `[mcp_servers.filesystem]`) != 1 || !strings.Contains(string(codexConfig), `[mcp_servers.docs.http_headers]`) {
 		t.Fatalf("codex mcp config=%q err=%v", string(codexConfig), err)
 	}
 	if err := WriteOpenCodeMCPConfig(session, mcps); err != nil {
@@ -54,6 +57,20 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 	openCodeConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json"))
 	if err != nil || !strings.Contains(string(openCodeConfig), `"mcp"`) || !strings.Contains(string(openCodeConfig), `"filesystem"`) {
 		t.Fatalf("opencode mcp config=%q err=%v", string(openCodeConfig), err)
+	}
+	if err := WriteCodexMCPConfig(session, nil); err != nil {
+		t.Fatalf("clear WriteCodexMCPConfig returned error: %v", err)
+	}
+	codexConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
+	if err != nil || strings.Contains(string(codexConfig), `[mcp_servers.`) {
+		t.Fatalf("cleared codex mcp config=%q err=%v", string(codexConfig), err)
+	}
+	if err := WriteOpenCodeMCPConfig(session, nil); err != nil {
+		t.Fatalf("clear WriteOpenCodeMCPConfig returned error: %v", err)
+	}
+	openCodeConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json"))
+	if err != nil || strings.Contains(string(openCodeConfig), `"mcp"`) == true {
+		t.Fatalf("cleared opencode mcp config=%q err=%v", string(openCodeConfig), err)
 	}
 	if got := GuestOpenCodeConfigPath(&appconfig.Config{GuestHomePath: "/guest"}); got != "/root/.config/opencode/opencode.json" {
 		t.Fatalf("GuestOpenCodeConfigPath = %q", got)

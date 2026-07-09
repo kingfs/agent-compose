@@ -14,6 +14,11 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
+const (
+	codexManagedMCPStart = "# agent-compose managed mcp start"
+	codexManagedMCPEnd   = "# agent-compose managed mcp end"
+)
+
 func WriteCodexRuntimeConfig(session *domain.Sandbox, model, baseURL, wireAPI string) error {
 	if session == nil {
 		return nil
@@ -58,20 +63,38 @@ persistence = "save-all"
 }
 
 func WriteCodexMCPConfig(session *domain.Sandbox, mcps map[string]compose.NormalizedMCPServerSpec) error {
-	if session == nil || len(mcps) == 0 {
+	if session == nil {
 		return nil
 	}
 	path := filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create codex config dir: %w", err)
 	}
-	var b strings.Builder
-	if existing, err := os.ReadFile(path); err == nil {
-		b.Write(existing)
-		if len(existing) > 0 && existing[len(existing)-1] != '\n' {
-			b.WriteByte('\n')
-		}
+	existing := []byte{}
+	if data, err := os.ReadFile(path); err == nil {
+		existing = data
 	}
+	managed := buildCodexManagedMCPBlock(mcps)
+	merged := replaceManagedTextBlock(string(existing), codexManagedMCPStart, codexManagedMCPEnd, managed)
+	if strings.TrimSpace(merged) == "" {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove codex mcp config: %w", err)
+		}
+		return nil
+	}
+	if err := os.WriteFile(path, []byte(merged), 0o644); err != nil {
+		return fmt.Errorf("write codex mcp config: %w", err)
+	}
+	return nil
+}
+
+func buildCodexManagedMCPBlock(mcps map[string]compose.NormalizedMCPServerSpec) string {
+	if len(mcps) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(codexManagedMCPStart)
+	b.WriteByte('\n')
 	keys := make([]string, 0, len(mcps))
 	for key := range mcps {
 		keys = append(keys, key)
@@ -112,10 +135,9 @@ func WriteCodexMCPConfig(session *domain.Sandbox, mcps map[string]compose.Normal
 			}
 		}
 	}
-	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
-		return fmt.Errorf("write codex mcp config: %w", err)
-	}
-	return nil
+	b.WriteString(codexManagedMCPEnd)
+	b.WriteByte('\n')
+	return b.String()
 }
 
 func WriteOpenCodeRuntimeConfig(session *domain.Sandbox, providerID, model, baseURL string) error {
@@ -163,7 +185,7 @@ func WriteOpenCodeRuntimeConfig(session *domain.Sandbox, providerID, model, base
 }
 
 func WriteOpenCodeMCPConfig(session *domain.Sandbox, mcps map[string]compose.NormalizedMCPServerSpec) error {
-	if session == nil || len(mcps) == 0 {
+	if session == nil {
 		return nil
 	}
 	path := filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json")
@@ -191,7 +213,11 @@ func WriteOpenCodeMCPConfig(session *domain.Sandbox, mcps map[string]compose.Nor
 			mcp[name] = map[string]any{"type": "remote", "url": server.URL, "headers": headers}
 		}
 	}
-	payload["mcp"] = mcp
+	if len(mcp) == 0 {
+		delete(payload, "mcp")
+	} else {
+		payload["mcp"] = mcp
+	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode opencode mcp config: %w", err)
@@ -200,6 +226,32 @@ func WriteOpenCodeMCPConfig(session *domain.Sandbox, mcps map[string]compose.Nor
 		return fmt.Errorf("write opencode mcp config: %w", err)
 	}
 	return nil
+}
+
+func replaceManagedTextBlock(existing, startMarker, endMarker, managed string) string {
+	start := strings.Index(existing, startMarker)
+	if start >= 0 {
+		end := strings.Index(existing[start:], endMarker)
+		if end >= 0 {
+			end += start + len(endMarker)
+			if end < len(existing) && existing[end] == '\n' {
+				end++
+			}
+			existing = existing[:start] + existing[end:]
+		}
+	}
+	existing = strings.TrimRight(existing, "\n")
+	managed = strings.TrimSpace(managed)
+	if managed == "" {
+		if existing == "" {
+			return ""
+		}
+		return existing + "\n"
+	}
+	if existing == "" {
+		return managed + "\n"
+	}
+	return existing + "\n\n" + managed + "\n"
 }
 
 func WriteOpenCodeAnthropicRuntimeConfig(session *domain.Sandbox, model, baseURL string) error {

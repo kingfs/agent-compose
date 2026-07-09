@@ -67,9 +67,6 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, session *domain.Sandb
 	if err := execution.WriteAgentSystemPromptFile(session, systemPrompt); err != nil {
 		return domain.ExecResult{}, domain.AgentRunResult{}, err
 	}
-	if err := r.prepareAgentMCPConfig(ctx, session, agentDefinitionID, agent); err != nil {
-		return domain.ExecResult{}, domain.AgentRunResult{}, err
-	}
 	runtime, err := r.runtimes.ForSession(session)
 	if err != nil {
 		return domain.ExecResult{}, domain.AgentRunResult{}, err
@@ -87,6 +84,9 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, session *domain.Sandb
 			}
 		}
 	}
+	if err := r.prepareAgentMCPConfig(ctx, session, agentDefinitionID, agent); err != nil {
+		return domain.ExecResult{}, domain.AgentRunResult{}, err
+	}
 	result, err := runtime.ExecStream(ctx, session, vmState, spec, stream)
 	if err != nil {
 		return execution.SanitizeAgentExecResult(result), domain.AgentRunResult{}, err
@@ -99,22 +99,39 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, session *domain.Sandb
 }
 
 func (r *AgentRunner) prepareAgentMCPConfig(ctx context.Context, session *domain.Sandbox, agentDefinitionID, agent string) error {
-	if r == nil || r.agents == nil || session == nil {
+	if session == nil {
 		return nil
+	}
+	provider := domain.NormalizeAgentKind(agent)
+	clearProvider := func() error {
+		if err := execution.WriteAgentMCPConfigFile(session, nil); err != nil {
+			return err
+		}
+		switch provider {
+		case "codex":
+			return llms.WriteCodexMCPConfig(session, nil)
+		case "opencode":
+			return llms.WriteOpenCodeMCPConfig(session, nil)
+		default:
+			return nil
+		}
+	}
+	if r == nil || r.agents == nil {
+		return clearProvider()
 	}
 	agentID := strings.TrimSpace(agentDefinitionID)
 	if agentID == "" {
-		return nil
+		return clearProvider()
 	}
 	definition, err := r.agents.GetAgentDefinition(ctx, agentID)
 	if err != nil {
-		return nil
+		return clearProvider()
 	}
 	mcps := llms.AgentMCPConfig(definition)
-	if len(mcps) == 0 {
-		return nil
+	if err := execution.WriteAgentMCPConfigFile(session, mcps); err != nil {
+		return err
 	}
-	switch domain.NormalizeAgentKind(agent) {
+	switch provider {
 	case "codex":
 		return llms.WriteCodexMCPConfig(session, mcps)
 	case "opencode":
