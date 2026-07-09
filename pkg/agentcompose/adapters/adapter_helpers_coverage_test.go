@@ -33,7 +33,7 @@ func TestAdapterHelperCoverage(t *testing.T) {
 		}
 	})
 
-	t.Run("loader session rpc linked session id", func(t *testing.T) {
+	t.Run("loader sandbox rpc linked session id", func(t *testing.T) {
 		if got := LoaderSessionRPCLinkedSessionID("CreateSession", `{"sessionId":"request-session"}`, `{"session":{"summary":{"sessionId":"response-session"}}}`); got != "response-session" {
 			t.Fatalf("response session id = %q", got)
 		}

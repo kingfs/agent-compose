@@ -71,7 +71,7 @@ func TestRuntimeHostAgentCommandLLMAndSessionRPC(t *testing.T) {
 	if len(publisher.events) != 1 || publisher.events[0].topic != "agent-compose.agent.completed" {
 		t.Fatalf("publisher events = %#v", publisher.events)
 	}
-	if !events.contains("loader.session.created") || !events.contains("loader.agent.completed") || !events.contains("loader.session.stopped") {
+	if !events.contains("loader.sandbox.created") || !events.contains("loader.agent.completed") || !events.contains("loader.sandbox.stopped") {
 		t.Fatalf("agent events = %#v", events.types())
 	}
 
@@ -112,7 +112,7 @@ func TestRuntimeHostAgentCommandLLMAndSessionRPC(t *testing.T) {
 	if responseJSON != rpc.response || rpc.source != domain.SandboxTypeScript+":"+loader.Summary.ID {
 		t.Fatalf("rpc response/source = %q/%q", responseJSON, rpc.source)
 	}
-	if !store.containsLink("session-rpc", "session_rpc_completed") {
+	if !store.containsLink("session-rpc", "sandbox_rpc_completed") {
 		t.Fatalf("session links = %#v", store.links)
 	}
 }
@@ -178,7 +178,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 		Publisher: &hostPublisherFake{},
 	}, loader, run, loaders.TriggerEventMetadata{EventID: "topic-event"})
 	agentResult, err := host.Agent(ctx, "prompt", domain.LoaderAgentRequest{})
-	if err == nil || agentResult.Text != "agent stderr" || !events.contains("loader.agent.failed") || !events.contains("loader.session.stop_failed") {
+	if err == nil || agentResult.Text != "agent stderr" || !events.contains("loader.agent.failed") || !events.contains("loader.sandbox.stop_failed") {
 		t.Fatalf("agent error result=%#v err=%v events=%#v", agentResult, err, events.types())
 	}
 
@@ -264,7 +264,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 			return ""
 		},
 	}, loader, run, loaders.TriggerEventMetadata{EventID: "topic-event"})
-	if _, err := rpcHost.CallSessionRPC(ctx, "GetSession", `{"sessionId":"session-rpc"}`); err == nil || !rpcEvents.contains("loader.session.rpc.failed") || !rpcStore.containsLink("session-rpc", "session_rpc_failed") {
+	if _, err := rpcHost.CallSessionRPC(ctx, "GetSession", `{"sessionId":"session-rpc"}`); err == nil || !rpcEvents.contains("loader.sandbox.rpc.failed") || !rpcStore.containsLink("session-rpc", "sandbox_rpc_failed") {
 		t.Fatalf("rpc err=%v events=%#v links=%#v", err, rpcEvents.types(), rpcStore.links)
 	}
 }
@@ -434,7 +434,7 @@ func (s *hostSessionsFake) Ensure(context.Context, domain.Loader, domain.LoaderA
 	if s.ensureErr != nil {
 		return nil, "", s.ensureErr
 	}
-	return s.session, "loader.session.created", nil
+	return s.session, "loader.sandbox.created", nil
 }
 
 func (s *hostSessionsFake) Load(context.Context, string) (*domain.Sandbox, error) {

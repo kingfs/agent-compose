@@ -72,7 +72,7 @@ func TestLoaderCommandExecutorFiltersCommandPayloadFromStreamingCellOutput(t *te
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
-	session, err := store.CreateSandbox(ctx, "loader command session", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeScript, nil, nil, nil)
+	session, err := store.CreateSandbox(ctx, "loader command sandbox", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeScript, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateSession returned error: %v", err)
 	}

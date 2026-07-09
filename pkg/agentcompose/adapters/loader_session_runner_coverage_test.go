@@ -44,7 +44,7 @@ func TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 		t.Fatalf("UpdateSession stopped returned error: %v", err)
 	}
 	resumed, eventType, err = runner.LoadOrResume(ctx, stopped.Summary.ID)
-	if err != nil || resumed.Summary.VMStatus != domain.VMStatusRunning || eventType != "loader.session.resumed" || len(driver.startCalls) != 1 {
+	if err != nil || resumed.Summary.VMStatus != domain.VMStatusRunning || eventType != "loader.sandbox.resumed" || len(driver.startCalls) != 1 {
 		t.Fatalf("LoadOrResume stopped resumed=%#v event=%q err=%v starts=%#v", resumed, eventType, err, driver.startCalls)
 	}
 	if len(publisher.events) != 1 || publisher.events[0].Topic != "agent-compose.session.resumed" {
@@ -123,7 +123,7 @@ func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 		}},
 	}
 	request := domain.LoaderAgentRequest{
-		SessionPolicy: domain.LoaderSandboxPolicyNew,
+		SandboxPolicy: domain.LoaderSandboxPolicyNew,
 		Volumes: []domain.VolumeMountSpec{{
 			Type:   domain.VolumeMountTypeVolume,
 			Source: "request-cache",
@@ -134,7 +134,7 @@ func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Ensure returned error: %v", err)
 	}
-	if eventType != "loader.session.created" || len(driver.startCalls) != 1 {
+	if eventType != "loader.sandbox.created" || len(driver.startCalls) != 1 {
 		t.Fatalf("eventType=%q startCalls=%#v", eventType, driver.startCalls)
 	}
 	if len(resolver.specs) != 1 || resolver.specs[0].Source != "request-cache" {

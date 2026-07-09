@@ -33,8 +33,8 @@ func CommandCellSource(request domain.LoaderCommandRequest) string {
 
 func CommandRequestRequiresCleanup(loader domain.Loader, request domain.LoaderCommandRequest) bool {
 	effectivePolicy := domain.NormalizeLoaderSandboxPolicy(loader.Summary.SandboxPolicy)
-	if strings.TrimSpace(request.SessionPolicy) != "" {
-		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(request.SessionPolicy)
+	if strings.TrimSpace(domain.LoaderCommandSandboxPolicy(request)) != "" {
+		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(domain.LoaderCommandSandboxPolicy(request))
 	}
 	return effectivePolicy == domain.LoaderSandboxPolicyNew || CommandRequestOverridesSession(request)
 }
@@ -43,6 +43,6 @@ func CommandRequestOverridesSession(request domain.LoaderCommandRequest) bool {
 	return strings.TrimSpace(request.Driver) != "" ||
 		strings.TrimSpace(request.GuestImage) != "" ||
 		strings.TrimSpace(request.WorkspaceID) != "" ||
-		len(domain.NormalizeEnvItems(request.SessionEnv)) > 0 ||
+		len(domain.NormalizeEnvItems(domain.LoaderCommandSandboxEnv(request))) > 0 ||
 		len(request.Volumes) > 0
 }

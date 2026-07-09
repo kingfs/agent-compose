@@ -119,6 +119,7 @@ type LoaderBinding struct {
 
 type LoaderAgentRequest struct {
 	Agent          string            `json:"agent,omitempty"`
+	SandboxPolicy  string            `json:"sandboxPolicy,omitempty"`
 	SessionPolicy  string            `json:"sessionPolicy,omitempty"`
 	Timeout        time.Duration     `json:"timeout,omitempty"`
 	Title          string            `json:"title,omitempty"`
@@ -127,6 +128,7 @@ type LoaderAgentRequest struct {
 	PullPolicy     string            `json:"pullPolicy,omitempty"`
 	WorkspaceID    string            `json:"workspaceId,omitempty"`
 	JupyterEnabled bool              `json:"jupyter,omitempty"`
+	SandboxEnv     []SandboxEnvVar   `json:"sandboxEnv,omitempty"`
 	SessionEnv     []SandboxEnvVar   `json:"sessionEnv,omitempty"`
 	Volumes        []VolumeMountSpec `json:"volumes,omitempty"`
 	OutputSchema   string            `json:"outputSchema,omitempty"`
@@ -155,6 +157,7 @@ type LoaderCommandRequest struct {
 	Env            map[string]string `json:"env,omitempty"`
 	TimeoutMs      int64             `json:"timeoutMs,omitempty"`
 	MaxOutputBytes int64             `json:"maxOutputBytes,omitempty"`
+	SandboxPolicy  string            `json:"sandboxPolicy,omitempty"`
 	SessionPolicy  string            `json:"sessionPolicy,omitempty"`
 	Title          string            `json:"title,omitempty"`
 	Driver         string            `json:"driver,omitempty"`
@@ -162,6 +165,7 @@ type LoaderCommandRequest struct {
 	PullPolicy     string            `json:"pullPolicy,omitempty"`
 	WorkspaceID    string            `json:"workspaceId,omitempty"`
 	JupyterEnabled bool              `json:"jupyter,omitempty"`
+	SandboxEnv     []SandboxEnvVar   `json:"sandboxEnv,omitempty"`
 	SessionEnv     []SandboxEnvVar   `json:"sessionEnv,omitempty"`
 	Volumes        []VolumeMountSpec `json:"volumes,omitempty"`
 }
@@ -239,6 +243,37 @@ func NormalizeLoaderSandboxPolicy(policy string) string {
 	default:
 		return LoaderSandboxPolicySticky
 	}
+}
+
+func LoaderAgentSandboxPolicy(request LoaderAgentRequest) string {
+	return firstNonEmpty(request.SandboxPolicy, request.SessionPolicy)
+}
+
+func LoaderAgentSandboxEnv(request LoaderAgentRequest) []SandboxEnvVar {
+	if len(NormalizeEnvItems(request.SandboxEnv)) > 0 {
+		return request.SandboxEnv
+	}
+	return request.SessionEnv
+}
+
+func LoaderCommandSandboxPolicy(request LoaderCommandRequest) string {
+	return firstNonEmpty(request.SandboxPolicy, request.SessionPolicy)
+}
+
+func LoaderCommandSandboxEnv(request LoaderCommandRequest) []SandboxEnvVar {
+	if len(NormalizeEnvItems(request.SandboxEnv)) > 0 {
+		return request.SandboxEnv
+	}
+	return request.SessionEnv
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func NormalizeLoaderConcurrencyPolicy(policy string) string {

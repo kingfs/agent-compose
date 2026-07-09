@@ -134,23 +134,23 @@ scheduler.on("runtime.test.*", function onEvent(event) { return { event }; }, "e
 
 function main(payload) {
   scheduler.log("coverage", { payload });
-  const created = scheduler.session.createSession({ title: "alpha" });
-  const sessionId = created.session.summary.sessionId;
-  const current = scheduler.session.getSession({ sessionId });
-  const sessions = scheduler.session.listSessions();
-  const proxy = scheduler.session.getSessionProxy({ sessionId });
-  const stopped = scheduler.session.stopSession({ sessionId });
-  const resumed = scheduler.session.ResumeSession({ sessionId });
+  const created = scheduler.sandbox.createSandbox({ title: "alpha" });
+  const sandboxId = created.sandbox.summary.sandboxId;
+  const current = scheduler.sandbox.getSandbox({ sandboxId });
+  const sandboxes = scheduler.sandbox.listSandboxes();
+  const proxy = scheduler.sandbox.getSandboxProxy({ sandboxId });
+  const stopped = scheduler.sandbox.stopSandbox({ sandboxId });
+  const resumed = scheduler.sandbox.ResumeSandbox({ sandboxId });
   const RiskSummary = scheduler.z.object({ summary: scheduler.z.string(), risk: scheduler.z.enum(["low", "high"]) });
   const agent = scheduler.agent("summarize", {
-    agent: "claude", sessionPolicy: "new", timeout: "45s", title: "Loader Agent Session",
+    agent: "claude", sandboxPolicy: "new", timeout: "45s", title: "Loader Agent Session",
     driver: "microsandbox", guestImage: "guest:latest", workspaceId: "workspace-1",
-    sessionEnv: { REQUEST_ONLY: "request" },
+    sandboxEnv: { REQUEST_ONLY: "request" },
     volumes: ["cache:/cache", { type: "bind", source: "./fixtures", target: "/fixtures", readOnly: true }],
     outputSchema: RiskSummary
   });
   const llm = scheduler.llm("answer", { model: "gpt", outputSchema: RiskSummary });
-  const execResult = scheduler.exec({ command: "python3", args: ["-V"], cwd: "/tmp", env: { FOO: "bar" }, timeoutMs: 30000, maxOutputBytes: 128, sessionPolicy: "new", volumes: ["./bin:/host-bin:ro"] });
+  const execResult = scheduler.exec({ command: "python3", args: ["-V"], cwd: "/tmp", env: { FOO: "bar" }, timeoutMs: 30000, maxOutputBytes: 128, sandboxPolicy: "new", volumes: ["./bin:/host-bin:ro"] });
   const shellResult = scheduler.shell("echo hello", { cwd: "/tmp", env: { SHELL_FOO: "baz" }, maxOutputBytes: 64, volumes: [{ source: "shell-cache", target: "/shell-cache" }] });
   scheduler.state.set("nil", null);
   scheduler.state.set("bool", true);
@@ -161,7 +161,7 @@ function main(payload) {
   const existing = scheduler.state.get("existing");
   scheduler.state.delete("existing");
   const published = scheduler.event.publish("runtime.test.requested", { value: 1 });
-  return { current, sessions, proxy, stopped, resumed, agent, llm, execResult, shellResult, existing, published, runtime: scheduler.runtime.name };
+  return { current, sandboxes, proxy, stopped, resumed, agent, llm, execResult, shellResult, existing, published, runtime: scheduler.runtime.name };
 }`,
 	}, host)
 	if err != nil {
@@ -173,11 +173,14 @@ function main(payload) {
 	if host.agentCalls[0].Driver != driverpkg.RuntimeDriverMicrosandbox || host.commandCalls[0].Mode != "exec" || host.commandCalls[1].Mode != "shell" {
 		t.Fatalf("unexpected request mappings: agent=%#v commands=%#v", host.agentCalls[0], host.commandCalls)
 	}
-	if host.agentCalls[0].SessionPolicy != domain.LoaderSandboxPolicyNew || domain.SandboxEnvMap(host.agentCalls[0].SessionEnv)["REQUEST_ONLY"] != "request" {
-		t.Fatalf("deprecated scheduler.agent session aliases mapped to %#v", host.agentCalls[0])
+	if host.agentCalls[0].SandboxPolicy != domain.LoaderSandboxPolicyNew || domain.SandboxEnvMap(host.agentCalls[0].SandboxEnv)["REQUEST_ONLY"] != "request" {
+		t.Fatalf("scheduler.agent sandbox options mapped to %#v", host.agentCalls[0])
 	}
-	if host.commandCalls[0].SessionPolicy != domain.LoaderSandboxPolicyNew {
-		t.Fatalf("deprecated scheduler.exec sessionPolicy alias mapped to %#v", host.commandCalls[0])
+	if host.commandCalls[0].SandboxPolicy != domain.LoaderSandboxPolicyNew {
+		t.Fatalf("scheduler.exec sandboxPolicy mapped to %#v", host.commandCalls[0])
+	}
+	if got := host.requests["GetSession"]["sessionId"]; got != "session-from-host" {
+		t.Fatalf("scheduler.sandbox request was not translated to session rpc request: %#v", host.requests["GetSession"])
 	}
 	if len(host.agentCalls[0].Volumes) != 2 ||
 		host.agentCalls[0].Volumes[0].Type != domain.VolumeMountTypeVolume ||
@@ -192,7 +195,7 @@ function main(payload) {
 		host.commandCalls[1].Volumes[0].Type != domain.VolumeMountTypeVolume {
 		t.Fatalf("unexpected command volumes: exec=%#v shell=%#v", host.commandCalls[0].Volumes, host.commandCalls[1].Volumes)
 	}
-	if !strings.Contains(result.ResultJSON, `"runtime":"scheduler"`) || !strings.Contains(result.ResultJSON, `"eventId":"evt-test"`) {
+	if len(result.Warnings) != 0 || !strings.Contains(result.ResultJSON, `"runtime":"scheduler"`) || !strings.Contains(result.ResultJSON, `"eventId":"evt-test"`) || !strings.Contains(result.ResultJSON, `"sandboxId":"session-from-host"`) {
 		t.Fatalf("result json = %s", result.ResultJSON)
 	}
 
@@ -216,7 +219,7 @@ function main(payload) {
 	}
 
 	aliasHost := &coverageEngineHost{}
-	_, err = engine.Execute(context.Background(), LoaderExecutionRequest{
+	aliasResult, err := engine.Execute(context.Background(), LoaderExecutionRequest{
 		Runtime: domain.LoaderRuntimeScheduler,
 		Script: `
 function main() {
@@ -227,11 +230,14 @@ function main() {
 	if err != nil {
 		t.Fatalf("deprecated alias characterization execute returned error: %v", err)
 	}
-	if len(aliasHost.agentCalls) != 1 || aliasHost.agentCalls[0].SessionPolicy != domain.LoaderSandboxPolicyNew || domain.SandboxEnvMap(aliasHost.agentCalls[0].SessionEnv)["FROM_SNAKE"] != "yes" {
+	if len(aliasHost.agentCalls) != 1 || aliasHost.agentCalls[0].SandboxPolicy != domain.LoaderSandboxPolicyNew || domain.SandboxEnvMap(aliasHost.agentCalls[0].SandboxEnv)["FROM_SNAKE"] != "yes" {
 		t.Fatalf("scheduler.agent deprecated alias mapping = %#v", aliasHost.agentCalls)
 	}
-	if len(aliasHost.commandCalls) != 1 || aliasHost.commandCalls[0].SessionPolicy != domain.LoaderSandboxPolicySticky || domain.SandboxEnvMap(aliasHost.commandCalls[0].SessionEnv)["FROM_CAMEL"] != "yes" {
+	if len(aliasHost.commandCalls) != 1 || aliasHost.commandCalls[0].SandboxPolicy != domain.LoaderSandboxPolicySticky || domain.SandboxEnvMap(aliasHost.commandCalls[0].SandboxEnv)["FROM_CAMEL"] != "yes" {
 		t.Fatalf("scheduler.exec deprecated alias mapping = %#v", aliasHost.commandCalls)
+	}
+	if len(aliasResult.Warnings) == 0 {
+		t.Fatalf("expected deprecated alias warnings")
 	}
 
 	validation, err := engine.Validate(context.Background(), domain.LoaderRuntimeScheduler, `
@@ -280,6 +286,7 @@ func TestQJSLoaderEngineValidationCoverageWorkflow(t *testing.T) {
 		{`scheduler.event.publish("runtime.test", {})`, "scheduler.event.publish is unavailable during validation"},
 		{`scheduler.agent("summarize")`, "scheduler.agent is unavailable during validation"},
 		{`scheduler.llm("answer")`, "scheduler.llm is unavailable during validation"},
+		{`scheduler.sandbox.getSandbox({ sandboxId: "sandbox-1" })`, "scheduler.sandbox.getSandbox is unavailable during validation"},
 		{`scheduler.session.getSession({ sessionId: "session-1" })`, "scheduler.session.getSession is unavailable during validation"},
 		{`scheduler.cron("*/5 * * * *", function cron() {}, { id: "a" }, { id: "b" });`, "at most one options"},
 		{`scheduler.cron("first", "*/5 * * * *", function cron() {}, { id: "second" });`, "multiple trigger ids"},
@@ -308,7 +315,7 @@ func TestQJSLoaderEngineValidationCoverageWorkflow(t *testing.T) {
 		{`function main() { return scheduler.event.publish("", {}); }`, "non-empty topic"},
 		{`function main() { return scheduler.event.publish("runtime.test", []); }`, "payload must be an object"},
 		{`function main() { return scheduler.agent(""); }`, "scheduler.agent requires a non-empty prompt"},
-		{`function main() { return scheduler.agent("summarize", { sessionEnv: "bad" }); }`, "decode scheduler.agent sessionEnv"},
+		{`function main() { return scheduler.agent("summarize", { sandboxEnv: "bad" }); }`, "decode scheduler.agent sandboxEnv"},
 		{`function main() { return scheduler.agent("summarize", { volumes: "bad" }); }`, "decode scheduler.agent volumes"},
 		{`function main() { return scheduler.llm(""); }`, "scheduler.llm requires a non-empty prompt"},
 		{`function main() { return scheduler.llm("answer", "bad"); }`, "decode scheduler.llm options"},
@@ -356,8 +363,8 @@ func TestE2EQJSLoaderEngineValidationCoverageWorkflow(t *testing.T) {
 	TestQJSLoaderEngineValidationCoverageWorkflow(t)
 }
 
-func TestLoaderSessionEnvDecodingEdgeBranches(t *testing.T) {
-	items, err := loaderSessionEnvItems(map[string]any{
+func TestLoaderSandboxEnvDecodingEdgeBranches(t *testing.T) {
+	items, err := loaderSandboxEnvItems(map[string]any{
 		" BOOL ":         true,
 		"FLOAT":          float64(12.50),
 		"OPENAI_API_KEY": map[string]any{"value": "secret", "secret": false},
@@ -366,7 +373,7 @@ func TestLoaderSessionEnvDecodingEdgeBranches(t *testing.T) {
 		" ":              "ignored",
 	})
 	if err != nil {
-		t.Fatalf("loaderSessionEnvItems map returned error: %v", err)
+		t.Fatalf("loaderSandboxEnvItems map returned error: %v", err)
 	}
 	env := domain.SandboxEnvMap(items)
 	if env["BOOL"] != "true" || env["FLOAT"] != "12.5" || env["OPENAI_API_KEY"] != "secret" || env["NUMBER_SECRET"] != "7" {
@@ -379,13 +386,13 @@ func TestLoaderSessionEnvDecodingEdgeBranches(t *testing.T) {
 		t.Fatalf("secret flags were not decoded: %#v", items)
 	}
 
-	arrayItems, err := loaderSessionEnvItems([]any{
+	arrayItems, err := loaderSandboxEnvItems([]any{
 		map[string]any{"name": "A", "value": nil},
 		map[string]any{"name": "B", "value": false, "secret": "false"},
 		map[string]any{"name": "C_TOKEN", "value": map[string]any{"value": "nested"}},
 	})
 	if err != nil {
-		t.Fatalf("loaderSessionEnvItems array returned error: %v", err)
+		t.Fatalf("loaderSandboxEnvItems array returned error: %v", err)
 	}
 	arrayEnv := domain.SandboxEnvMap(arrayItems)
 	if arrayEnv["A"] != "" || arrayEnv["B"] != "false" || arrayEnv["C_TOKEN"] != "nested" || !findEnvSecretForTest(arrayItems, "C_TOKEN") {
@@ -405,9 +412,9 @@ func TestLoaderSessionEnvDecodingEdgeBranches(t *testing.T) {
 	}
 	for _, tc := range errorCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := loaderSessionEnvItems(tc.value)
+			_, err := loaderSandboxEnvItems(tc.value)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("loaderSessionEnvItems(%#v) error = %v, want %q", tc.value, err, tc.want)
+				t.Fatalf("loaderSandboxEnvItems(%#v) error = %v, want %q", tc.value, err, tc.want)
 			}
 		})
 	}

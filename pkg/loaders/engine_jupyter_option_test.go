@@ -7,7 +7,7 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-// The loader session-spawning APIs (scheduler.agent, scheduler.shell,
+// The loader sandbox-spawning APIs (scheduler.agent, scheduler.shell,
 // scheduler.exec) accept a `jupyter: true` option that must reach the request
 // struct so LoaderSandboxRunner.Ensure can enable Jupyter on the sandbox.
 func TestLoaderJupyterOptionThreadsThroughRequests(t *testing.T) {

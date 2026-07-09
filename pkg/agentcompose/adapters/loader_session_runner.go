@@ -86,8 +86,8 @@ func (r *LoaderSandboxRunner) Ensure(ctx context.Context, loader domain.Loader, 
 		return nil, "", err
 	}
 	effectivePolicy := domain.NormalizeLoaderSandboxPolicy(loader.Summary.SandboxPolicy)
-	if strings.TrimSpace(request.SessionPolicy) != "" {
-		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(request.SessionPolicy)
+	if strings.TrimSpace(domain.LoaderAgentSandboxPolicy(request)) != "" {
+		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(domain.LoaderAgentSandboxPolicy(request))
 	}
 	hasOverrides := loaders.AgentRequestOverridesSession(request, titleOverridesSession)
 	forceNew := effectivePolicy == domain.LoaderSandboxPolicyNew || hasOverrides
@@ -111,7 +111,7 @@ func (r *LoaderSandboxRunner) Ensure(ctx context.Context, loader domain.Loader, 
 		envItems = domain.MergeEnvItems(envItems, agentDefinition.EnvItems)
 	}
 	envItems = domain.MergeEnvItems(envItems, loader.EnvItems)
-	envItems = domain.MergeEnvItems(envItems, request.SessionEnv)
+	envItems = domain.MergeEnvItems(envItems, domain.LoaderAgentSandboxEnv(request))
 	providerEnvItems := envItems
 	envItems = llms.FilterPersistedRuntimeEnv(envItems)
 	capabilityVars, capabilityTags := capabilities.BuildGatewaySessionVars(capabilities.ProxyTarget(r.Cap), loader.Summary.CapsetIDs)
@@ -191,7 +191,7 @@ func (r *LoaderSandboxRunner) Ensure(ctx context.Context, loader domain.Loader, 
 		"source":        "loader",
 		"loaderId":      loader.Summary.ID,
 	})
-	return loaded, "loader.session.created", nil
+	return loaded, "loader.sandbox.created", nil
 }
 
 func (r *LoaderSandboxRunner) Load(ctx context.Context, sessionID string) (*domain.Sandbox, error) {
@@ -236,7 +236,7 @@ func (r *LoaderSandboxRunner) LoadOrResume(ctx context.Context, sessionID string
 		"driver":    loaded.Summary.Driver,
 		"source":    "loader",
 	})
-	return loaded, "loader.session.resumed", nil
+	return loaded, "loader.sandbox.resumed", nil
 }
 
 func (r *LoaderSandboxRunner) ResolveLoaderAgentDefinition(ctx context.Context, loader domain.Loader) (*domain.AgentDefinition, error) {

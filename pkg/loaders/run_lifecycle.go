@@ -158,6 +158,9 @@ func (e *RunExecutor) Execute(ctx context.Context, prepared PreparedRun) (domain
 	if host != nil {
 		host.CleanupCommandSessions(writeCtx)
 	}
+	for _, warning := range execution.Warnings {
+		_ = e.addLoaderEvent(writeCtx, prepared.Loader.Summary.ID, run.ID, run.TriggerID, "loader.deprecated_alias.warning", "warning", warning, nil, "", "", "")
+	}
 
 	completedAt := time.Now().UTC()
 	run.CompletedAt = completedAt

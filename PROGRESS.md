@@ -688,7 +688,7 @@
       - 本任务未修改 `proto/agentcompose/v1/*`、v2 proto 或 generated code；v2 `RunSandboxCleanupPolicy`、`RunAgentRequest.sandbox_id`、`ExecRequest.sandbox_id/run_id/ExecSandboxSelector` 已在 6.2 完成并由本任务测试覆盖。
     - 下一目标：8.2。
 
-- [ ] 8.2 迁移 loader scheduler sandbox API 和 deprecated aliases
+- [x] 8.2 迁移 loader scheduler sandbox API 和 deprecated aliases
   - 依赖：5.1、7.3。
   - 工作内容：
     - 新增/迁移 `scheduler.sandbox.createSandbox/resumeSandbox/stopSandbox/getSandbox/listSandboxes/getSandboxProxy`。
@@ -697,9 +697,9 @@
     - 保留 `sessionPolicy/session_env/sessionEnv` alias，解析后内部事件、结果、持久化使用 sandbox/thread。
     - loader sticky policy 绑定 `loader_id -> sandbox_id`。
   - 可并行子任务：
-    - [ ] 可并行：迁移 loader engine bindings 和 QJS API tests。
-    - [ ] 可并行：迁移 loader run host/result/payload/event tests。
-    - [ ] 可并行：迁移 sticky binding store 和 scheduler tests。
+    - [x] 可并行：迁移 loader engine bindings 和 QJS API tests。
+    - [x] 可并行：迁移 loader run host/result/payload/event tests。
+    - [x] 可并行：迁移 sticky binding store 和 scheduler tests。
   - 测试方案：
     - `go test ./pkg/loaders ./pkg/agentcompose/adapters ./pkg/storage/configstore`
     - `task test:integration`
@@ -708,10 +708,24 @@
     - Deprecated aliases 有 warning 和测试，不污染内部持久化字段。
     - 同一 loader run 内 command/shell 复用 run-scoped loader sandbox。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
+    - 状态：已完成。
+    - 变更：
+      - 新增 `scheduler.sandbox.createSandbox/resumeSandbox/stopSandbox/getSandbox/listSandboxes/getSandboxProxy` QJS API；loader-facing request/response JSON 使用 `sandboxId`、`sandbox`、`sandboxes`、`agentThreadId`，内部通过现有 bridge 转换到 v1 session RPC。
+      - `scheduler.agent`、`scheduler.exec`、`scheduler.shell` 新增并优先解析 `sandboxPolicy` / `sandbox_policy` 与 `sandboxEnv` / `sandbox_env`，domain request 增加 `SandboxPolicy`、`SandboxEnv` 字段。
+      - 保留 `scheduler.session.*`、`sessionPolicy/session_policy`、`sessionEnv/session_env` deprecated aliases；alias 使用会产生 engine warning，实际 run 会记录 `loader.deprecated_alias.warning` loader event。
+      - loader runtime host、command cleanup、command executor provider env、loader sandbox runner 改为读取 sandbox-native request helpers，内部 loader event 类型切换为 `loader.sandbox.*` 和 `loader.sandbox.rpc.*`。
+      - 同一 loader run 内 command/shell 的 run-scoped sandbox 复用逻辑保持并由 `RuntimeHost` 测试覆盖；sticky binding 继续使用 `loader_id -> sandbox_id` 的 `LoaderBinding`。
+    - 验证：
+      - `go test ./pkg/loaders ./pkg/agentcompose/adapters ./pkg/storage/configstore`
+      - `task test:integration`
+      - `git diff --check`
+      - `rg -n "scheduler\\.session|sessionPolicy|session_policy|sessionEnv|session_env|loader\\.session|SessionPolicy|SessionEnv" pkg/loaders pkg/agentcompose/adapters pkg/model -g'*.go'`
+      - `rg -n "scheduler\\.sandbox|sandboxPolicy|sandboxEnv|loader\\.sandbox|loader\\.deprecated_alias\\.warning|sandbox_rpc_|SandboxPolicy|SandboxEnv" pkg/loaders pkg/agentcompose/adapters pkg/model -g'*.go'`
+    - 审计与例外：
+      - `sessionPolicy/sessionEnv` 残留仅保留在 `pkg/model` deprecated alias 字段/helper fallback、QJS deprecated alias parser、以及 alias behavior tests 中。
+      - `scheduler.session.*` 残留仅保留为 deprecated JS compatibility alias，并有 warning 测试；新 API 测试使用 `scheduler.sandbox.*`。
+      - `HostSessionRPC`、`SessionTopicPayload`、`agent-compose.session.*` topic 和 v1 bridge method 名仍为兼容/后续 8.3 topic/capability 收敛范围；本任务未修改 v1 proto 或 v1 generated code。
+      - `pkg/storage/configstore` sticky binding schema 已是 `loader_id -> sandbox_id`，本任务未做 schema 变更。
     - 下一目标：8.3。
 
 - [ ] 8.3 迁移 capability token 和 topic event link

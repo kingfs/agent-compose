@@ -265,7 +265,7 @@ func (e *LoaderCommandExecutor) prepareLoaderCommandLLMFacadeEnv(ctx context.Con
 			return nil, "", err
 		}
 		providerEnv := domain.MergeEnvItems(globalEnv, session.EnvItems)
-		providerEnv = domain.MergeEnvItems(providerEnv, request.SessionEnv)
+		providerEnv = domain.MergeEnvItems(providerEnv, domain.LoaderCommandSandboxEnv(request))
 		execSession.ProviderEnvItems = providerEnv
 	}
 
