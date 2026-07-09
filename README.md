@@ -21,7 +21,7 @@ Chinese documentation is available at [docs/zh-CN/README.md](docs/zh-CN/README.m
 - Supports project definitions in `agent-compose.yml`.
 - Starts isolated guest runtimes with Docker, BoxLite, or Microsandbox.
 - Provisions workspaces from local directories or Git repositories.
-- Exposes v1 session-oriented APIs and v2 project/run/image APIs.
+- Exposes v1 compatibility session APIs and v2 project/run/sandbox/image APIs.
 - Includes JavaScript runtime components under `runtime/`.
 
 The web UI lives in a separate repository,
@@ -42,14 +42,14 @@ proxy assumptions.
 cmd/agent-compose/             daemon and CLI entrypoint
 pkg/agentcompose/app/          service graph, route registration, background managers
 pkg/agentcompose/api/          Connect handlers and API/protobuf conversion helpers
-pkg/agentcompose/adapters/     daemon runtime/session/loader/capability adapters
+pkg/agentcompose/adapters/     daemon runtime/sandbox/loader/capability adapters
 pkg/agentcompose/proxy/        Jupyter, workspace, and runtime LLM HTTP proxy routes
 pkg/model/                     domain records, validation, stable IDs, JSON helpers
-pkg/storage/                   session and config persistence helpers
+pkg/storage/                   sandbox and config persistence helpers
 pkg/loaders/                   loader engine, scheduling, command, and payload helpers
 pkg/projects/                  project normalization and managed-resource builders
-pkg/runs/                      project run coordinator and run/session helpers
-pkg/sessions/                  session stream broker and runtime state helpers
+pkg/runs/                      project run coordinator and run/sandbox helpers
+pkg/sessions/                  v1-compatible stream broker and sandbox state helpers
 pkg/execution/                 cell, agent execution, artifact, and driver conversion helpers
 pkg/llms/                      daemon LLM client and runtime facade helpers
 pkg/events/                    event/webhook helpers
@@ -350,8 +350,8 @@ the selected OpenCode model provider.
 
 | Provider | Typical env vars | Notes |
 | --- | --- | --- |
-| `codex` | daemon LLM provider config; runtime receives `AGENT_COMPOSE_SESSION_TOKEN`, `LLM_API_KEY`, `LLM_API_ENDPOINT`, `OPENAI_BASE_URL`, and facade-token API key aliases | Uses Codex CLI/SDK in the guest image |
-| `claude` | daemon Anthropic-family provider config; runtime receives `AGENT_COMPOSE_SESSION_TOKEN`, `LLM_API_KEY`, `LLM_API_ENDPOINT`, `ANTHROPIC_BASE_URL`, and facade-token API key aliases | Uses Claude Code CLI in the guest image |
+| `codex` | daemon LLM provider config; runtime receives `AGENT_COMPOSE_SANDBOX_TOKEN`, `LLM_API_KEY`, `LLM_API_ENDPOINT`, `OPENAI_BASE_URL`, and facade-token API key aliases | Uses Codex CLI/SDK in the guest image |
+| `claude` | daemon Anthropic-family provider config; runtime receives `AGENT_COMPOSE_SANDBOX_TOKEN`, `LLM_API_KEY`, `LLM_API_ENDPOINT`, `ANTHROPIC_BASE_URL`, and facade-token API key aliases | Uses Claude Code CLI in the guest image |
 | `gemini` | not yet routed through the LLM facade | Uses Gemini CLI in the guest image |
 | `opencode` | Provider-specific keys for the selected OpenCode model, for example `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | Uses OpenCode CLI in the guest image |
 
@@ -466,8 +466,10 @@ npm run test:unit
 
 The daemon exposes both v1 and v2 Connect APIs.
 
-- v1 is session-oriented and remains available for existing UI and clients.
-- v2 is the preferred path for newer CLI and project/run/image workflows.
+- v1 is the compatibility API for existing UI and clients and retains its
+  session-oriented wire shape.
+- v2 is the preferred path for newer CLI and project/run/sandbox/image
+  workflows.
 
 Protocol definitions live under `proto/`.
 

@@ -842,7 +842,7 @@
 
 参考文档：[docs/plan/sandbox-naming-implementation-plan.md](docs/plan/sandbox-naming-implementation-plan.md#阶段-10文档部署材料和残留审计)
 
-- [ ] 10.1 更新仓库入口、部署和用户文档
+- [x] 10.1 更新仓库入口、部署和用户文档
   - 依赖：2.2、9.2。
   - 工作内容：
     - 更新 `AGENTS.md` 的 overview、runtime layout、core services、proxy path、runtime defaults、persistence、Docker/Compose 说明。
@@ -850,9 +850,9 @@
     - 更新 `docs/command-line-manual.md`、`docs/zh-CN/command-line-manual.md`。
     - 更新 runtime SDK README、proto-client README、loader-script README 中的公开字段和示例。
   - 可并行子任务：
-    - [ ] 可并行：更新部署和 env 文档。
-    - [ ] 可并行：更新 CLI 文档。
-    - [ ] 可并行：更新 package README 示例。
+    - [x] 可并行：更新部署和 env 文档。
+    - [x] 可并行：更新 CLI 文档。
+    - [x] 可并行：更新 package README 示例。
   - 测试方案：
     - 文档人工审阅。
     - 若示例含命令或 JSON，用现有 CLI tests 或 focused tests 固定 shape。
@@ -860,10 +860,23 @@
     - 用户文档中的当前目标状态与实现一致。
     - `.env.example` 不提供旧变量可复制默认值。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
+    - 状态：已完成。
+    - 变更：
+      - `AGENTS.md`、`README.md` 更新为 sandbox control plane、sandbox persistence、v2 project/run/sandbox/image workflow，并将 v1 `SessionService`、`/agent-compose/session/<session_id>` proxy path 和 `pkg/storage/sessionstore` 标为 compatibility 边界。
+      - `docs/zh-CN/README.md` 更新部署/env 说明，使用 `SANDBOX_ROOT`、`DOCKER_HOST_SANDBOX_ROOT`、`AGENT_COMPOSE_SANDBOX_TOKEN`，移除旧 `DOCKER_HOST_SESSION_ROOT` 默认路径。
+      - `docs/command-line-manual.md`、`docs/zh-CN/command-line-manual.md` 将 `sandbox prune` 文案收敛为删除 sandbox records。
+      - `runtime/javascript/README.md` 改为 agent sandboxes 和 provider thread resume state。
+      - `loader-script/README.md`、`loader-script/03-event-to-agent.js`、`loader-script/04-cron-daily-summary.js`、`loader-script/05-router-with-multiple-triggers.js` 的公开示例改用 `sandboxPolicy`、`sandboxEnv`、`sandboxId`、`agentThreadId` 和 `scheduler.sandbox.*`；`scheduler.session.*`、`sessionPolicy`、`sessionEnv` 仅作为 deprecated compatibility aliases 说明。
+      - 审计 `Dockerfile`、`docker-compose.yml`、`docker-compose.override.yml`、`.env.example`、runtime SDK README、proto-client README；无需代码变更。
+    - 验证：
+      - `node --check loader-script/01-manual-main.js && node --check loader-script/02-interval-heartbeat.js && node --check loader-script/03-event-to-agent.js && node --check loader-script/04-cron-daily-summary.js && node --check loader-script/05-router-with-multiple-triggers.js && node --check loader-script/06-conditional-triggers.js`
+      - `rg -n 'AGENT_COMPOSE_SESSION_TOKEN|DOCKER_HOST_SESSION_ROOT|SESSION_ROOT|sessionPolicy|sessionEnv|sessionId|agentSessionId|sandbox/session|agent session' README.md docs/zh-CN/README.md docs/command-line-manual.md docs/zh-CN/command-line-manual.md runtime/javascript/README.md runtime/agent-compose-runtime-sdk/README.md proto-client/README.md loader-script -S`
+      - `task build`
+    - 审计与例外：
+      - targeted public-doc audit 仅剩 `loader-script/README.md` 的 deprecated alias 说明；这是明确 compatibility 文案。
+      - broader 10.1 docs audit 剩余 `session` 命中属于 auth/browser session、v1 compatibility API/proxy、compatibility package/file names、loader lifecycle topic compatibility 或 deprecated alias 文案。
+      - `.env.example` 仅在 breaking-change 注释中提及旧 env；未提供旧变量可复制默认值。
+      - 本任务未修改 `proto/agentcompose/v1/*`、v2 proto、generated code、Dockerfile 或 Compose 行为。
     - 下一目标：10.2。
 
 - [ ] 10.2 更新设计文档和中文对应文档
