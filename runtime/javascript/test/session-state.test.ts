@@ -23,6 +23,24 @@ describe("provider session state", () => {
       await fs.writeFile(target, "{\"sessionId\": 3}", "utf8");
 
       expect(await readStoredSession(stateRoot, "codex")).toBeNull();
+
+      await fs.writeFile(target, "{\"provider\":\"codex\"}", "utf8");
+
+      expect(await readStoredSession(stateRoot, "codex")).toBeNull();
+    });
+  });
+
+  it("characterizes current whitespace session id compatibility", async () => {
+    await withTempSession(async (root) => {
+      const stateRoot = path.join(root, "state");
+      const target = sessionStatePath(stateRoot, "codex");
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, "{\"sessionId\":\"   \",\"updatedAt\":\"2026-01-01T00:00:00.000Z\"}", "utf8");
+
+      await expect(readStoredSession(stateRoot, "codex")).resolves.toEqual({
+        sessionId: "   ",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
     });
   });
 

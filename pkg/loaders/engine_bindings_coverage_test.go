@@ -173,6 +173,12 @@ function main(payload) {
 	if host.agentCalls[0].Driver != driverpkg.RuntimeDriverMicrosandbox || host.commandCalls[0].Mode != "exec" || host.commandCalls[1].Mode != "shell" {
 		t.Fatalf("unexpected request mappings: agent=%#v commands=%#v", host.agentCalls[0], host.commandCalls)
 	}
+	if host.agentCalls[0].SessionPolicy != domain.LoaderSessionPolicyNew || domain.SessionEnvMap(host.agentCalls[0].SessionEnv)["REQUEST_ONLY"] != "request" {
+		t.Fatalf("deprecated scheduler.agent session aliases mapped to %#v", host.agentCalls[0])
+	}
+	if host.commandCalls[0].SessionPolicy != domain.LoaderSessionPolicyNew {
+		t.Fatalf("deprecated scheduler.exec sessionPolicy alias mapped to %#v", host.commandCalls[0])
+	}
 	if len(host.agentCalls[0].Volumes) != 2 ||
 		host.agentCalls[0].Volumes[0].Type != domain.VolumeMountTypeVolume ||
 		host.agentCalls[0].Volumes[1].Type != domain.VolumeMountTypeBind ||
@@ -207,6 +213,25 @@ function main(payload) {
 	}, host)
 	if err != nil || singleTriggerResult.ResultJSON != `{"single":3}` {
 		t.Fatalf("single trigger result=%#v err=%v", singleTriggerResult, err)
+	}
+
+	aliasHost := &coverageEngineHost{}
+	_, err = engine.Execute(context.Background(), LoaderExecutionRequest{
+		Runtime: domain.LoaderRuntimeScheduler,
+		Script: `
+function main() {
+  scheduler.agent("alias agent", { session_policy: "new", session_env: { FROM_SNAKE: "yes" } });
+  scheduler.exec({ command: "true", sessionPolicy: "reuse", sessionEnv: [{ name: "FROM_CAMEL", value: "yes" }] });
+}`,
+	}, aliasHost)
+	if err != nil {
+		t.Fatalf("deprecated alias characterization execute returned error: %v", err)
+	}
+	if len(aliasHost.agentCalls) != 1 || aliasHost.agentCalls[0].SessionPolicy != domain.LoaderSessionPolicyNew || domain.SessionEnvMap(aliasHost.agentCalls[0].SessionEnv)["FROM_SNAKE"] != "yes" {
+		t.Fatalf("scheduler.agent deprecated alias mapping = %#v", aliasHost.agentCalls)
+	}
+	if len(aliasHost.commandCalls) != 1 || aliasHost.commandCalls[0].SessionPolicy != domain.LoaderSessionPolicySticky || domain.SessionEnvMap(aliasHost.commandCalls[0].SessionEnv)["FROM_CAMEL"] != "yes" {
+		t.Fatalf("scheduler.exec deprecated alias mapping = %#v", aliasHost.commandCalls)
 	}
 
 	validation, err := engine.Validate(context.Background(), domain.LoaderRuntimeScheduler, `

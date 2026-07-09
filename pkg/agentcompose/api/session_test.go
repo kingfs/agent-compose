@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -70,6 +71,46 @@ func TestSessionHandlerGetAndListSessionsUseStoreAndReconciler(t *testing.T) {
 	}
 	if reconciler.calls != 2 {
 		t.Fatalf("reconciler calls = %d, want 2", reconciler.calls)
+	}
+}
+
+func TestV1CompatibilityMappingPreservesSessionWireNames(t *testing.T) {
+	now := time.Date(2026, 7, 9, 10, 11, 12, 0, time.UTC)
+	session := &domain.Session{
+		Summary: domain.SessionSummary{
+			ID:        "sandbox-compatible-id",
+			Title:     "v1 compatibility",
+			VMStatus:  domain.VMStatusRunning,
+			Driver:    driverpkg.RuntimeDriverDocker,
+			Tags:      []domain.SessionTag{{Name: "project", Value: "demo"}},
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		EnvItems: []domain.SessionEnvVar{{Name: "PLAIN", Value: "visible"}, {Name: "SECRET", Value: "hidden", Secret: true}},
+	}
+
+	detail := SessionDetailToProto(session)
+	if detail.GetSummary().GetSessionId() != session.Summary.ID || detail.GetSummary().GetTitle() != session.Summary.Title {
+		t.Fatalf("v1 session summary mapping = %#v", detail.GetSummary())
+	}
+	if got := detail.GetEnvItems()[1].GetValue(); got != secretRedactedValue {
+		t.Fatalf("v1 secret env value = %q, want redacted", got)
+	}
+
+	cell := domain.NotebookCell{
+		ID:             "cell-1",
+		Type:           "agent",
+		Source:         "prompt",
+		Agent:          "codex",
+		AgentSessionID: "provider-thread-compatible-id",
+		Success:        true,
+		CreatedAt:      now,
+	}
+	if got := CellToProto(cell).GetAgentSessionId(); got != cell.AgentSessionID {
+		t.Fatalf("v1 cell agent_session_id = %q, want %q", got, cell.AgentSessionID)
+	}
+	if got := AgentRunToProto(cell).GetAgentSessionId(); got != cell.AgentSessionID {
+		t.Fatalf("v1 agent run agent_session_id = %q, want %q", got, cell.AgentSessionID)
 	}
 }
 

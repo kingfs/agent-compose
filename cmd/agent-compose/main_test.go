@@ -4483,6 +4483,9 @@ agents:
 	if sessionDecoded.ID != "session-inspect" || sessionDecoded.VMStatus != "running" || sessionDecoded.Tags["project"] == "" {
 		t.Fatalf("inspect session JSON = %#v", sessionDecoded)
 	}
+	if !reflect.DeepEqual(sessionDecoded, sandboxDecoded) {
+		t.Fatalf("inspect session alias JSON differs from sandbox JSON:\nsession=%#v\nsandbox=%#v", sessionDecoded, sandboxDecoded)
+	}
 }
 
 func TestIntegrationCLIImagesAliasesAndJSON(t *testing.T) {
