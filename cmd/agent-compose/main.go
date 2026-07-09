@@ -4633,7 +4633,7 @@ func listProjectRuns(ctx context.Context, client agentcomposev2connect.RunServic
 func latestRunsBySession(runs []*agentcomposev2.RunSummary) map[string]*agentcomposev2.RunSummary {
 	result := map[string]*agentcomposev2.RunSummary{}
 	for _, run := range runs {
-		sessionID := runSummarySandboxID(run)
+		sessionID := strings.TrimSpace(run.GetSessionId())
 		if sessionID == "" {
 			continue
 		}
@@ -4721,7 +4721,7 @@ func firstRunningSessionOutput(ctx context.Context, clients cliServiceClients, p
 	}
 	seen := map[string]struct{}{}
 	for _, run := range resp.Msg.GetRuns() {
-		sessionID := runSummarySandboxID(run)
+		sessionID := strings.TrimSpace(run.GetSessionId())
 		if sessionID == "" {
 			continue
 		}
