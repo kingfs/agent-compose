@@ -147,7 +147,6 @@ func ProjectSpecToProto(spec *compose.NormalizedProjectSpec) *agentcomposev2.Pro
 	return &agentcomposev2.ProjectSpec{
 		Name:      spec.Name,
 		Variables: EnvVarSpecsToProto(spec.Variables),
-		Workspace: WorkspaceSpecToProto(spec.Workspace),
 		Agents:    AgentSpecsToProto(spec.Agents),
 		Network:   NetworkSpecToProto(spec.Network),
 		Volumes:   ProjectVolumeSpecsToProto(spec.Volumes),
