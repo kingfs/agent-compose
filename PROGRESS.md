@@ -802,7 +802,7 @@
       - 本任务未修改 `proto/agentcompose/v1/*`、v2 proto 或 generated code。
     - 下一目标：9.2。
 
-- [ ] 9.2 补齐 CLI/E2E 和 compose env 工作流测试
+- [x] 9.2 补齐 CLI/E2E 和 compose env 工作流测试
   - 依赖：9.1。
   - 工作内容：
     - 覆盖 `agent-compose run <agent> --sandbox-id <id>`。
@@ -813,8 +813,8 @@
     - 覆盖 `agent-compose sandbox stop|resume|rm|prune`。
     - Docker compose env E2E 使用 `SANDBOX_ROOT` / `DOCKER_HOST_SANDBOX_ROOT`。
   - 可并行子任务：
-    - [ ] 可并行：补齐 CLI E2E tests。
-    - [ ] 可并行：补齐 compose/env E2E 或 integration tests。
+    - [x] 可并行：补齐 CLI E2E tests。
+    - [x] 可并行：补齐 compose/env E2E 或 integration tests。
   - 测试方案：
     - `task test:e2e`
     - `go test ./cmd/agent-compose`
@@ -822,10 +822,20 @@
     - 主要用户工作流有 E2E 证明。
     - compose env 不再依赖旧 session 变量。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
+    - 状态：已完成。
+    - 变更：
+      - 新增 `cmd/agent-compose/cli_sandbox_workflows_e2e_test.go`，用 `TestE2ECLISandboxNamingUserWorkflows` 显式聚合 9.2 要求的 CLI 用户工作流：`run --sandbox-id`、`ps --json` sandbox shape、`exec <sandbox> --command`、`logs --sandbox`、`inspect sandbox`/deprecated `inspect session`、`sandbox stop|resume|rm|prune`。
+      - 新增 `cmd/agent-compose/compose_env_e2e_test.go`，解析 `docker-compose.yml` 并审计 `.env.example`、`Dockerfile`，固定远端 compose 使用 published image、`DOCKER_HOST_SANDBOX_ROOT`、`SANDBOX_ROOT=/data/sandboxes`、`./data:/data` 和 `/data/work/.env` 挂载，不暴露 copyable legacy session env 默认值。
+    - 验证：
+      - `go test ./cmd/agent-compose -run 'TestE2E(CLISandboxNamingUserWorkflows|DockerComposeSandboxEnvContract)$'`
+      - `go test ./cmd/agent-compose`
+      - `task test:e2e`
+      - `rg -n 'session_id|SESSION_ROOT|DOCKER_HOST_SESSION_ROOT|SESSION_START_TIMEOUT|SESSION_STOP_TIMEOUT|json:"sandbox"|--session-id' cmd/agent-compose docker-compose.yml Dockerfile .env.example -S`
+    - 审计与例外：
+      - `task test:e2e` 已覆盖 Go E2E shape、`test/e2e` package 和 runtime JavaScript `TEST_SHAPE=e2e npm run test:unit`。
+      - legacy session env audit 命中仅为 `.env.example` breaking-change 注释和新增/既有测试断言；`docker-compose.yml`、`Dockerfile` 未保留 legacy session env 默认值。
+      - `--session-id` 命中仅为 CLI usage tests，确认旧 flag 已拒绝；`session_id` 命中为 `ps --json` 禁止字段断言。
+      - 本任务未修改 `proto/agentcompose/v1/*`、v2 proto 或 generated code。
     - 下一目标：10.1。
 
 ## 10. 阶段 10：文档、部署材料和残留审计
