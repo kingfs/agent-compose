@@ -110,11 +110,11 @@ func TestRunsCoordinatorAndHelperWorkflows(t *testing.T) {
 	if transition.ExitCode == 0 || !strings.Contains(transition.Error, "boom") {
 		t.Fatalf("transition from exec error = %#v", transition)
 	}
-	if !CleanupPolicyStopsSession(agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_STOP_ON_COMPLETION) ||
-		!CleanupPolicyStopsSession(agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_REMOVE_ON_COMPLETION) ||
-		CleanupPolicyStopsSession(agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_KEEP_RUNNING) ||
-		!CleanupPolicyRemovesSession(agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_REMOVE_ON_COMPLETION) ||
-		CleanupPolicyRemovesSession(agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_STOP_ON_COMPLETION) {
+	if !CleanupPolicyStopsSession(agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION) ||
+		!CleanupPolicyStopsSession(agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION) ||
+		CleanupPolicyStopsSession(agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING) ||
+		!CleanupPolicyRemovesSession(agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION) ||
+		CleanupPolicyRemovesSession(agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION) {
 		t.Fatalf("cleanup policy mapping failed")
 	}
 }
@@ -289,7 +289,7 @@ func TestRunsControllerRunProjectAgentSuccessWorkflow(t *testing.T) {
 		Prompt:          "do work",
 		Source:          domain.ProjectRunSourceAPI,
 		ClientRequestID: "request-1",
-		CleanupPolicy:   agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_STOP_ON_COMPLETION,
+		CleanupPolicy:   agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION,
 	}, &StreamSink{
 		SendStarted: func(run domain.ProjectRunRecord, _ time.Time) error {
 			started = true
@@ -550,7 +550,7 @@ func TestRunsControllerRunProjectAgentCommandWorkflow(t *testing.T) {
 		SandboxID:       run.SandboxID,
 		Source:          domain.ProjectRunSourceAPI,
 		ClientRequestID: "command-request-2",
-		CleanupPolicy:   agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_KEEP_RUNNING,
+		CleanupPolicy:   agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING,
 	}, nil)
 	if secondErr != nil || secondExecErr != nil {
 		t.Fatalf("second command run err=%v execErr=%v run=%#v", secondErr, secondExecErr, second)
@@ -831,7 +831,7 @@ func runAgentWithRemoveOnCompletion(t *testing.T, fixture *controllerRunFixture,
 		Prompt:          "do work",
 		Source:          domain.ProjectRunSourceAPI,
 		ClientRequestID: uuidForTest(t.Name()),
-		CleanupPolicy:   agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_REMOVE_ON_COMPLETION,
+		CleanupPolicy:   agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION,
 	}
 	if extra != nil {
 		extra(&req)

@@ -165,7 +165,7 @@ func RuntimeCacheDomainFromProto(domain agentcomposev2.CacheDomain) (runtimecach
 		return runtimecache.DomainMaterializedImageCache, nil
 	case agentcomposev2.CacheDomain_CACHE_DOMAIN_RUNTIME_DERIVED_CACHE:
 		return runtimecache.DomainRuntimeDerivedCache, nil
-	case agentcomposev2.CacheDomain_CACHE_DOMAIN_SESSION_EPHEMERAL_STATE:
+	case agentcomposev2.CacheDomain_CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE:
 		return runtimecache.DomainSandboxEphemeralState, nil
 	default:
 		return "", fmt.Errorf("%w: unknown domain %d", runtimecache.ErrInvalidFilter, domain)
@@ -181,7 +181,7 @@ func RuntimeCacheDomainToProto(domain runtimecache.Domain) agentcomposev2.CacheD
 	case runtimecache.DomainRuntimeDerivedCache:
 		return agentcomposev2.CacheDomain_CACHE_DOMAIN_RUNTIME_DERIVED_CACHE
 	case runtimecache.DomainSandboxEphemeralState:
-		return agentcomposev2.CacheDomain_CACHE_DOMAIN_SESSION_EPHEMERAL_STATE
+		return agentcomposev2.CacheDomain_CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE
 	default:
 		return agentcomposev2.CacheDomain_CACHE_DOMAIN_UNSPECIFIED
 	}

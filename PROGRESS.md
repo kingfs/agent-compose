@@ -449,7 +449,7 @@
 
 参考文档：[docs/plan/sandbox-naming-implementation-plan.md](docs/plan/sandbox-naming-implementation-plan.md#阶段-6v2-protogo-generated-code-和-typescript-client)
 
-- [ ] 6.1 清理 v2 proto 并重新生成 Go/TypeScript client
+- [x] 6.1 清理 v2 proto 并重新生成 Go/TypeScript client
   - 依赖：4.1、5.1。
   - 工作内容：
     - 只修改 `proto/agentcompose/v2/agentcompose.proto`，不修改 v1 proto。
@@ -459,9 +459,9 @@
     - `CACHE_DOMAIN_SESSION_EPHEMERAL_STATE` -> `CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE`。
     - 执行 Go pb/connect 生成和 `proto-client` 生成构建。
   - 可并行子任务：
-    - [ ] 可并行：编辑 v2 proto 并检查 reserve 策略。
-    - [ ] 可并行：更新 generated Go 调用点编译错误。
-    - [ ] 可并行：更新 `proto-client` generated TypeScript 和 build 输出。
+    - [x] 可并行：编辑 v2 proto 并检查 reserve 策略。
+    - [x] 可并行：更新 generated Go 调用点编译错误。
+    - [x] 可并行：更新 `proto-client` generated TypeScript 和 build 输出。
   - 测试方案：
     - `protoc -I proto --go_out=. --go_opt=paths=source_relative --connect-go_out=. --connect-go_opt=paths=source_relative proto/health/v1/health.proto proto/agentcompose/v1/agentcompose.proto proto/agentcompose/v2/agentcompose.proto`
     - `cd proto-client && npm run gen && npm run build`
@@ -471,10 +471,27 @@
     - v2 generated Go 和 `proto-client` 与 proto 同步。
     - v2 public `session_id` 字段不存在，删除字段已 reserved。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
+    - 状态：已完成并准备提交。
+    - 变更：
+      - `proto/agentcompose/v2/agentcompose.proto` 将 `RunSessionCleanupPolicy` 重命名为 `RunSandboxCleanupPolicy`，保留 enum value numbers，并 reserve 旧 enum value names。
+      - v2 public `session_id` 字段已按 spec 删除或重命名为 `sandbox_id`，删除字段保留旧 field number/name；`ExecSessionSelector` 重命名为 `ExecSandboxSelector`。
+      - `CACHE_DOMAIN_SESSION_EPHEMERAL_STATE` 重命名为 `CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE`，保留旧 enum value name；`RemoveProjectRequest.stop_running_sessions` 重命名为 `stop_running_sandboxes` 并 reserve 旧 name。
+      - 重新生成 v2 Go pb/connect 代码，并更新必要的 Go 调用点、CLI 输出路径和测试以匹配 generated v2 sandbox 字段。
+      - 重新生成并构建 `proto-client` TypeScript 输出；`proto-client/src` 和 `proto-client/dist` 为 gitignored 产物，不产生 tracked diff。
+    - 验证：
+      - `protoc -I proto --go_out=proto --go_opt=paths=source_relative --connect-go_out=proto --connect-go_opt=paths=source_relative health/v1/health.proto agentcompose/v1/agentcompose.proto agentcompose/v2/agentcompose.proto`
+      - `cd proto-client && npm run gen && npm run build`
+      - `go test ./proto/agentcompose/v2 ./proto/agentcompose/v2/agentcomposev2connect ./pkg/agentcompose/api ./cmd/agent-compose ./pkg/runs ./pkg/agentcompose/app`
+      - `task build`
+      - `git diff --check`
+      - `git diff -- proto/agentcompose/v1 proto/agentcompose/v1/agentcomposev1connect`
+      - `rg -n "RunSessionCleanupPolicy|ExecSessionSelector|CACHE_DOMAIN_SESSION_EPHEMERAL_STATE|GetSessionId\\(\\)|SessionId:|ExecRequest_SessionId|stop_running_sessions|session_id" proto/agentcompose/v2/agentcompose.proto proto-client/src/agentcompose/v2/agentcompose_pb.ts proto-client/dist/agentcompose/v2/agentcompose_pb.js pkg/agentcompose/api pkg/agentcompose/app pkg/runs cmd/agent-compose`
+    - 审计与例外：
+      - `PROGRESS.md` 原测试命令使用 `--go_out=.` 且传入 `proto/...` 路径，会生成未跟踪根目录 `agentcompose/`、`health/`；已删除该临时输出，并改用 `--go_out=proto` 与相对 `proto` 的输入路径更新 tracked generated files。
+      - v1 proto、v1 generated Go 和 v1 Connect generated code 无 diff；v1 service compatibility references 仍保留。
+      - v2 public `session_id` 字段已移除或重命名并 reserve；symbol audit 剩余命中仅为 v2 proto reserved names 或 v1 compatibility 引用。
+      - 6.1 为通过 generated code 编译同步更新了必要 Go 调用点；更完整的 v2/v1 mapper 收敛仍按 6.2 继续。
+      - subagent 并行尝试因 `agent thread limit reached` 未执行；本任务由主 agent 完成实现、测试和审计。
     - 下一目标：6.2。
 
 - [ ] 6.2 更新 v2 server/client mappings 和 v1 compatibility mapper

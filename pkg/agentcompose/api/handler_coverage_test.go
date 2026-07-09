@@ -400,7 +400,7 @@ func TestExecHandlerSessionTargetWorkflow(t *testing.T) {
 		return runtime, nil
 	})
 	resp, err := handler.Exec(ctx, connect.NewRequest(&agentcomposev2.ExecRequest{
-		Target:  &agentcomposev2.ExecRequest_SessionId{SessionId: "session-1"},
+		Target:  &agentcomposev2.ExecRequest_SandboxId{SandboxId: "session-1"},
 		Command: &agentcomposev2.ExecCommand{Command: "echo", Args: []string{"hi"}},
 		Env:     []*agentcomposev2.EnvVarSpec{{Name: "FOO", Value: "bar"}, {Name: " "}},
 	}))
@@ -426,11 +426,11 @@ func TestExecHandlerSessionTargetWorkflow(t *testing.T) {
 	if err != nil || string(outputData) != "hi\n" {
 		t.Fatalf("exec output artifact = %q err=%v", string(outputData), err)
 	}
-	if _, err := handler.Exec(ctx, connect.NewRequest(&agentcomposev2.ExecRequest{Target: &agentcomposev2.ExecRequest_SessionId{SessionId: "session-1"}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := handler.Exec(ctx, connect.NewRequest(&agentcomposev2.ExecRequest{Target: &agentcomposev2.ExecRequest_SandboxId{SandboxId: "session-1"}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("expected missing command error, got %v", err)
 	}
 	store.session = &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-1", VMStatus: domain.VMStatusStopped}}
-	if _, err := handler.Exec(ctx, connect.NewRequest(&agentcomposev2.ExecRequest{Target: &agentcomposev2.ExecRequest_SessionId{SessionId: "session-1"}, Command: &agentcomposev2.ExecCommand{Command: "echo"}})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+	if _, err := handler.Exec(ctx, connect.NewRequest(&agentcomposev2.ExecRequest{Target: &agentcomposev2.ExecRequest_SandboxId{SandboxId: "session-1"}, Command: &agentcomposev2.ExecCommand{Command: "echo"}})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("expected stopped session error, got %v", err)
 	}
 }
@@ -478,7 +478,7 @@ func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executeProjectCommand run target returned error: %v", err)
 	}
-	if resp.GetRunId() != "run-1" || resp.GetSessionId() != "session-running" || resp.GetCwd() != "/custom" || len(events) < 2 {
+	if resp.GetRunId() != "run-1" || resp.GetSandboxId() != "session-running" || resp.GetCwd() != "/custom" || len(events) < 2 {
 		t.Fatalf("run target resp=%#v events=%#v", resp, events)
 	}
 	if events[0].GetEventType() != agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_STARTED ||
@@ -501,25 +501,25 @@ func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
 	}
 
 	if _, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
-		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSessionSelector{ProjectId: "project-1", AgentName: "worker"}},
+		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{ProjectId: "project-1", AgentName: "worker"}},
 		Command: &agentcomposev2.ExecCommand{Command: "echo"},
 	}, "exec-ambiguous", nil); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("expected multiple running selector error, got %v", err)
 	}
 	projects.runs = projects.runs[:1]
 	selectorResp, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
-		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSessionSelector{ProjectId: "project-1", AgentName: "worker"}},
+		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{ProjectId: "project-1", AgentName: "worker"}},
 		Command: &agentcomposev2.ExecCommand{Command: "echo"},
 	}, "exec-selector", nil)
 	if err != nil {
 		t.Fatalf("selector command returned error: %v", err)
 	}
-	if selectorResp.GetRunId() != "run-1" || selectorResp.GetSessionId() != "session-running" {
+	if selectorResp.GetRunId() != "run-1" || selectorResp.GetSandboxId() != "session-running" {
 		t.Fatalf("selector resp = %#v", selectorResp)
 	}
 	projects.runs = nil
 	if _, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
-		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSessionSelector{ProjectId: "project-1", AgentName: "worker"}},
+		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{ProjectId: "project-1", AgentName: "worker"}},
 		Command: &agentcomposev2.ExecCommand{Command: "echo"},
 	}, "exec-missing", nil); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("expected no running session selector error, got %v", err)

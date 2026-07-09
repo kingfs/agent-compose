@@ -288,8 +288,8 @@ func testComposeProjectOutputHelpers(t *testing.T) {
 		t.Fatalf("composePSStatusFilter default filter=%#v err=%v", filter, err)
 	}
 
-	newerRun := &agentcomposev2.RunSummary{RunId: "run-new", ProjectId: "project-1", SessionId: "session-1", UpdatedAt: "2026-07-02T00:00:00Z"}
-	olderRun := &agentcomposev2.RunSummary{RunId: "run-old", ProjectId: "project-1", SessionId: "session-1", CreatedAt: "2026-07-01T00:00:00Z"}
+	newerRun := &agentcomposev2.RunSummary{RunId: "run-new", ProjectId: "project-1", SandboxId: "session-1", UpdatedAt: "2026-07-02T00:00:00Z"}
+	olderRun := &agentcomposev2.RunSummary{RunId: "run-old", ProjectId: "project-1", SandboxId: "session-1", CreatedAt: "2026-07-01T00:00:00Z"}
 	bySession := latestRunsBySession([]*agentcomposev2.RunSummary{
 		olderRun,
 		{RunId: "missing-session"},
@@ -362,7 +362,7 @@ func testComposeRunLogAndExecHelpers(t *testing.T) {
 		AgentName:   "reviewer",
 		Source:      agentcomposev2.RunSource_RUN_SOURCE_SCHEDULER,
 		Status:      agentcomposev2.RunStatus_RUN_STATUS_FAILED,
-		SessionId:   "session-1",
+		SandboxId:   "session-1",
 		ExitCode:    7,
 		Error:       "failed",
 		StartedAt:   "started",
@@ -460,7 +460,7 @@ func testComposeRunLogAndExecHelpers(t *testing.T) {
 
 	execOutput := composeExecOutputFromResult(&agentcomposev2.ExecResult{
 		ExecId:    "exec-1",
-		SessionId: "session-1",
+		SandboxId: "session-1",
 		RunId:     "run-1",
 		Command:   &agentcomposev2.ExecCommand{Command: "bash", Args: []string{"-lc", "echo ok"}},
 		Cwd:       "/repo",
@@ -595,7 +595,7 @@ func testComposeRunExecAndLogsEdgeHelpers(t *testing.T) {
 	normalizedExecProject := &compose.NormalizedProjectSpec{Name: "Project"}
 	execSandboxID := "sha256:1111111111111111111111111111111111111111111111111111111111111111"
 	req, err := normalizeComposeExecRequest(&cobra.Command{Use: "exec"}, cliServiceClients{}, normalizedExecProject, "project-1", composeExecOptions{Cwd: " /repo "}, []string{" " + execSandboxID + " ", "bash", "-lc", "pwd"})
-	if err != nil || req.GetSessionId() != execSandboxID || req.GetCwd() != "/repo" || req.GetCommand().GetCommand() != "bash" {
+	if err != nil || req.GetSandboxId() != execSandboxID || req.GetCwd() != "/repo" || req.GetCommand().GetCommand() != "bash" {
 		t.Fatalf("normalizeComposeExecRequest req=%#v err=%v", req, err)
 	}
 	for _, tc := range []struct {
@@ -732,7 +732,7 @@ func testComposeImageStatsAndSessionHelpers(t *testing.T) {
 	}
 	cacheItem := &agentcomposev2.CacheItem{
 		CacheId:        "cache-1",
-		Domain:         agentcomposev2.CacheDomain_CACHE_DOMAIN_SESSION_EPHEMERAL_STATE,
+		Domain:         agentcomposev2.CacheDomain_CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE,
 		Driver:         "docker",
 		Kind:           "sandbox-dir",
 		Path:           "/tmp/sandbox",

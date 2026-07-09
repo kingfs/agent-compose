@@ -21,7 +21,7 @@ func TestCacheHandlerListCachesMapsFilterAndResponse(t *testing.T) {
 
 	resp, err := handler.ListCaches(context.Background(), connect.NewRequest(&agentcomposev2.ListCachesRequest{Filter: &agentcomposev2.CacheFilter{
 		Driver:           runtimecache.DriverMicrosandbox,
-		Domain:           agentcomposev2.CacheDomain_CACHE_DOMAIN_SESSION_EPHEMERAL_STATE,
+		Domain:           agentcomposev2.CacheDomain_CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE,
 		Type:             string(runtimecache.CacheTypeSandbox),
 		Status:           agentcomposev2.CacheStatus_CACHE_STATUS_ORPHANED,
 		OlderThanSeconds: 7,
@@ -43,7 +43,7 @@ func TestCacheHandlerListCachesMapsFilterAndResponse(t *testing.T) {
 	}
 	got := resp.Msg.GetCaches()[0]
 	if got.GetCacheId() != item.CacheID ||
-		got.GetDomain() != agentcomposev2.CacheDomain_CACHE_DOMAIN_SESSION_EPHEMERAL_STATE ||
+		got.GetDomain() != agentcomposev2.CacheDomain_CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE ||
 		got.GetStatus() != agentcomposev2.CacheStatus_CACHE_STATUS_ORPHANED ||
 		got.GetLastUsedAt() == "" ||
 		len(got.GetReferences()) != 1 ||

@@ -1757,11 +1757,11 @@ func runComposeRunCommand(cmd *cobra.Command, cli cliOptions, options composeRun
 		}
 		normalizedOptions.SandboxID = sandboxID
 	}
-	cleanupPolicy := agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_STOP_ON_COMPLETION
+	cleanupPolicy := agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION
 	if normalizedOptions.KeepRunning {
-		cleanupPolicy = agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_KEEP_RUNNING
+		cleanupPolicy = agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING
 	} else if normalizedOptions.Remove {
-		cleanupPolicy = agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_REMOVE_ON_COMPLETION
+		cleanupPolicy = agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION
 	}
 	client := clients.run
 	var jupyter *agentcomposev2.RunJupyterSpec
@@ -1777,7 +1777,7 @@ func runComposeRunCommand(cmd *cobra.Command, cli cliOptions, options composeRun
 		Prompt:          prompt,
 		Command:         commandText,
 		Source:          agentcomposev2.RunSource_RUN_SOURCE_MANUAL,
-		SessionId:       strings.TrimSpace(normalizedOptions.SandboxID),
+		SandboxId:       strings.TrimSpace(normalizedOptions.SandboxID),
 		Driver:          strings.TrimSpace(normalizedOptions.Driver),
 		CleanupPolicy:   cleanupPolicy,
 		ClientRequestId: manualRunClientRequestID(normalized.Name, agentName, firstNonEmptyString(prompt, commandText)),
@@ -1789,7 +1789,7 @@ func runComposeRunCommand(cmd *cobra.Command, cli cliOptions, options composeRun
 	if normalizedOptions.Interactive {
 		runReq.Prompt = ""
 		runReq.Command = ""
-		runReq.CleanupPolicy = agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_KEEP_RUNNING
+		runReq.CleanupPolicy = agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING
 		return runInteractiveComposeRun(cmd, normalizedOptions, normalized.Name, client, clients.sandbox, runReq, promptFlagChanged, prompt, commandText)
 	}
 	return executeComposeRunRequest(cmd, cli, normalized.Name, projectID, client, runReq, normalizedOptions.Detach)
@@ -1873,11 +1873,11 @@ func runComposeSchedulerTriggerCommand(cmd *cobra.Command, cli cliOptions, optio
 	if err != nil {
 		return err
 	}
-	cleanupPolicy := agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_STOP_ON_COMPLETION
+	cleanupPolicy := agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION
 	if options.KeepRunning {
-		cleanupPolicy = agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_KEEP_RUNNING
+		cleanupPolicy = agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING
 	} else if options.Remove {
-		cleanupPolicy = agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_REMOVE_ON_COMPLETION
+		cleanupPolicy = agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION
 	}
 	var jupyter *agentcomposev2.RunJupyterSpec
 	if options.Jupyter || options.JupyterExpose {
@@ -1890,7 +1890,7 @@ func runComposeSchedulerTriggerCommand(cmd *cobra.Command, cli cliOptions, optio
 		ProjectId:       projectID,
 		AgentName:       trigger.AgentName,
 		Source:          agentcomposev2.RunSource_RUN_SOURCE_MANUAL,
-		SessionId:       strings.TrimSpace(options.SandboxID),
+		SandboxId:       strings.TrimSpace(options.SandboxID),
 		Driver:          strings.TrimSpace(options.Driver),
 		SchedulerId:     firstNonEmptyString(trigger.RawSchedulerID, trigger.SchedulerID),
 		TriggerId:       firstNonEmptyString(trigger.RawTriggerID, trigger.TriggerID),
@@ -2207,17 +2207,17 @@ func composeRunCompletionError(projectName, agentName string, completed *agentco
 }
 
 func runInteractiveComposeRun(cmd *cobra.Command, options composeRunOptions, projectName string, client agentcomposev2connect.RunServiceClient, sandboxClient agentcomposev2connect.SandboxServiceClient, baseReq *agentcomposev2.RunAgentRequest, promptMode bool, firstPrompt, firstCommand string) (err error) {
-	sessionID := strings.TrimSpace(baseReq.GetSessionId())
-	removeOnExit := options.Remove && sessionID == ""
+	sandboxID := strings.TrimSpace(baseReq.GetSandboxId())
+	removeOnExit := options.Remove && sandboxID == ""
 	defer func() {
-		if !removeOnExit || strings.TrimSpace(sessionID) == "" {
+		if !removeOnExit || strings.TrimSpace(sandboxID) == "" {
 			return
 		}
-		removeErr := removeSandbox(context.Background(), sandboxClient, sessionID, true)
+		removeErr := removeSandbox(context.Background(), sandboxClient, sandboxID, true)
 		if removeErr == nil {
 			return
 		}
-		wrapped := commandExitErrorForConnect(fmt.Errorf("remove interactive sandbox %s: %w", sessionID, removeErr))
+		wrapped := commandExitErrorForConnect(fmt.Errorf("remove interactive sandbox %s: %w", sandboxID, removeErr))
 		if err == nil {
 			err = wrapped
 			return
@@ -2257,8 +2257,8 @@ func runInteractiveComposeRun(cmd *cobra.Command, options composeRunOptions, pro
 			return nil
 		}
 		runReq := proto.Clone(baseReq).(*agentcomposev2.RunAgentRequest)
-		runReq.SessionId = sessionID
-		if strings.TrimSpace(sessionID) != "" {
+		runReq.SandboxId = sandboxID
+		if strings.TrimSpace(sandboxID) != "" {
 			runReq.Driver = ""
 		}
 		runReq.ClientRequestId = manualRunClientRequestID(projectName, baseReq.GetAgentName(), input)
@@ -2273,8 +2273,8 @@ func runInteractiveComposeRun(cmd *cobra.Command, options composeRunOptions, pro
 		if runErr != nil {
 			return runErr
 		}
-		if completed.GetSessionId() != "" {
-			sessionID = completed.GetSessionId()
+		if completed.GetSandboxId() != "" {
+			sandboxID = completed.GetSandboxId()
 		}
 		if err := writeRunWarnings(cmd.ErrOrStderr(), warnings); err != nil {
 			return err
@@ -2398,7 +2398,7 @@ func (w *terminalStreamWriter) Finish() error {
 func writeDetachedRunText(out io.Writer, run *agentcomposev2.RunSummary, logsCommand string) error {
 	if _, err := fmt.Fprintf(out, "Run: %s\nSandbox: %s\nStatus: %s\nLogs: %s\n",
 		firstNonEmptyString(displayOpaqueID(run.GetRunId()), "-"),
-		firstNonEmptyString(displayOpaqueID(run.GetSessionId()), "-"),
+		firstNonEmptyString(displayOpaqueID(run.GetSandboxId()), "-"),
 		runStatusText(run.GetStatus()),
 		logsCommand,
 	); err != nil {
@@ -2775,7 +2775,7 @@ func runComposeExecCommand(cmd *cobra.Command, cli cliOptions, options composeEx
 		}
 	}
 	if !result.GetSuccess() {
-		return commandExitError{Code: execResultExitCode(result), Err: fmt.Errorf("exec %s in sandbox %s failed: %s", result.GetExecId(), result.GetSessionId(), firstNonEmptyString(result.GetError(), result.GetStderr(), result.GetOutput(), "command failed"))}
+		return commandExitError{Code: execResultExitCode(result), Err: fmt.Errorf("exec %s in sandbox %s failed: %s", result.GetExecId(), result.GetSandboxId(), firstNonEmptyString(result.GetError(), result.GetStderr(), result.GetOutput(), "command failed"))}
 	}
 	return nil
 }
@@ -2823,7 +2823,7 @@ func normalizeComposeExecRequest(cmd *cobra.Command, clients cliServiceClients, 
 			if err != nil {
 				return nil, err
 			}
-			req.Target = &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSessionSelector{
+			req.Target = &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{
 				ProjectId:   projectID,
 				ProjectName: normalized.Name,
 				AgentName:   agentName,
@@ -2846,7 +2846,7 @@ func normalizeComposeExecRequest(cmd *cobra.Command, clients cliServiceClients, 
 	return &agentcomposev2.ExecRequest{
 		Command: command,
 		Cwd:     strings.TrimSpace(options.Cwd),
-		Target:  &agentcomposev2.ExecRequest_SessionId{SessionId: sandbox},
+		Target:  &agentcomposev2.ExecRequest_SandboxId{SandboxId: sandbox},
 	}, nil
 }
 
@@ -4830,7 +4830,7 @@ func listProjectRuns(ctx context.Context, client agentcomposev2connect.RunServic
 func latestRunsBySession(runs []*agentcomposev2.RunSummary) map[string]*agentcomposev2.RunSummary {
 	result := map[string]*agentcomposev2.RunSummary{}
 	for _, run := range runs {
-		sessionID := strings.TrimSpace(run.GetSessionId())
+		sessionID := strings.TrimSpace(run.GetSandboxId())
 		if sessionID == "" {
 			continue
 		}
@@ -4849,7 +4849,7 @@ func runSummarySandboxID(run *agentcomposev2.RunSummary) string {
 	if run == nil {
 		return ""
 	}
-	return firstNonEmptyString(strings.TrimSpace(run.GetSandboxId()), strings.TrimSpace(run.GetSessionId()))
+	return strings.TrimSpace(run.GetSandboxId())
 }
 
 func composePSSessionBelongsToProject(session *agentcomposev1.SessionSummary, project *agentcomposev2.Project, runsBySession map[string]*agentcomposev2.RunSummary) bool {
@@ -4918,7 +4918,7 @@ func firstRunningSessionOutput(ctx context.Context, clients cliServiceClients, p
 	}
 	seen := map[string]struct{}{}
 	for _, run := range resp.Msg.GetRuns() {
-		sessionID := strings.TrimSpace(run.GetSessionId())
+		sessionID := strings.TrimSpace(run.GetSandboxId())
 		if sessionID == "" {
 			continue
 		}
@@ -5231,7 +5231,7 @@ func composeRunOutputFromDetailWithOptions(run *agentcomposev2.RunDetail, option
 func composeExecOutputFromResult(result *agentcomposev2.ExecResult) composeExecOutput {
 	return composeExecOutput{
 		ExecID:    displayOpaqueID(result.GetExecId()),
-		SandboxID: displayOpaqueID(result.GetSessionId()),
+		SandboxID: displayOpaqueID(result.GetSandboxId()),
 		RunID:     displayOpaqueID(result.GetRunId()),
 		Command:   result.GetCommand().GetCommand(),
 		Args:      append([]string(nil), result.GetCommand().GetArgs()...),
@@ -6906,7 +6906,7 @@ func cacheDomainText(domain agentcomposev2.CacheDomain) string {
 		return "materialized-image-cache"
 	case agentcomposev2.CacheDomain_CACHE_DOMAIN_RUNTIME_DERIVED_CACHE:
 		return "runtime-derived-cache"
-	case agentcomposev2.CacheDomain_CACHE_DOMAIN_SESSION_EPHEMERAL_STATE:
+	case agentcomposev2.CacheDomain_CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE:
 		return "sandbox-ephemeral-state"
 	default:
 		return "unspecified"
@@ -6921,7 +6921,7 @@ func cacheTypeText(domain agentcomposev2.CacheDomain) string {
 		return "materialized"
 	case agentcomposev2.CacheDomain_CACHE_DOMAIN_RUNTIME_DERIVED_CACHE:
 		return "runtime"
-	case agentcomposev2.CacheDomain_CACHE_DOMAIN_SESSION_EPHEMERAL_STATE:
+	case agentcomposev2.CacheDomain_CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE:
 		return "sandbox"
 	default:
 		return "unspecified"

@@ -74,7 +74,7 @@ func (h *ExecHandler) ExecStream(ctx context.Context, req *connect.Request[agent
 	return stream.Send(&agentcomposev2.ExecStreamResponse{
 		EventType: agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_COMPLETED,
 		ExecId:    execID,
-		SessionId: result.GetSessionId(),
+		SandboxId: result.GetSandboxId(),
 		RunId:     result.GetRunId(),
 		Result:    result,
 	})
@@ -98,7 +98,7 @@ func (h *ExecHandler) executeProjectCommand(ctx context.Context, req *agentcompo
 		if err := send(&agentcomposev2.ExecStreamResponse{
 			EventType: agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_STARTED,
 			ExecId:    execID,
-			SessionId: session.Summary.ID,
+			SandboxId: session.Summary.ID,
 			RunId:     runID,
 		}); err != nil {
 			return nil, connect.NewError(connect.CodeUnknown, err)
@@ -156,7 +156,7 @@ func (h *ExecHandler) executeProjectCommand(ctx context.Context, req *agentcompo
 			sendErr = send(&agentcomposev2.ExecStreamResponse{
 				EventType:  agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_OUTPUT,
 				ExecId:     execID,
-				SessionId:  session.Summary.ID,
+				SandboxId:  session.Summary.ID,
 				RunId:      runID,
 				Chunk:      filtered.Text,
 				Stream:     StdioStreamToProto(filtered.Stream),
@@ -192,13 +192,13 @@ func (h *ExecHandler) resolveExecTargetSession(ctx context.Context, req *agentco
 	if req == nil {
 		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("exec request is required"))
 	}
-	if sessionID := strings.TrimSpace(req.GetSessionId()); sessionID != "" {
-		session, err := h.store.GetSandbox(ctx, sessionID)
+	if sandboxID := strings.TrimSpace(req.GetSandboxId()); sandboxID != "" {
+		session, err := h.store.GetSandbox(ctx, sandboxID)
 		if err != nil {
-			return nil, "", connect.NewError(connect.CodeNotFound, fmt.Errorf("session %s not found: %w", sessionID, err))
+			return nil, "", connect.NewError(connect.CodeNotFound, fmt.Errorf("sandbox %s not found: %w", sandboxID, err))
 		}
 		if session.Summary.VMStatus != domain.VMStatusRunning {
-			return nil, "", connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("session %s is not running", sessionID))
+			return nil, "", connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("sandbox %s is not running", sandboxID))
 		}
 		return session, "", nil
 	}
@@ -364,7 +364,7 @@ func ExecResultToProto(execID, sessionID, runID string, req *agentcomposev2.Exec
 	}
 	return &agentcomposev2.ExecResult{
 		ExecId:    execID,
-		SessionId: sessionID,
+		SandboxId: sessionID,
 		RunId:     runID,
 		Command: &agentcomposev2.ExecCommand{
 			Command: req.GetCommand().GetCommand(),

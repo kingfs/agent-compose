@@ -111,10 +111,10 @@ func TestAppRunControllerHelperCoverage(t *testing.T) {
 		TriggerId:        "trigger-1",
 		ClientRequestId:  "request-1",
 		Env:              []*agentcomposev2.EnvVarSpec{{Name: "A", Value: "B"}},
-		SessionId:        "session-1",
+		SandboxId:        "session-1",
 		Driver:           "docker",
 		OutputSchemaJson: `{"type":"object"}`,
-		CleanupPolicy:    agentcomposev2.RunSessionCleanupPolicy_RUN_SESSION_CLEANUP_POLICY_KEEP_RUNNING,
+		CleanupPolicy:    agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING,
 		Jupyter:          &agentcomposev2.RunJupyterSpec{Enabled: true},
 	}
 	req := runAgentRequestFromProto(msg)

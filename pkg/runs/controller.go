@@ -154,7 +154,7 @@ type RunAgentRequest struct {
 	Volumes          []domain.VolumeMountSpec
 	Driver           string
 	OutputSchemaJSON string
-	CleanupPolicy    agentcomposev2.RunSessionCleanupPolicy
+	CleanupPolicy    agentcomposev2.RunSandboxCleanupPolicy
 	Jupyter          *agentcomposev2.RunJupyterSpec
 }
 
@@ -837,7 +837,7 @@ func (c *Controller) publishProjectRunSessionStarted(ctx context.Context, sessio
 	}
 }
 
-func (c *Controller) cleanupProjectRunSession(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sessionResult SessionResult, policy agentcomposev2.RunSessionCleanupPolicy) domain.ProjectRunRecord {
+func (c *Controller) cleanupProjectRunSession(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sessionResult SessionResult, policy agentcomposev2.RunSandboxCleanupPolicy) domain.ProjectRunRecord {
 	session := sessionResult.Session
 	if !CleanupPolicyStopsSession(policy) || session == nil {
 		return run
@@ -858,7 +858,7 @@ func (c *Controller) cleanupProjectRunSession(ctx context.Context, coordinator *
 	return updated
 }
 
-func (c *Controller) cleanupProjectRunSessionByPolicy(ctx context.Context, sessionResult SessionResult, policy agentcomposev2.RunSessionCleanupPolicy) error {
+func (c *Controller) cleanupProjectRunSessionByPolicy(ctx context.Context, sessionResult SessionResult, policy agentcomposev2.RunSandboxCleanupPolicy) error {
 	session := sessionResult.Session
 	if CleanupPolicyRemovesSession(policy) && sessionResult.Created {
 		if err := c.stopProjectRunSession(ctx, session); err != nil {
