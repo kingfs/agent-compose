@@ -18,11 +18,11 @@ type fakeCellRuntime struct {
 	result domain.ExecResult
 }
 
-func (r fakeCellRuntime) EnsureSession(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
+func (r fakeCellRuntime) EnsureSandbox(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
 	return domain.SandboxVMInfo{}, nil
 }
 
-func (r fakeCellRuntime) StopSession(context.Context, *domain.Sandbox, domain.VMState) (bool, error) {
+func (r fakeCellRuntime) StopSandbox(context.Context, *domain.Sandbox, domain.VMState) (bool, error) {
 	return false, nil
 }
 

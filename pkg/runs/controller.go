@@ -661,11 +661,11 @@ func (c *Controller) ensureProjectRunSession(ctx context.Context, run domain.Pro
 			if err := c.applyJupyterOptionsToSession(session.Summary.ID, jupyterOptions); err != nil {
 				return SessionResult{Session: session}, err
 			}
-			driver, err := driverpkg.ResolveSessionRuntimeDriver(session.Summary.Driver, c.config.RuntimeDriver)
+			driver, err := driverpkg.ResolveSandboxRuntimeDriver(session.Summary.Driver, c.config.RuntimeDriver)
 			if err != nil {
 				return SessionResult{}, err
 			}
-			guestImage := driverpkg.ResolveSessionGuestImage(session.Summary.GuestImage, driverpkg.DefaultGuestImageForDriver(c.config, driver))
+			guestImage := driverpkg.ResolveSandboxGuestImage(session.Summary.GuestImage, driverpkg.DefaultGuestImageForDriver(c.config, driver))
 			if err := images.EnsureDriverImage(ctx, c.config, c.images, images.EnsureRequest{
 				Driver:      driver,
 				ImageRef:    guestImage,
@@ -687,11 +687,11 @@ func (c *Controller) ensureProjectRunSession(ctx context.Context, run domain.Pro
 	if prepared.Workspace != nil {
 		workspaceID = strings.TrimSpace(prepared.Workspace.ID)
 	}
-	driver, err := driverpkg.ResolveSessionRuntimeDriver(run.Driver, c.config.RuntimeDriver)
+	driver, err := driverpkg.ResolveSandboxRuntimeDriver(run.Driver, c.config.RuntimeDriver)
 	if err != nil {
 		return SessionResult{}, err
 	}
-	guestImage := driverpkg.ResolveSessionGuestImage(run.ImageRef, driverpkg.DefaultGuestImageForDriver(c.config, driver))
+	guestImage := driverpkg.ResolveSandboxGuestImage(run.ImageRef, driverpkg.DefaultGuestImageForDriver(c.config, driver))
 	if err := images.EnsureDriverImage(ctx, c.config, c.images, images.EnsureRequest{
 		Driver:      driver,
 		ImageRef:    guestImage,

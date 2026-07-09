@@ -13,7 +13,7 @@ import (
 )
 
 func TestDriverConversionWorkflows(t *testing.T) {
-	if ToDriverSession(nil) != nil {
+	if ToDriverSandbox(nil) != nil {
 		t.Fatalf("nil session should map to nil")
 	}
 	now := time.Date(2026, 7, 4, 8, 0, 0, 0, time.UTC)
@@ -25,7 +25,7 @@ func TestDriverConversionWorkflows(t *testing.T) {
 		EnvItems:        []domain.SandboxEnvVar{{Name: "A", Value: "B", Secret: true}},
 		RuntimeEnvItems: []domain.SandboxEnvVar{{Name: "R", Value: "V"}},
 	}
-	driverSession := ToDriverSession(session)
+	driverSession := ToDriverSandbox(session)
 	if driverSession.Summary.ID != "session-1" || len(driverSession.EnvItems) != 1 || !driverSession.EnvItems[0].Secret || len(driverSession.RuntimeEnvItems) != 1 {
 		t.Fatalf("driver session = %#v", driverSession)
 	}
@@ -43,7 +43,7 @@ func TestDriverConversionWorkflows(t *testing.T) {
 	if spec.Command != "echo" || spec.Args[0] != "ok" || spec.Env["A"] != "B" || spec.Cwd != "/workspace" {
 		t.Fatalf("exec spec = %#v", spec)
 	}
-	info := FromDriverSessionVMInfo(driverpkg.SessionVMInfo{BoxID: "box-id", JupyterURL: "http://jupyter", ProxyState: &driverProxyState})
+	info := FromDriverSandboxVMInfo(driverpkg.SandboxVMInfo{BoxID: "box-id", JupyterURL: "http://jupyter", ProxyState: &driverProxyState})
 	if info.BoxID != "box-id" || info.ProxyState == nil || info.ProxyState.Token != "token" {
 		t.Fatalf("session vm info = %#v", info)
 	}
@@ -79,8 +79,8 @@ func TestDriverConversionWorkflows(t *testing.T) {
 	}
 	session.EnvItems = []domain.SandboxEnvVar{{Name: "USER_VAR", Value: "ok"}, {Name: "LLM_API_KEY", Value: "secret"}}
 	session.RuntimeEnvItems = []domain.SandboxEnvVar{{Name: "MANAGED", Value: "yes"}}
-	env := BuildSessionExecEnv(config, session, "/home/agent")
-	if env["USER_VAR"] != "ok" || env["LLM_API_KEY"] != "" || env["MANAGED"] != "yes" || env["SESSION_ID"] != "session-1" {
+	env := BuildSandboxExecEnv(config, session, "/home/agent")
+	if env["USER_VAR"] != "ok" || env["LLM_API_KEY"] != "" || env["MANAGED"] != "yes" || env["SANDBOX_ID"] != "session-1" {
 		t.Fatalf("session exec env = %#v", env)
 	}
 	execSpec := BuildLoaderCommandExecSpec(config, session, "/state/cells/cell-1/request.json", "/home/agent")

@@ -122,7 +122,7 @@ func (c *Coordinator) BeginRun(ctx context.Context, req StartRequest) (domain.Pr
 	}
 	driver := firstNonEmpty(req.Driver, agent.Driver, projectAgent.Driver)
 	if driver != "" {
-		driver, err = driverpkg.ResolveSessionRuntimeDriver(driver, "")
+		driver, err = driverpkg.ResolveSandboxRuntimeDriver(driver, "")
 		if err != nil {
 			return domain.ProjectRunRecord{}, err
 		}

@@ -151,11 +151,11 @@ func (s *Store) CreateSandboxWithOptions(_ context.Context, title, baseWorkspace
 	sandboxDir := s.sandboxDir(id)
 	workspaceDir := filepath.Join(sandboxDir, "workspace")
 	proxyPath := strings.TrimRight(s.config.JupyterProxyBasePath, "/") + "/" + id + "/lab"
-	driver, err := driverpkg.ResolveSessionRuntimeDriver(driver, s.config.RuntimeDriver)
+	driver, err := driverpkg.ResolveSandboxRuntimeDriver(driver, s.config.RuntimeDriver)
 	if err != nil {
 		return nil, err
 	}
-	guestImage = driverpkg.ResolveSessionGuestImage(guestImage, "", driverpkg.DefaultGuestImageForDriver(s.config, driver))
+	guestImage = driverpkg.ResolveSandboxGuestImage(guestImage, "", driverpkg.DefaultGuestImageForDriver(s.config, driver))
 
 	for _, dir := range []string{
 		sandboxDir,
@@ -478,10 +478,10 @@ func (s *Store) hydrateSandboxGuestImage(session *Sandbox) {
 		return
 	}
 	if vmState, err := s.GetVMState(session.Summary.ID); err == nil {
-		session.Summary.GuestImage = driverpkg.ResolveSessionGuestImage("", vmState.Image, driverpkg.DefaultGuestImageForDriver(s.config, session.Summary.Driver))
+		session.Summary.GuestImage = driverpkg.ResolveSandboxGuestImage("", vmState.Image, driverpkg.DefaultGuestImageForDriver(s.config, session.Summary.Driver))
 		return
 	}
-	session.Summary.GuestImage = driverpkg.ResolveSessionGuestImage("", "", driverpkg.DefaultGuestImageForDriver(s.config, session.Summary.Driver))
+	session.Summary.GuestImage = driverpkg.ResolveSandboxGuestImage("", "", driverpkg.DefaultGuestImageForDriver(s.config, session.Summary.Driver))
 }
 
 func (s *Store) vmStatePath(id string) string {
@@ -522,7 +522,7 @@ func (s *Store) loadSandbox(id string) (*Sandbox, error) {
 	if strings.TrimSpace(session.Summary.ShortID) == "" {
 		session.Summary.ShortID = identity.ShortID(session.Summary.ID)
 	}
-	driver, err := driverpkg.ResolveSessionRuntimeDriver(session.Summary.Driver, s.config.RuntimeDriver)
+	driver, err := driverpkg.ResolveSandboxRuntimeDriver(session.Summary.Driver, s.config.RuntimeDriver)
 	if err != nil {
 		return nil, fmt.Errorf("session metadata %s has invalid driver: %w", id, err)
 	}
@@ -900,7 +900,7 @@ func (s *Store) SaveVMState(id string, state VMState) error {
 }
 
 func (s *Store) saveVMState(id string, state VMState) error {
-	driver, err := driverpkg.ResolveSessionRuntimeDriver(state.Driver, s.config.RuntimeDriver)
+	driver, err := driverpkg.ResolveSandboxRuntimeDriver(state.Driver, s.config.RuntimeDriver)
 	if err != nil {
 		return err
 	}

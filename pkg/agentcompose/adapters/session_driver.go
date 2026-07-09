@@ -33,7 +33,7 @@ func (d *SessionDriver) StartSessionVM(ctx context.Context, session *domain.Sand
 	ctx, cancel := context.WithTimeout(ctx, d.Config.SandboxStartTimeout)
 	defer cancel()
 
-	driver, err := driverpkg.ResolveSessionRuntimeDriver(session.Summary.Driver, d.Config.RuntimeDriver)
+	driver, err := driverpkg.ResolveSandboxRuntimeDriver(session.Summary.Driver, d.Config.RuntimeDriver)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func (d *SessionDriver) StartSessionVM(ctx context.Context, session *domain.Sand
 		return err
 	}
 
-	info, err := runtime.EnsureSession(ctx, session, vmState, proxyState)
+	info, err := runtime.EnsureSandbox(ctx, session, vmState, proxyState)
 	if err != nil {
 		vmState.LastError = err.Error()
 		vmState.StoppedAt = time.Time{}
@@ -80,11 +80,11 @@ func (d *SessionDriver) saveSessionStartInfo(session *domain.Sandbox, vmState do
 }
 
 func (d *SessionDriver) StopSessionVM(ctx context.Context, session *domain.Sandbox) error {
-	driver, err := driverpkg.ResolveSessionRuntimeDriver(session.Summary.Driver, d.Config.RuntimeDriver)
+	driver, err := driverpkg.ResolveSandboxRuntimeDriver(session.Summary.Driver, d.Config.RuntimeDriver)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, driverpkg.SessionStopContextTimeout(driver, d.Config.SandboxStopTimeout))
+	ctx, cancel := context.WithTimeout(ctx, driverpkg.SandboxStopContextTimeout(driver, d.Config.SandboxStopTimeout))
 	defer cancel()
 
 	runtime, err := d.Runtimes.ForDriver(driver)
@@ -96,7 +96,7 @@ func (d *SessionDriver) StopSessionVM(ctx context.Context, session *domain.Sandb
 	if err != nil {
 		return err
 	}
-	missing, err := runtime.StopSession(ctx, session, vmState)
+	missing, err := runtime.StopSandbox(ctx, session, vmState)
 	if err != nil {
 		vmState.LastError = err.Error()
 		_ = d.Store.SaveVMState(session.Summary.ID, vmState)
@@ -117,7 +117,7 @@ func (d *SessionDriver) StopSessionVM(ctx context.Context, session *domain.Sandb
 }
 
 func (d *SessionDriver) prepareSessionStart(ctx context.Context, driver string, session *domain.Sandbox, vmState *domain.VMState) error {
-	prepared, err := driverpkg.PrepareSessionStart(ctx, d.Config, driver, execution.ToDriverSession(session), execution.ToDriverVMState(*vmState))
+	prepared, err := driverpkg.PrepareSandboxStart(ctx, d.Config, driver, execution.ToDriverSandbox(session), execution.ToDriverVMState(*vmState))
 	if err != nil {
 		return err
 	}

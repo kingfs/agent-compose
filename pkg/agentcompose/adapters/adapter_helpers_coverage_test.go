@@ -66,7 +66,7 @@ func TestAdapterHelperCoverage(t *testing.T) {
 		runtime := &fakeAgentRuntime{}
 		provider := &runtimeProvider{
 			config: &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverBoxlite},
-			runtimes: map[string]BoxRuntime{
+			runtimes: map[string]SandboxRuntime{
 				driverpkg.RuntimeDriverDocker:  runtime,
 				driverpkg.RuntimeDriverBoxlite: runtime,
 			},
@@ -127,20 +127,20 @@ type fakeDriverAdapterRuntime struct {
 	stats      driverpkg.SandboxStats
 }
 
-func (r *fakeDriverAdapterRuntime) EnsureSession(context.Context, *driverpkg.Session, driverpkg.VMState, driverpkg.ProxyState) (driverpkg.SessionVMInfo, error) {
-	return driverpkg.SessionVMInfo{}, nil
+func (r *fakeDriverAdapterRuntime) EnsureSandbox(context.Context, *driverpkg.Sandbox, driverpkg.VMState, driverpkg.ProxyState) (driverpkg.SandboxVMInfo, error) {
+	return driverpkg.SandboxVMInfo{}, nil
 }
 
-func (r *fakeDriverAdapterRuntime) StopSession(context.Context, *driverpkg.Session, driverpkg.VMState) (bool, error) {
+func (r *fakeDriverAdapterRuntime) StopSandbox(context.Context, *driverpkg.Sandbox, driverpkg.VMState) (bool, error) {
 	return false, nil
 }
 
-func (r *fakeDriverAdapterRuntime) Exec(_ context.Context, _ *driverpkg.Session, _ driverpkg.VMState, spec driverpkg.ExecSpec) (driverpkg.ExecResult, error) {
+func (r *fakeDriverAdapterRuntime) Exec(_ context.Context, _ *driverpkg.Sandbox, _ driverpkg.VMState, spec driverpkg.ExecSpec) (driverpkg.ExecResult, error) {
 	r.execSpec = spec
 	return r.execResult, nil
 }
 
-func (r *fakeDriverAdapterRuntime) ExecStream(_ context.Context, _ *driverpkg.Session, _ driverpkg.VMState, spec driverpkg.ExecSpec, stream driverpkg.ExecStreamWriter) (driverpkg.ExecResult, error) {
+func (r *fakeDriverAdapterRuntime) ExecStream(_ context.Context, _ *driverpkg.Sandbox, _ driverpkg.VMState, spec driverpkg.ExecSpec, stream driverpkg.ExecStreamWriter) (driverpkg.ExecResult, error) {
 	r.execSpec = spec
 	if stream != nil {
 		stream(driverpkg.ExecChunk{Text: "err", Stream: driverpkg.StdioStderr})
@@ -148,25 +148,25 @@ func (r *fakeDriverAdapterRuntime) ExecStream(_ context.Context, _ *driverpkg.Se
 	return r.execResult, nil
 }
 
-func (r *fakeDriverAdapterRuntime) Stats(context.Context, *driverpkg.Session, driverpkg.VMState) (driverpkg.SandboxStats, error) {
+func (r *fakeDriverAdapterRuntime) Stats(context.Context, *driverpkg.Sandbox, driverpkg.VMState) (driverpkg.SandboxStats, error) {
 	return r.stats, nil
 }
 
 type fakeDriverNoStatsRuntime struct{}
 
-func (fakeDriverNoStatsRuntime) EnsureSession(context.Context, *driverpkg.Session, driverpkg.VMState, driverpkg.ProxyState) (driverpkg.SessionVMInfo, error) {
-	return driverpkg.SessionVMInfo{}, nil
+func (fakeDriverNoStatsRuntime) EnsureSandbox(context.Context, *driverpkg.Sandbox, driverpkg.VMState, driverpkg.ProxyState) (driverpkg.SandboxVMInfo, error) {
+	return driverpkg.SandboxVMInfo{}, nil
 }
 
-func (fakeDriverNoStatsRuntime) StopSession(context.Context, *driverpkg.Session, driverpkg.VMState) (bool, error) {
+func (fakeDriverNoStatsRuntime) StopSandbox(context.Context, *driverpkg.Sandbox, driverpkg.VMState) (bool, error) {
 	return false, nil
 }
 
-func (fakeDriverNoStatsRuntime) Exec(context.Context, *driverpkg.Session, driverpkg.VMState, driverpkg.ExecSpec) (driverpkg.ExecResult, error) {
+func (fakeDriverNoStatsRuntime) Exec(context.Context, *driverpkg.Sandbox, driverpkg.VMState, driverpkg.ExecSpec) (driverpkg.ExecResult, error) {
 	return driverpkg.ExecResult{}, nil
 }
 
-func (fakeDriverNoStatsRuntime) ExecStream(context.Context, *driverpkg.Session, driverpkg.VMState, driverpkg.ExecSpec, driverpkg.ExecStreamWriter) (driverpkg.ExecResult, error) {
+func (fakeDriverNoStatsRuntime) ExecStream(context.Context, *driverpkg.Sandbox, driverpkg.VMState, driverpkg.ExecSpec, driverpkg.ExecStreamWriter) (driverpkg.ExecResult, error) {
 	return driverpkg.ExecResult{}, nil
 }
 

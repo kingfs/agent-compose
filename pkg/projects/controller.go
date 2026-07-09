@@ -550,7 +550,7 @@ func (c *Controller) validateManagedAgentDefinitions(normalized NormalizedProjec
 			continue
 		}
 		if strings.TrimSpace(agent.Driver) != "" {
-			if _, err := driverpkg.ResolveSessionRuntimeDriver(agent.Driver, c.defaultDR); err != nil {
+			if _, err := driverpkg.ResolveSandboxRuntimeDriver(agent.Driver, c.defaultDR); err != nil {
 				issues = append(issues, ValidationIssue{Path: path + ".driver", Message: err.Error()})
 			}
 		}

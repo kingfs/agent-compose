@@ -250,7 +250,7 @@ func (h *AgentDefinitionHandler) CreateAgentSession(ctx context.Context, req *co
 	}
 	driver := firstNonEmpty(strings.TrimSpace(req.Msg.GetDriver()), agent.Driver)
 	if strings.TrimSpace(driver) != "" {
-		if _, err := driverpkg.ResolveSessionRuntimeDriver(driver, h.runtimeDriver()); err != nil {
+		if _, err := driverpkg.ResolveSandboxRuntimeDriver(driver, h.runtimeDriver()); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
 	}
@@ -304,7 +304,7 @@ func (h *AgentDefinitionHandler) validateAgentDefinitionWithWorkspace(item domai
 		result.Errors = append(result.Errors, "runtime_image_id is not supported in this version")
 	}
 	if driver := strings.TrimSpace(item.Driver); driver != "" {
-		if _, driverErr := driverpkg.ResolveSessionRuntimeDriver(driver, h.runtimeDriver()); driverErr != nil {
+		if _, driverErr := driverpkg.ResolveSandboxRuntimeDriver(driver, h.runtimeDriver()); driverErr != nil {
 			result.Errors = append(result.Errors, driverErr.Error())
 		}
 	}

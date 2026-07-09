@@ -34,11 +34,11 @@ type fakeAgentRuntime struct {
 	result       domain.ExecResult
 }
 
-func (r *fakeAgentRuntime) EnsureSession(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
+func (r *fakeAgentRuntime) EnsureSandbox(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
 	return domain.SandboxVMInfo{}, nil
 }
 
-func (r *fakeAgentRuntime) StopSession(context.Context, *domain.Sandbox, domain.VMState) (bool, error) {
+func (r *fakeAgentRuntime) StopSandbox(context.Context, *domain.Sandbox, domain.VMState) (bool, error) {
 	return false, nil
 }
 

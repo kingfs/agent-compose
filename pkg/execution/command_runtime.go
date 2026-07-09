@@ -56,7 +56,7 @@ func BuildLoaderCommandExecSpec(config *appconfig.Config, session *domain.Sandbo
 
 func BuildRuntimeCommandExecSpec(config *appconfig.Config, session *domain.Sandbox, guestRequestPath, home string) domain.ExecSpec {
 	appconfig.ApplyDefaultGuestPaths(config)
-	env := BuildSessionExecEnv(config, session, home)
+	env := BuildSandboxExecEnv(config, session, home)
 	command := strings.Join([]string{
 		"set -e",
 		"cd " + ShellQuote(config.GuestWorkspacePath),
@@ -85,7 +85,7 @@ func RuntimeCommandResultToExecResult(result domain.RuntimeCommandResult) domain
 	}
 }
 
-func BuildSessionExecEnv(config *appconfig.Config, session *domain.Sandbox, home string) map[string]string {
+func BuildSandboxExecEnv(config *appconfig.Config, session *domain.Sandbox, home string) map[string]string {
 	appconfig.ApplyDefaultGuestPaths(config)
 	env := runtimeEnvMap(session.EnvItems)
 	if env == nil {
@@ -99,7 +99,7 @@ func BuildSessionExecEnv(config *appconfig.Config, session *domain.Sandbox, home
 	}
 	env["GOPATH"] = "/usr/local/go"
 	env["PATH"] = "/root/.local/bin:/usr/local/go/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-	env["SESSION_ID"] = session.Summary.ID
+	env["SANDBOX_ID"] = session.Summary.ID
 	env["WORKSPACE"] = config.GuestWorkspacePath
 	env["STATE_ROOT"] = config.GuestStateRoot
 	env["RUNTIME_ROOT"] = config.GuestRuntimeRoot

@@ -40,7 +40,7 @@ func NormalizeLoader(item domain.Loader, assignID bool) (domain.Loader, error) {
 	item.Summary.AgentID = strings.TrimSpace(item.Summary.AgentID)
 	item.Summary.Driver = strings.TrimSpace(item.Summary.Driver)
 	if item.Summary.Driver != "" {
-		driver, err := driverpkg.ResolveSessionRuntimeDriver(item.Summary.Driver, item.Summary.Driver)
+		driver, err := driverpkg.ResolveSandboxRuntimeDriver(item.Summary.Driver, item.Summary.Driver)
 		if err != nil {
 			return domain.Loader{}, err
 		}

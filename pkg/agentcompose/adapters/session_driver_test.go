@@ -22,14 +22,14 @@ type fakeSessionRuntime struct {
 	ensureHook func(*domain.Sandbox)
 }
 
-func (r fakeSessionRuntime) EnsureSession(_ context.Context, session *domain.Sandbox, _ domain.VMState, _ domain.ProxyState) (domain.SandboxVMInfo, error) {
+func (r fakeSessionRuntime) EnsureSandbox(_ context.Context, session *domain.Sandbox, _ domain.VMState, _ domain.ProxyState) (domain.SandboxVMInfo, error) {
 	if r.ensureHook != nil {
 		r.ensureHook(session)
 	}
 	return r.info, nil
 }
 
-func (r fakeSessionRuntime) StopSession(context.Context, *domain.Sandbox, domain.VMState) (bool, error) {
+func (r fakeSessionRuntime) StopSandbox(context.Context, *domain.Sandbox, domain.VMState) (bool, error) {
 	return false, nil
 }
 
@@ -45,11 +45,11 @@ type fakeStopDeadlineRuntime struct {
 	remaining time.Duration
 }
 
-func (r *fakeStopDeadlineRuntime) EnsureSession(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
+func (r *fakeStopDeadlineRuntime) EnsureSandbox(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
 	return domain.SandboxVMInfo{}, nil
 }
 
-func (r *fakeStopDeadlineRuntime) StopSession(ctx context.Context, _ *domain.Sandbox, _ domain.VMState) (bool, error) {
+func (r *fakeStopDeadlineRuntime) StopSandbox(ctx context.Context, _ *domain.Sandbox, _ domain.VMState) (bool, error) {
 	deadline, ok := ctx.Deadline()
 	if ok {
 		r.remaining = time.Until(deadline)
@@ -69,35 +69,35 @@ type fakeDriverRuntime struct {
 	alive bool
 }
 
-func (r fakeDriverRuntime) EnsureSession(context.Context, *driverpkg.Session, driverpkg.VMState, driverpkg.ProxyState) (driverpkg.SessionVMInfo, error) {
-	return driverpkg.SessionVMInfo{}, nil
+func (r fakeDriverRuntime) EnsureSandbox(context.Context, *driverpkg.Sandbox, driverpkg.VMState, driverpkg.ProxyState) (driverpkg.SandboxVMInfo, error) {
+	return driverpkg.SandboxVMInfo{}, nil
 }
 
-func (r fakeDriverRuntime) StopSession(context.Context, *driverpkg.Session, driverpkg.VMState) (bool, error) {
+func (r fakeDriverRuntime) StopSandbox(context.Context, *driverpkg.Sandbox, driverpkg.VMState) (bool, error) {
 	return false, nil
 }
 
-func (r fakeDriverRuntime) Exec(context.Context, *driverpkg.Session, driverpkg.VMState, driverpkg.ExecSpec) (driverpkg.ExecResult, error) {
+func (r fakeDriverRuntime) Exec(context.Context, *driverpkg.Sandbox, driverpkg.VMState, driverpkg.ExecSpec) (driverpkg.ExecResult, error) {
 	return driverpkg.ExecResult{}, nil
 }
 
-func (r fakeDriverRuntime) ExecStream(context.Context, *driverpkg.Session, driverpkg.VMState, driverpkg.ExecSpec, driverpkg.ExecStreamWriter) (driverpkg.ExecResult, error) {
+func (r fakeDriverRuntime) ExecStream(context.Context, *driverpkg.Sandbox, driverpkg.VMState, driverpkg.ExecSpec, driverpkg.ExecStreamWriter) (driverpkg.ExecResult, error) {
 	return driverpkg.ExecResult{}, nil
 }
 
-func (r fakeDriverRuntime) IsSessionAlive(context.Context, *driverpkg.Session, driverpkg.VMState) (bool, error) {
+func (r fakeDriverRuntime) IsSandboxAlive(context.Context, *driverpkg.Sandbox, driverpkg.VMState) (bool, error) {
 	return r.alive, nil
 }
 
 type fakeRuntimeProvider struct {
-	runtime BoxRuntime
+	runtime SandboxRuntime
 }
 
-func (p fakeRuntimeProvider) ForDriver(string) (BoxRuntime, error) {
+func (p fakeRuntimeProvider) ForDriver(string) (SandboxRuntime, error) {
 	return p.runtime, nil
 }
 
-func (p fakeRuntimeProvider) ForSession(*domain.Sandbox) (BoxRuntime, error) {
+func (p fakeRuntimeProvider) ForSession(*domain.Sandbox) (SandboxRuntime, error) {
 	return p.runtime, nil
 }
 

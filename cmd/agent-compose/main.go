@@ -1939,7 +1939,7 @@ func normalizeComposeSchedulerTriggerOptions(options composeSchedulerTriggerOpti
 	options.SandboxID = strings.TrimSpace(options.SandboxID)
 	options.Driver = strings.TrimSpace(options.Driver)
 	if options.Driver != "" {
-		driver, err := driverpkg.ResolveSessionRuntimeDriver(options.Driver, "")
+		driver, err := driverpkg.ResolveSandboxRuntimeDriver(options.Driver, "")
 		if err != nil {
 			return options, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("scheduler trigger --driver: %w", err)}
 		}
@@ -2411,7 +2411,7 @@ func normalizeComposeRunOptions(cmd *cobra.Command, options composeRunOptions) (
 	options.SandboxID = strings.TrimSpace(options.SandboxID)
 	options.Driver = strings.TrimSpace(options.Driver)
 	if options.Driver != "" {
-		driver, err := driverpkg.ResolveSessionRuntimeDriver(options.Driver, "")
+		driver, err := driverpkg.ResolveSandboxRuntimeDriver(options.Driver, "")
 		if err != nil {
 			return options, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("run --driver: %w", err)}
 		}

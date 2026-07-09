@@ -18,11 +18,11 @@ import (
 
 type fakeLoaderCommandRuntime struct{}
 
-func (r fakeLoaderCommandRuntime) EnsureSession(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
+func (r fakeLoaderCommandRuntime) EnsureSandbox(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
 	return domain.SandboxVMInfo{}, nil
 }
 
-func (r fakeLoaderCommandRuntime) StopSession(context.Context, *domain.Sandbox, domain.VMState) (bool, error) {
+func (r fakeLoaderCommandRuntime) StopSandbox(context.Context, *domain.Sandbox, domain.VMState) (bool, error) {
 	return false, nil
 }
 

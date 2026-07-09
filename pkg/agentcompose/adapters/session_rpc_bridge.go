@@ -195,11 +195,11 @@ func (b *SessionRPCBridge) createSession(ctx context.Context, req *connect.Reque
 		workspaceSnapshot = toSessionWorkspaceSnapshot(workspaceConfig)
 	}
 
-	driver, err := driverpkg.ResolveSessionRuntimeDriver(req.Msg.GetDriver(), b.config.RuntimeDriver)
+	driver, err := driverpkg.ResolveSandboxRuntimeDriver(req.Msg.GetDriver(), b.config.RuntimeDriver)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	guestImage := driverpkg.ResolveSessionGuestImage(req.Msg.GetGuestImage(), driverpkg.DefaultGuestImageForDriver(b.config, driver))
+	guestImage := driverpkg.ResolveSandboxGuestImage(req.Msg.GetGuestImage(), driverpkg.DefaultGuestImageForDriver(b.config, driver))
 	session, err := b.store.CreateSandbox(ctx, req.Msg.GetTitle(), req.Msg.GetBaseWorkspace(), driver, guestImage, workspaceID, source, workspaceSnapshot, envItems, tags)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -385,12 +385,12 @@ func (p sessionRuntimeLiveness) IsSessionAlive(ctx context.Context, driver strin
 		return false, false, err
 	}
 	aliveRuntime, ok := runtime.(interface {
-		IsSessionAlive(context.Context, *domain.Sandbox, domain.VMState) (bool, error)
+		IsSandboxAlive(context.Context, *domain.Sandbox, domain.VMState) (bool, error)
 	})
 	if !ok {
 		return false, false, nil
 	}
-	alive, err := aliveRuntime.IsSessionAlive(ctx, session, vmState)
+	alive, err := aliveRuntime.IsSandboxAlive(ctx, session, vmState)
 	return alive, true, err
 }
 

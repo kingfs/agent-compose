@@ -494,18 +494,18 @@ func (c *Controller) AddLoaderEventRecord(ctx context.Context, loaderID, runID, 
 		return domain.LoaderEvent{}, err
 	}
 	event := domain.LoaderEvent{
-		ID:                   c.newID(),
-		LoaderID:             strings.TrimSpace(loaderID),
-		RunID:                strings.TrimSpace(runID),
-		TriggerID:            strings.TrimSpace(triggerID),
-		Type:                 strings.TrimSpace(eventType),
-		Level:                firstNonEmpty(strings.TrimSpace(level), "info"),
-		Message:              strings.TrimSpace(message),
-		PayloadJSON:          payloadJSON,
-		LinkedSessionID:      strings.TrimSpace(linkedSessionID),
-		LinkedCellID:         strings.TrimSpace(linkedCellID),
+		ID:                  c.newID(),
+		LoaderID:            strings.TrimSpace(loaderID),
+		RunID:               strings.TrimSpace(runID),
+		TriggerID:           strings.TrimSpace(triggerID),
+		Type:                strings.TrimSpace(eventType),
+		Level:               firstNonEmpty(strings.TrimSpace(level), "info"),
+		Message:             strings.TrimSpace(message),
+		PayloadJSON:         payloadJSON,
+		LinkedSessionID:     strings.TrimSpace(linkedSessionID),
+		LinkedCellID:        strings.TrimSpace(linkedCellID),
 		LinkedAgentThreadID: strings.TrimSpace(linkedAgentThreadID),
-		CreatedAt:            c.now(),
+		CreatedAt:           c.now(),
 	}
 	if err := c.deps.Store.AddLoaderEvent(ctx, event); err != nil {
 		return domain.LoaderEvent{}, err

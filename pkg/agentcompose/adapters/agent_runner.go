@@ -125,7 +125,7 @@ func (r *AgentRunner) resolveAgentSystemPrompt(ctx context.Context, session *dom
 func BuildAgentExecSpec(config *appconfig.Config, session *domain.Sandbox, agent, model, promptPath, schemaPath string) domain.ExecSpec {
 	appconfig.ApplyDefaultGuestPaths(config)
 	agentHome := config.GuestHomePath
-	env := execution.BuildSessionExecEnv(config, session, agentHome)
+	env := execution.BuildSandboxExecEnv(config, session, agentHome)
 
 	promptCommand := "agent-compose-runtime prompt" +
 		" --provider " + execution.ShellQuote(agent) +

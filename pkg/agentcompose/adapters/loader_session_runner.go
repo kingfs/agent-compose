@@ -278,7 +278,7 @@ func (r *LoaderSessionRunner) driver(request domain.LoaderAgentRequest, loader d
 	if agentDefinition != nil {
 		driverValue = firstNonEmpty(strings.TrimSpace(request.Driver), strings.TrimSpace(loader.Summary.Driver), strings.TrimSpace(agentDefinition.Driver))
 	}
-	return driverpkg.ResolveSessionRuntimeDriver(driverValue, r.Config.RuntimeDriver)
+	return driverpkg.ResolveSandboxRuntimeDriver(driverValue, r.Config.RuntimeDriver)
 }
 
 func (r *LoaderSessionRunner) guestImage(request domain.LoaderAgentRequest, loader domain.Loader, agentDefinition *domain.AgentDefinition, driver string) string {
@@ -286,7 +286,7 @@ func (r *LoaderSessionRunner) guestImage(request domain.LoaderAgentRequest, load
 	if agentDefinition != nil {
 		agentGuestImage = agentDefinition.GuestImage
 	}
-	return driverpkg.ResolveSessionGuestImage(request.GuestImage, loader.Summary.GuestImage, agentGuestImage, driverpkg.DefaultGuestImageForDriver(r.Config, driver))
+	return driverpkg.ResolveSandboxGuestImage(request.GuestImage, loader.Summary.GuestImage, agentGuestImage, driverpkg.DefaultGuestImageForDriver(r.Config, driver))
 }
 
 func (r *LoaderSessionRunner) resolveVolumeMounts(ctx context.Context, loader domain.Loader, request domain.LoaderAgentRequest, agentDefinition *domain.AgentDefinition) ([]domain.SandboxVolumeMount, []string, error) {

@@ -21,8 +21,8 @@ func HostAgentSystemPromptPath(session *domain.Sandbox) string {
 }
 
 func WriteAgentPromptFile(config *appconfig.Config, session *domain.Sandbox, agent, message string) (string, error) {
-	hostSessionDir := filepath.Dir(session.Summary.WorkspacePath)
-	promptDir := filepath.Join(hostSessionDir, "state", "agents", "prompts")
+	hostSandboxDir := filepath.Dir(session.Summary.WorkspacePath)
+	promptDir := filepath.Join(hostSandboxDir, "state", "agents", "prompts")
 	if err := os.MkdirAll(promptDir, 0o755); err != nil {
 		return "", fmt.Errorf("create agent prompt dir: %w", err)
 	}
@@ -72,8 +72,8 @@ func WriteAgentOutputSchemaFile(config *appconfig.Config, session *domain.Sandbo
 	if _, ok := decoded.(map[string]any); !ok {
 		return "", fmt.Errorf("agent output schema must be a JSON object")
 	}
-	hostSessionDir := filepath.Dir(session.Summary.WorkspacePath)
-	schemaDir := filepath.Join(hostSessionDir, "state", "agents", "schemas")
+	hostSandboxDir := filepath.Dir(session.Summary.WorkspacePath)
+	schemaDir := filepath.Join(hostSandboxDir, "state", "agents", "schemas")
 	if err := os.MkdirAll(schemaDir, 0o755); err != nil {
 		return "", fmt.Errorf("create agent schema dir: %w", err)
 	}

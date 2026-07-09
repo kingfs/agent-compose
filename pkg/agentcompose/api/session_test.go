@@ -98,13 +98,13 @@ func TestV1CompatibilityMappingPreservesSessionWireNames(t *testing.T) {
 	}
 
 	cell := domain.NotebookCell{
-		ID:             "cell-1",
-		Type:           "agent",
-		Source:         "prompt",
-		Agent:          "codex",
+		ID:            "cell-1",
+		Type:          "agent",
+		Source:        "prompt",
+		Agent:         "codex",
 		AgentThreadID: "provider-thread-compatible-id",
-		Success:        true,
-		CreatedAt:      now,
+		Success:       true,
+		CreatedAt:     now,
 	}
 	if got := CellToProto(cell).GetAgentSessionId(); got != cell.AgentThreadID {
 		t.Fatalf("v1 cell agent_thread_id = %q, want %q", got, cell.AgentThreadID)

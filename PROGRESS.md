@@ -273,7 +273,7 @@
       - 已尝试启动 subagent 做独立审计，但当前线程 subagent 数达到上限，无法新增；主 agent 使用本地 `rg`/diff/test 证据完成审计。
     - 下一目标：4.2。
 
-- [ ] 4.2 重命名 runtime driver domain 和实现
+- [x] 4.2 重命名 runtime driver domain 和实现
   - 依赖：4.1。
   - 工作内容：
     - `SessionRuntime` -> `SandboxRuntime`。
@@ -282,9 +282,9 @@
     - `ResolveSessionRuntimeDriver` -> `ResolveSandboxRuntimeDriver`，`ResolveSessionGuestImage` -> `ResolveSandboxGuestImage`。
     - 更新 Docker、BoxLite、Microsandbox runtime、runtime mount manifest、stats、guest bootstrap、image/cache references 的内部 JSON 字段和日志键。
   - 可并行子任务：
-    - [ ] 可并行：迁移 `pkg/driver` 接口、实现和 tests。
-    - [ ] 可并行：迁移 BoxLite/Microsandbox build-tag 文件和 smoke tests。
-    - [ ] 可并行：迁移 runtime mount manifest 和 Docker rebase tests。
+    - [x] 可并行：迁移 `pkg/driver` 接口、实现和 tests。
+    - [x] 可并行：迁移 BoxLite/Microsandbox build-tag 文件和 smoke tests。
+    - [x] 可并行：迁移 runtime mount manifest 和 Docker rebase tests。
   - 测试方案：
     - `go test ./pkg/driver`
     - 如环境可用：`task test:runtime-smoke`
@@ -292,10 +292,28 @@
     - driver 支持矩阵仍为 `docker`、`boxlite`、`microsandbox`。
     - driver resolve/start/stop/reconcile/stats/exec 测试覆盖 sandbox 命名。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
+    - 状态：已完成。
+    - 变更：
+      - `pkg/driver` runtime domain 已从 `SessionRuntime` 收敛为 `SandboxRuntime`，并迁移 `EnsureSandbox`、`StopSandbox`、可选 `IsSandboxAlive`、`SandboxVMInfo`、`ResolveSandboxRuntimeDriver`、`ResolveSandboxGuestImage`、`PrepareSandboxStart`、`ToDriverSandbox`、`FromDriverSandboxVMInfo`。
+      - Docker、BoxLite、Microsandbox runtime 实现和 build-tag 文件已迁移到 sandbox 命名，driver 日志键使用 `sandbox_id`，guest env 注入 `SANDBOX_ID`。
+      - runtime mount manifest、directory-only guest bootstrap、Docker host rebase、BoxLite/Microsandbox smoke tests 和 driver stats/exec 测试已同步 sandbox 命名。
+      - driver-facing adapter bridges、execution driver facade、image/loaders/projects/runs resolver 调用点已更新到 sandbox runtime API。
+      - 清理 driver-owned错误文案、注释和 helper 名称中的残留 session 术语，如 `SandboxStopContextTimeout`、`dockerSandboxHostConfig`、`readSandboxJupyterLog`、`sandboxVolumeMountSpecs`。
+    - 验证：
+      - `go test ./pkg/driver ./pkg/execution ./pkg/agentcompose/adapters`
+      - `go test ./pkg/...`
+      - `go test ./cmd/agent-compose`
+      - `go test -tags boxlitecgo ./pkg/driver`
+      - `go test ./pkg/execution`
+      - `git diff --check`
+      - `git diff -- proto/agentcompose/v1 proto/agentcompose/v1/agentcomposev1connect`
+      - `task test:runtime-smoke` 已尝试；BoxLite 启动因当前环境 `/dev/kvm: permission denied` 失败，并提示 `sudo usermod -aG kvm $USER && newgrp kvm`；OCI image smoke 未设置 `SMOKE_OCI_IMAGE_REF` 而跳过。
+    - 审计与例外：
+      - v1 proto、v1 generated Go、v1 Connect generated code diff 为空。
+      - schema audit 未发现 premature configstore schema rename：`loader_store.go`、`topic_event_store.go`、`llm_facade_store.go` 中未出现 `linked_agent_thread`、`agent_thread`、`linked_sandbox_id` 或新 `sandbox_id` schema 字段。
+      - driver runtime 命名 audit 未发现 `SessionRuntime`、`SessionVMInfo`、`EnsureSession`、`ResolveSessionRuntimeDriver`、`PrepareSessionStart`、`SESSION_ID`、`hostSessionDir`、`sessionEnvMap` 或已迁移 helper 名称残留。
+      - 仍保留 v1 compatibility 和 4.3 service graph 边界：`StopSession`、`SessionSummary`、`SessionIDRequest`、`SessionRPCBridge`、`sessionRuntimeLiveness.IsSessionAlive`。
+      - runtimecache/microsandbox cache 的 `DomainSessionEphemeralState`、`SessionID`、`ActiveSessions` 等命名，以及 SQLite columns/tables，按阶段 5.2/5.1 处理；本任务未执行旧 schema 自动迁移。
     - 下一目标：4.3。
 
 - [ ] 4.3 迁移 app/adapters/service graph 的 sandbox-native 依赖

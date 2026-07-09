@@ -59,7 +59,7 @@ func (l Lifecycle) ReconcileRuntimeState(ctx context.Context, session *domain.Sa
 	if session == nil || session.Summary.VMStatus != domain.VMStatusRunning {
 		return session, nil
 	}
-	driver, err := driverpkg.ResolveSessionRuntimeDriver(session.Summary.Driver, l.Config.RuntimeDriver)
+	driver, err := driverpkg.ResolveSandboxRuntimeDriver(session.Summary.Driver, l.Config.RuntimeDriver)
 	if err != nil {
 		return nil, err
 	}
