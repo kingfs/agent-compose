@@ -512,7 +512,7 @@ func testComposeRunExecAndLogsEdgeHelpers(t *testing.T) {
 	out.Reset()
 	logsCmd.SetErr(&out)
 	logOptions, err := normalizeComposeLogsOptions(logsCmd, composeLogsOptions{SandboxID: "sandbox-logs", TailLines: -1}, nil)
-	if err != nil || logOptions.SessionID != "sandbox-logs" || out.String() != "" {
+	if err != nil || logOptions.SandboxID != "sandbox-logs" || logOptions.SessionID != "" || out.String() != "" {
 		t.Fatalf("normalizeComposeLogsOptions options=%#v err=%v stderr=%q", logOptions, err, out.String())
 	}
 	if _, err := normalizeComposeLogsOptions(&cobra.Command{Use: "logs"}, composeLogsOptions{TailLines: -2}, nil); commandExitCode(err) != exitCodeUsage {
