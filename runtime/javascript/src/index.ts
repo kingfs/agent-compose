@@ -8,6 +8,6 @@ export { ClaudeRunner } from "./runners/claude.js";
 export { CodexRunner } from "./runners/codex.js";
 export { GeminiRunner } from "./runners/gemini.js";
 export { OpenCodeRunner } from "./runners/opencode.js";
-export { readStoredSession, sessionStatePath, writeStoredSession } from "./session-state.js";
+export { providerStatePath, readStoredThread, writeStoredThread } from "./session-state.js";
 export { appendDelta, TranscriptWriter } from "./transcript.js";
-export type { AgentResult, Provider, RunnerOptions, StoredSession } from "./types.js";
+export type { AgentResult, Provider, RunnerOptions, StoredThread } from "./types.js";

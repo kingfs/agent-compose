@@ -537,7 +537,7 @@
 
 参考文档：[docs/plan/sandbox-naming-implementation-plan.md](docs/plan/sandbox-naming-implementation-plan.md#阶段-7runtime-jsruntime-sdkagent-thread-artifact-和-llm-facade)
 
-- [ ] 7.1 将 runtime JS contract 从 `sessionId` 切换为 `threadId`
+- [x] 7.1 将 runtime JS contract 从 `sessionId` 切换为 `threadId`
   - 依赖：4.1。
   - 工作内容：
     - `runtime/javascript` 中 `AgentResult.sessionId` -> `threadId`。
@@ -546,19 +546,30 @@
     - Provider adapter 内部继续解析第三方 native `session_id/sessionId/sessionID/--session`，对外统一输出 `threadId`。
     - `__AGENT_RESULT__` payload 改为包含 `threadId`。
   - 可并行子任务：
-    - [ ] 可并行：迁移 runtime types、session-state 和 exports。
-    - [ ] 可并行：迁移 codex/claude/gemini/opencode runners 和 tests。
-    - [ ] 可并行：迁移 CLI/runtime e2e tests 和 fixture payload。
+    - [x] 可并行：迁移 runtime types、session-state 和 exports。
+    - [x] 可并行：迁移 codex/claude/gemini/opencode runners 和 tests。
+    - [x] 可并行：迁移 CLI/runtime e2e tests 和 fixture payload。
   - 测试方案：
     - `cd runtime/javascript && npm run test:unit`
   - 验收标准：
     - runtime public contract 使用 `threadId`。
     - provider-native session 字段只留在 runner adapter 内部和对应 tests。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
+    - 状态：已完成。
+    - 变更：
+      - `runtime/javascript` public `AgentResult` contract 已从 `sessionId` 切换为 `threadId`，CLI `__AGENT_RESULT__` 输出和 runtime e2e expectations 同步改为 `threadId`。
+      - `StoredSession/readStoredSession/writeStoredSession/sessionStatePath` 已收敛为 `StoredThread/readStoredThread/writeStoredThread/providerStatePath`，provider state 路径保持 `/data/state/agents/providers/<provider>.json`，payload 字段改为 `threadId`。
+      - Codex、Claude、Gemini、OpenCode runners 对外统一写入和返回 `threadId`，并更新 CLI、runner、runtime e2e、provider state 和 shape workflow tests。
+      - OpenCode resume 仍在 adapter 边界使用 provider-native `--session` 参数，但输入来自存储的 `threadId`。
+    - 验证：
+      - `cd runtime/javascript && npm run test:unit`
+      - `git diff --check`
+      - `rg -n "AgentResult.*sessionId|sessionId|StoredSession|readStoredSession|writeStoredSession|sessionStatePath|\"sessionId\"|result\\.sessionId|stored\\.sessionId" runtime/javascript/src runtime/javascript/test -g'*.ts'`
+    - 审计与例外：
+      - runtime JS source 中剩余 `sessionId/session_id/sessionID/--session` 仅位于 provider-native adapter 解析：Gemini `sessionId/session_id`、Claude `session_id`、OpenCode `sessionID/sessionId/session_id` 和 `--session`。
+      - runtime JS tests 中剩余 `sessionId/session_id/sessionID/--session` 仅为对应 provider-native fixture 或 OpenCode resume 参数断言；public result、stored provider JSON 和 CLI stdout expectations 均使用 `threadId`。
+      - 本任务未修改 v1 proto/generated、runtime SDK、host artifact/env 或 LLM facade；后续 SDK 和 host/facade 收敛按 7.2、7.3 继续。
+      - subagent 并行尝试因 `agent thread limit reached` 未执行；本任务由主 agent 完成实现、测试和审计。
     - 下一目标：7.2。
 
 - [ ] 7.2 更新 runtime SDK public result type 和包装测试
