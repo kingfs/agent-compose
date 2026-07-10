@@ -4967,8 +4967,8 @@ func TestCLIExecPromptAttachDoesNotWaitForOpenStdin(t *testing.T) {
 	stream := newFakeExecAttachStream(nil)
 	stream.recvErr = io.EOF
 	stdin, stdinWriter := io.Pipe()
-	defer stdin.Close()
-	defer stdinWriter.Close()
+	defer func() { _ = stdin.Close() }()
+	defer func() { _ = stdinWriter.Close() }()
 
 	cmd := &cobra.Command{Use: "exec"}
 	cmd.SetContext(context.Background())
