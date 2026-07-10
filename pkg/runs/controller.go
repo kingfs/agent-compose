@@ -1561,6 +1561,9 @@ func (p *promptAttachProjector) AppendHumanMessage(message string) error {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.loggedText != "" && !strings.HasSuffix(p.loggedText, "\n") {
+		text = "\n" + text
+	}
 	return p.appendLogChunkLocked(text)
 }
 

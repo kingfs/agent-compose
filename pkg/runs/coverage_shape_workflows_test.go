@@ -866,6 +866,24 @@ func TestPromptAttachProjectorLogsTurnFinalTextWithoutAgentEventText(t *testing.
 	}
 }
 
+func TestPromptAttachProjectorSeparatesHumanMessageAfterUnterminatedAgentText(t *testing.T) {
+	logsPath := filepath.Join(t.TempDir(), "transcript.txt")
+	projector := newPromptAttachProjector(domain.ProjectRunRecord{RunID: "run-boundary"}, &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-boundary"}}, logsPath, nil)
+	if _, _, err := projector.Project([]byte(`{"type":"agent_event","event":{"type":"item.completed","item":{"id":"m1","type":"agent_message","text":"first answer"}}}` + "\n")); err != nil {
+		t.Fatalf("project agent text: %v", err)
+	}
+	if err := projector.AppendHumanMessage("next question"); err != nil {
+		t.Fatalf("append human message: %v", err)
+	}
+	transcript, err := os.ReadFile(logsPath)
+	if err != nil {
+		t.Fatalf("read transcript: %v", err)
+	}
+	if string(transcript) != "first answer\nnext question\n" {
+		t.Fatalf("transcript = %q", string(transcript))
+	}
+}
+
 func receiveProjectorRunLogEvent(t *testing.T, sub *RunLogSubscription) RunLogEvent {
 	t.Helper()
 	select {
