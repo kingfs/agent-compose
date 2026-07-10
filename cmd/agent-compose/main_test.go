@@ -2082,7 +2082,7 @@ func TestIntegrationCLIRunPromptTTYUsesRunAttach(t *testing.T) {
 	var stderr bytes.Buffer
 	cmd := &cobra.Command{Use: "run"}
 	cmd.SetContext(context.Background())
-	cmd.SetIn(strings.NewReader("second prompt\n/exit\n"))
+	cmd.SetIn(strings.NewReader(strings.Repeat("\n", 1024) + "second prompt\n/exit\n"))
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 	err := runComposeRunPromptAttachCommand(cmd, "cli-run-prompt-attach", client, &agentcomposev2.RunAgentRequest{
@@ -4876,7 +4876,7 @@ func TestCLIExecPromptAttachUsesExecAttachClient(t *testing.T) {
 	var stderr bytes.Buffer
 	cmd := &cobra.Command{Use: "exec"}
 	cmd.SetContext(context.Background())
-	cmd.SetIn(strings.NewReader("next message\n/exit\n"))
+	cmd.SetIn(strings.NewReader(strings.Repeat("\n", 1024) + "next message\n/exit\n"))
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 	err := runComposeExecPromptAttachCommand(cmd, "cli-exec-prompt", client, &agentcomposev2.ExecRequest{

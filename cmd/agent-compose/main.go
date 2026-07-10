@@ -3003,40 +3003,41 @@ func runComposeRunPromptAttachCommand(cmd *cobra.Command, projectName string, cl
 		AgentName: req.GetAgentName(),
 		SandboxID: firstNonEmptyString(req.GetSandboxId(), req.GetSandboxId()),
 	}
-	var promptForInput func() error
-	promptForInput = func() error {
-		if fd, ok := terminalFileDescriptor(stdout); ok && isTerminalFD(fd) {
-			if err := writePromptAttachInputPrompt(stderr, inputPrompt, !lastOutputEndedWithNewline); err != nil {
-				return err
+	promptForInput := func() error {
+		for {
+			if fd, ok := terminalFileDescriptor(stdout); ok && isTerminalFD(fd) {
+				if err := writePromptAttachInputPrompt(stderr, inputPrompt, !lastOutputEndedWithNewline); err != nil {
+					return err
+				}
 			}
-		}
-		if !scanner.Scan() {
-			if err := scanner.Err(); err != nil {
-				return err
+			if !scanner.Scan() {
+				if err := scanner.Err(); err != nil {
+					return err
+				}
+				if err := send(&agentcomposev2.RunAttachRequest{
+					Frame: &agentcomposev2.RunAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}},
+				}); err != nil {
+					return err
+				}
+				return closeRequest()
 			}
-			if err := send(&agentcomposev2.RunAttachRequest{
-				Frame: &agentcomposev2.RunAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}},
-			}); err != nil {
-				return err
+			text := strings.TrimSpace(scanner.Text())
+			if text == "" {
+				continue
 			}
-			return closeRequest()
-		}
-		text := strings.TrimSpace(scanner.Text())
-		if text == "" {
-			return promptForInput()
-		}
-		if text == "/exit" {
-			if err := send(&agentcomposev2.RunAttachRequest{
-				Frame: &agentcomposev2.RunAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}},
-			}); err != nil {
-				return err
+			if text == "/exit" {
+				if err := send(&agentcomposev2.RunAttachRequest{
+					Frame: &agentcomposev2.RunAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}},
+				}); err != nil {
+					return err
+				}
+				return closeRequest()
 			}
-			return closeRequest()
+			lastOutputEndedWithNewline = true
+			return send(&agentcomposev2.RunAttachRequest{
+				Frame: &agentcomposev2.RunAttachRequest_HumanMessage{HumanMessage: &agentcomposev2.AttachHumanMessage{Text: text}},
+			})
 		}
-		lastOutputEndedWithNewline = true
-		return send(&agentcomposev2.RunAttachRequest{
-			Frame: &agentcomposev2.RunAttachRequest_HumanMessage{HumanMessage: &agentcomposev2.AttachHumanMessage{Text: text}},
-		})
 	}
 	var result *agentcomposev2.AttachResult
 	output := newTerminalStreamOutput(stdout, stderr)
@@ -3277,40 +3278,41 @@ func runComposeExecPromptAttachCommand(cmd *cobra.Command, projectName string, c
 	inputPrompt := promptAttachInputPrompt{
 		SandboxID: req.GetSandboxId(),
 	}
-	var promptForInput func() error
-	promptForInput = func() error {
-		if fd, ok := terminalFileDescriptor(stdout); ok && isTerminalFD(fd) {
-			if err := writePromptAttachInputPrompt(stderr, inputPrompt, !lastOutputEndedWithNewline); err != nil {
-				return err
+	promptForInput := func() error {
+		for {
+			if fd, ok := terminalFileDescriptor(stdout); ok && isTerminalFD(fd) {
+				if err := writePromptAttachInputPrompt(stderr, inputPrompt, !lastOutputEndedWithNewline); err != nil {
+					return err
+				}
 			}
-		}
-		if !scanner.Scan() {
-			if err := scanner.Err(); err != nil {
-				return err
+			if !scanner.Scan() {
+				if err := scanner.Err(); err != nil {
+					return err
+				}
+				if err := send(&agentcomposev2.ExecAttachRequest{
+					Frame: &agentcomposev2.ExecAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}},
+				}); err != nil {
+					return err
+				}
+				return closeRequest()
 			}
-			if err := send(&agentcomposev2.ExecAttachRequest{
-				Frame: &agentcomposev2.ExecAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}},
-			}); err != nil {
-				return err
+			text := strings.TrimSpace(scanner.Text())
+			if text == "" {
+				continue
 			}
-			return closeRequest()
-		}
-		text := strings.TrimSpace(scanner.Text())
-		if text == "" {
-			return promptForInput()
-		}
-		if text == "/exit" {
-			if err := send(&agentcomposev2.ExecAttachRequest{
-				Frame: &agentcomposev2.ExecAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}},
-			}); err != nil {
-				return err
+			if text == "/exit" {
+				if err := send(&agentcomposev2.ExecAttachRequest{
+					Frame: &agentcomposev2.ExecAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}},
+				}); err != nil {
+					return err
+				}
+				return closeRequest()
 			}
-			return closeRequest()
+			lastOutputEndedWithNewline = true
+			return send(&agentcomposev2.ExecAttachRequest{
+				Frame: &agentcomposev2.ExecAttachRequest_HumanMessage{HumanMessage: &agentcomposev2.AttachHumanMessage{Text: text}},
+			})
 		}
-		lastOutputEndedWithNewline = true
-		return send(&agentcomposev2.ExecAttachRequest{
-			Frame: &agentcomposev2.ExecAttachRequest_HumanMessage{HumanMessage: &agentcomposev2.AttachHumanMessage{Text: text}},
-		})
 	}
 	var result *agentcomposev2.AttachResult
 	output := newTerminalStreamOutput(stdout, stderr)
