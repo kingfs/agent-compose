@@ -607,6 +607,10 @@ func (r *microsandboxRuntime) dockerDiskPath(sandboxID string) string {
 	return filepath.Join(r.config.MicrosandboxHome, "docker-disks", microsandboxDockerDiskName(sandboxID)+".raw")
 }
 
+func (r *microsandboxRuntime) legacyDockerDiskPath(sandboxID string) string {
+	return filepath.Join(r.config.MicrosandboxHome, "docker-disks", sandboxID+".raw")
+}
+
 func microsandboxDockerDiskName(sandboxID string) string {
 	if hash, err := identity.Hash(sandboxID); err == nil {
 		return hash
@@ -622,6 +626,17 @@ func (r *microsandboxRuntime) ensureDockerDisk(sandboxID string) (string, error)
 	if _, err := os.Stat(path); err == nil {
 		// Disk already exists; reuse it (idempotent for sandbox reconnects).
 		return path, nil
+	}
+	legacyPath := r.legacyDockerDiskPath(sandboxID)
+	if legacyPath != path {
+		if _, err := os.Stat(legacyPath); err == nil {
+			if err := os.Rename(legacyPath, path); err != nil {
+				return "", fmt.Errorf("migrate legacy docker disk image %s to %s: %w", legacyPath, path, err)
+			}
+			return path, nil
+		} else if !os.IsNotExist(err) {
+			return "", fmt.Errorf("stat legacy docker disk image %s: %w", legacyPath, err)
+		}
 	}
 	// Create a sparse raw file then format it as ext4. Sized by
 	// BOX_DISK_SIZE_GB (shared with the boxlite driver; config default 6 GiB).
@@ -651,9 +666,14 @@ func (r *microsandboxRuntime) ensureDockerDisk(sandboxID string) (string, error)
 }
 
 func (r *microsandboxRuntime) removeDockerDisk(sandboxID string) {
-	path := r.dockerDiskPath(sandboxID)
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		slog.Warn("agent-compose microsandbox: failed to remove docker disk image", "path", path, "error", err)
+	paths := []string{r.dockerDiskPath(sandboxID)}
+	if legacyPath := r.legacyDockerDiskPath(sandboxID); legacyPath != paths[0] {
+		paths = append(paths, legacyPath)
+	}
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			slog.Warn("agent-compose microsandbox: failed to remove docker disk image", "path", path, "error", err)
+		}
 	}
 }
 

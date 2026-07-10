@@ -139,16 +139,44 @@ func TestMicrosandboxPrepareEnvironmentPreservesDockerDisks(t *testing.T) {
 func TestMicrosandboxRemoveDockerDiskOnlyCurrentSession(t *testing.T) {
 	config := testMicrosandboxConfig(t)
 	runtime := &microsandboxRuntime{config: config}
-	current := writeMicrosandboxFile(t, config.MicrosandboxHome, "docker-disks", "current.raw")
-	other := writeMicrosandboxFile(t, config.MicrosandboxHome, "docker-disks", "other.raw")
+	currentID := identity.NewRandomID(identity.ResourceSandbox)
+	otherID := identity.NewRandomID(identity.ResourceSandbox)
+	current := writeMicrosandboxFile(t, config.MicrosandboxHome, "docker-disks", microsandboxDockerDiskName(currentID)+".raw")
+	legacyCurrent := writeMicrosandboxFile(t, config.MicrosandboxHome, "docker-disks", currentID+".raw")
+	other := writeMicrosandboxFile(t, config.MicrosandboxHome, "docker-disks", microsandboxDockerDiskName(otherID)+".raw")
 
-	runtime.removeDockerDisk("current")
+	runtime.removeDockerDisk(currentID)
 
 	if _, err := os.Stat(current); !os.IsNotExist(err) {
 		t.Fatalf("current disk exists after removeDockerDisk, err=%v", err)
 	}
+	if _, err := os.Stat(legacyCurrent); !os.IsNotExist(err) {
+		t.Fatalf("legacy current disk exists after removeDockerDisk, err=%v", err)
+	}
 	if _, err := os.Stat(other); err != nil {
 		t.Fatalf("other disk missing after removeDockerDisk: %v", err)
+	}
+}
+
+func TestMicrosandboxEnsureDockerDiskMigratesLegacyPath(t *testing.T) {
+	config := testMicrosandboxConfig(t)
+	runtime := &microsandboxRuntime{config: config}
+	sandboxID := identity.NewRandomID(identity.ResourceSandbox)
+	legacy := writeMicrosandboxFile(t, config.MicrosandboxHome, "docker-disks", sandboxID+".raw")
+
+	got, err := runtime.ensureDockerDisk(sandboxID)
+	if err != nil {
+		t.Fatalf("ensureDockerDisk: %v", err)
+	}
+	want := runtime.dockerDiskPath(sandboxID)
+	if got != want {
+		t.Fatalf("ensureDockerDisk path = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("migrated docker disk missing: %v", err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy docker disk still exists after migration, err=%v", err)
 	}
 }
 
@@ -209,13 +237,14 @@ func TestMicrosandboxBindMountFallsBackToBoxDiskSize(t *testing.T) {
 
 func TestListMicrosandboxSandboxEphemeralCaches(t *testing.T) {
 	home := t.TempDir()
-	diskPath := writeMicrosandboxFile(t, home, "docker-disks", "running.raw")
+	runningID := identity.NewRandomID(identity.ResourceSandbox)
+	diskPath := writeMicrosandboxFile(t, home, "docker-disks", microsandboxDockerDiskName(runningID)+".raw")
 	orphanDisk := writeMicrosandboxFile(t, home, "docker-disks", "orphan.raw")
 	_ = writeMicrosandboxFile(t, home, "docker-disks", "ignored.txt")
 	sandboxPath := writeMicrosandboxFile(t, home, "sandboxes", "stopped-sandbox", "state.json")
 	result, err := listMicrosandboxSandboxEphemeralCaches(context.Background(), home, microsandboxCacheReferenceState{
 		ActiveSandboxes: map[string]runtimecache.Reference{
-			"running": {Name: "running sandbox"},
+			runningID: {Name: "running sandbox"},
 		},
 		ReferencedSandboxes: map[string]runtimecache.Reference{
 			"stopped-sandbox": {Name: "stopped sandbox"},
@@ -242,6 +271,9 @@ func TestListMicrosandboxSandboxEphemeralCaches(t *testing.T) {
 	}
 	if got := byPath[diskPath]; got.Status != runtimecache.StatusActive || got.Removable {
 		t.Fatalf("running disk status/removable = %s/%v, want active/false (%#v)", got.Status, got.Removable, got)
+	}
+	if got := byPath[diskPath]; got.SandboxID != runningID || len(got.References) != 1 || got.References[0].ID != runningID {
+		t.Fatalf("running disk reference = sandboxID %q refs %#v, want original sandbox id %q", got.SandboxID, got.References, runningID)
 	}
 	if got := byPath[orphanDisk]; got.Status != runtimecache.StatusOrphaned || !got.Removable {
 		t.Fatalf("orphan disk status/removable = %s/%v, want orphaned/true (%#v)", got.Status, got.Removable, got)

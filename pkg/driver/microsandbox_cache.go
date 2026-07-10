@@ -133,7 +133,7 @@ func microsandboxSandboxEphemeralItem(path, kind string, info os.FileInfo, refs 
 	switch kind {
 	case microsandboxDockerDiskKind:
 		item.SandboxID = strings.TrimSuffix(filepath.Base(path), ".raw")
-		applyMicrosandboxReferenceState(&item, refs.ActiveSandboxes, refs.ReferencedSandboxes, item.SandboxID, microsandboxReferenceTypeSandbox)
+		applyMicrosandboxDockerDiskReferenceState(&item, refs.ActiveSandboxes, refs.ReferencedSandboxes, item.SandboxID)
 	case microsandboxSandboxStateKind:
 		item.SandboxID = filepath.Base(path)
 		applyMicrosandboxReferenceState(&item, refs.ActiveSandboxes, refs.ReferencedSandboxes, item.SandboxID, microsandboxReferenceTypeSandbox)
@@ -154,24 +154,56 @@ func microsandboxSandboxEphemeralItem(path, kind string, info os.FileInfo, refs 
 	return runtimecache.EvaluateProtection(item, false)
 }
 
-func applyMicrosandboxReferenceState(item *runtimecache.Item, active, referenced map[string]runtimecache.Reference, id, refType string) {
-	if ref, ok := active[id]; ok {
-		ref.Type = firstNonEmpty(ref.Type, refType)
-		ref.ID = firstNonEmpty(ref.ID, id)
-		ref.Status = firstNonEmpty(ref.Status, "active")
+func applyMicrosandboxDockerDiskReferenceState(item *runtimecache.Item, active, referenced map[string]runtimecache.Reference, diskName string) {
+	if id, ref, ok := microsandboxDockerDiskReference(active, diskName); ok {
+		item.SandboxID = id
+		applyMicrosandboxReference(&ref, id, microsandboxReferenceTypeSandbox, "active")
 		item.Status = runtimecache.StatusActive
 		item.References = []runtimecache.Reference{ref}
 		return
 	}
-	if ref, ok := referenced[id]; ok {
-		ref.Type = firstNonEmpty(ref.Type, refType)
-		ref.ID = firstNonEmpty(ref.ID, id)
-		ref.Status = firstNonEmpty(ref.Status, "stopped")
+	if id, ref, ok := microsandboxDockerDiskReference(referenced, diskName); ok {
+		item.SandboxID = id
+		applyMicrosandboxReference(&ref, id, microsandboxReferenceTypeSandbox, "stopped")
 		item.Status = runtimecache.StatusReferenced
 		item.References = []runtimecache.Reference{ref}
 		return
 	}
 	item.Status = runtimecache.StatusOrphaned
+}
+
+func microsandboxDockerDiskReference(refs map[string]runtimecache.Reference, diskName string) (string, runtimecache.Reference, bool) {
+	if ref, ok := refs[diskName]; ok {
+		return diskName, ref, true
+	}
+	for id, ref := range refs {
+		if microsandboxDockerDiskName(id) == diskName {
+			return id, ref, true
+		}
+	}
+	return "", runtimecache.Reference{}, false
+}
+
+func applyMicrosandboxReferenceState(item *runtimecache.Item, active, referenced map[string]runtimecache.Reference, id, refType string) {
+	if ref, ok := active[id]; ok {
+		applyMicrosandboxReference(&ref, id, refType, "active")
+		item.Status = runtimecache.StatusActive
+		item.References = []runtimecache.Reference{ref}
+		return
+	}
+	if ref, ok := referenced[id]; ok {
+		applyMicrosandboxReference(&ref, id, refType, "stopped")
+		item.Status = runtimecache.StatusReferenced
+		item.References = []runtimecache.Reference{ref}
+		return
+	}
+	item.Status = runtimecache.StatusOrphaned
+}
+
+func applyMicrosandboxReference(ref *runtimecache.Reference, id, refType, status string) {
+	ref.Type = firstNonEmpty(ref.Type, refType)
+	ref.ID = firstNonEmpty(ref.ID, id)
+	ref.Status = firstNonEmpty(ref.Status, status)
 }
 
 type microsandboxSandboxEphemeralRemover struct {
