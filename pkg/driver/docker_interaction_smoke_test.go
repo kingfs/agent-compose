@@ -10,6 +10,17 @@ import (
 	"time"
 )
 
+func TestDockerStopResumePreservesWritableLayerSmoke(t *testing.T) {
+	runtimeSmokeEnabled(t, RuntimeDriverDocker)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	config := newRuntimeSmokeConfig(t, RuntimeDriverDocker)
+	runtime := &dockerRuntime{config: config}
+	session, vmState, proxyState := newRuntimeSmokeSandbox(t, ctx, config, RuntimeDriverDocker)
+	assertRuntimeStopResumePreservesWritableLayer(t, ctx, config, runtime, session, vmState, proxyState)
+}
+
 func TestDockerCommandInteractionSmokeCatStdinEOF(t *testing.T) {
 	runtimeSmokeEnabled(t, RuntimeDriverDocker)
 
@@ -25,11 +36,7 @@ func TestDockerCommandInteractionSmokeCatStdinEOF(t *testing.T) {
 		t.Fatalf("EnsureSandbox() error = %v", err)
 	}
 	vmState.BoxID = info.BoxID
-	t.Cleanup(func() {
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), SandboxStopContextTimeout(RuntimeDriverDocker, config.SandboxStopTimeout))
-		defer stopCancel()
-		_, _ = runtime.StopSandbox(stopCtx, session, vmState)
-	})
+	cleanupRuntimeSmokeSandbox(t, config, runtime, session, vmState)
 
 	interaction, err := runtime.OpenInteraction(ctx, session, vmState, RuntimeStartSpec{
 		OperationID: "smoke-cat",

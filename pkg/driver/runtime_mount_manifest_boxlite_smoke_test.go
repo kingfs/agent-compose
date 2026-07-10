@@ -4,9 +4,54 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
+
+func TestClassifyBoxliteStopError(t *testing.T) {
+	otherErr := errors.New("stop failed")
+	tests := []struct {
+		name        string
+		err         error
+		wantMissing bool
+		wantErr     error
+	}{
+		{name: "success"},
+		{name: "already stopped", err: &boxliteCallError{code: boxliteStatusStopped}},
+		{name: "not found", err: &boxliteCallError{code: boxliteStatusNotFound}, wantMissing: true},
+		{name: "other error", err: otherErr, wantErr: otherErr},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			missing, err := classifyBoxliteStopError(tt.err)
+			if missing != tt.wantMissing || !errors.Is(err, tt.wantErr) {
+				t.Fatalf("classifyBoxliteStopError() = (%v, %v), want (%v, %v)", missing, err, tt.wantMissing, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestBoxLiteStoppedStatusIsResumable(t *testing.T) {
+	if shouldRecreateBoxForStatus("stopped") {
+		t.Fatal("stopped box should be restarted instead of recreated")
+	}
+	for _, status := range []string{"failed", "dead", "removed", "exited"} {
+		if !shouldRecreateBoxForStatus(status) {
+			t.Fatalf("box status %q should be recreated", status)
+		}
+	}
+}
+
+func TestSmokeBoxLiteStopResumePreservesWritableLayer(t *testing.T) {
+	runtimeSmokeEnabled(t, RuntimeDriverBoxlite)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	config := newRuntimeSmokeConfig(t, RuntimeDriverBoxlite)
+	session, vmState, proxyState := newRuntimeSmokeSandbox(t, ctx, config, RuntimeDriverBoxlite)
+	runtime := &cgoSandboxRuntime{config: config}
+	assertRuntimeStopResumePreservesWritableLayer(t, ctx, config, runtime, session, vmState, proxyState)
+}
 
 func TestSmokeBoxLiteRuntimeMountManifestDirectoryOnlyStarts(t *testing.T) {
 	runtimeSmokeEnabled(t, RuntimeDriverBoxlite)
@@ -23,14 +68,7 @@ func TestSmokeBoxLiteRuntimeMountManifestDirectoryOnlyStarts(t *testing.T) {
 		t.Fatalf("EnsureSandbox returned error: %v", err)
 	}
 	vmState.BoxID = info.BoxID
-	t.Cleanup(func() {
-		if t.Failed() && runtimeSmokeKeepTmp() {
-			return
-		}
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), config.SandboxStopTimeout)
-		defer stopCancel()
-		_, _ = runtime.StopSandbox(stopCtx, session, vmState)
-	})
+	cleanupRuntimeSmokeSandbox(t, config, runtime, session, vmState)
 	assertBoxLiteRuntimeSmokeGuestPaths(t, ctx, runtime, vmState)
 	assertRuntimeSmokeHomeFiles(t, ctx, runtime, session, vmState)
 }
@@ -52,14 +90,7 @@ func TestSmokeBoxLiteUsesGoContainerRegistryOCIImage(t *testing.T) {
 		t.Fatalf("EnsureSandbox returned error: %v", err)
 	}
 	vmState.BoxID = info.BoxID
-	t.Cleanup(func() {
-		if t.Failed() && runtimeSmokeKeepTmp() {
-			return
-		}
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), config.SandboxStopTimeout)
-		defer stopCancel()
-		_, _ = runtime.StopSandbox(stopCtx, session, vmState)
-	})
+	cleanupRuntimeSmokeSandbox(t, config, runtime, session, vmState)
 	assertBoxLiteRuntimeSmokeGuestPaths(t, ctx, runtime, vmState)
 	assertRuntimeSmokeHomeFiles(t, ctx, runtime, session, vmState)
 }

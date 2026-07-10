@@ -10,6 +10,16 @@ import (
 	microsandbox "github.com/superradcompany/microsandbox/sdk/go"
 )
 
+func TestSmokeMicrosandboxStopResumePreservesWritableLayer(t *testing.T) {
+	runtimeSmokeEnabled(t, RuntimeDriverMicrosandbox)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	config := newRuntimeSmokeConfig(t, RuntimeDriverMicrosandbox)
+	session, vmState, proxyState := newRuntimeSmokeSandbox(t, ctx, config, RuntimeDriverMicrosandbox)
+	runtime := &microsandboxRuntime{config: config, lifecycleHandles: map[string]*microsandbox.Sandbox{}}
+	assertRuntimeStopResumePreservesWritableLayer(t, ctx, config, runtime, session, vmState, proxyState)
+}
+
 func TestSmokeMicrosandboxRuntimeMountManifestDirectoryOnlyStarts(t *testing.T) {
 	runtimeSmokeEnabled(t, RuntimeDriverMicrosandbox)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -25,14 +35,7 @@ func TestSmokeMicrosandboxRuntimeMountManifestDirectoryOnlyStarts(t *testing.T) 
 		t.Fatalf("EnsureSandbox returned error: %v", err)
 	}
 	vmState.BoxID = info.BoxID
-	t.Cleanup(func() {
-		if t.Failed() && runtimeSmokeKeepTmp() {
-			return
-		}
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), config.SandboxStopTimeout)
-		defer stopCancel()
-		_, _ = runtime.StopSandbox(stopCtx, session, vmState)
-	})
+	cleanupRuntimeSmokeSandbox(t, config, runtime, session, vmState)
 	assertMicrosandboxRuntimeSmokeGuestPaths(t, ctx, runtime, session, vmState)
 	assertRuntimeSmokeHomeFiles(t, ctx, runtime, session, vmState)
 }
@@ -53,14 +56,7 @@ func TestSmokeMicrosandboxUsesGoContainerRegistryOCIImage(t *testing.T) {
 		t.Fatalf("EnsureSandbox returned error: %v", err)
 	}
 	vmState.BoxID = info.BoxID
-	t.Cleanup(func() {
-		if t.Failed() && runtimeSmokeKeepTmp() {
-			return
-		}
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), config.SandboxStopTimeout)
-		defer stopCancel()
-		_, _ = runtime.StopSandbox(stopCtx, session, vmState)
-	})
+	cleanupRuntimeSmokeSandbox(t, config, runtime, session, vmState)
 	assertMicrosandboxRuntimeSmokeGuestPaths(t, ctx, runtime, session, vmState)
 	assertRuntimeSmokeHomeFiles(t, ctx, runtime, session, vmState)
 }
