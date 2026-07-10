@@ -4963,6 +4963,36 @@ func TestCLIExecPromptAttachUsesExecAttachClient(t *testing.T) {
 	}
 }
 
+func TestCLIExecPromptAttachDoesNotWaitForOpenStdin(t *testing.T) {
+	stream := newFakeExecAttachStream(nil)
+	stream.recvErr = io.EOF
+	stdin, stdinWriter := io.Pipe()
+	defer stdin.Close()
+	defer stdinWriter.Close()
+
+	cmd := &cobra.Command{Use: "exec"}
+	cmd.SetContext(context.Background())
+	cmd.SetIn(stdin)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runComposeExecPromptAttachCommand(cmd, "cli-exec-prompt", &fakeExecAttachClient{stream: stream}, &agentcomposev2.ExecRequest{
+			Target: &agentcomposev2.ExecRequest_SandboxId{SandboxId: "sandbox-attach"},
+		}, composeExecOptions{Interactive: true, Prompt: "hi"})
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "completed without result") {
+			t.Fatalf("exec prompt attach error = %v, want missing result", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("exec prompt attach waited for stdin after the response stream completed")
+	}
+}
+
 func TestCLIExecInteractiveUnsupportedUsesUnsupportedExitCode(t *testing.T) {
 	client := &fakeExecAttachClient{stream: &fakeExecAttachStream{
 		closedCh: make(chan struct{}),

@@ -3408,8 +3408,12 @@ func runComposeExecPromptAttachCommand(cmd *cobra.Command, projectName string, c
 		}
 	}
 	if inputErr != nil {
-		if err := <-inputErr; err != nil {
-			return err
+		select {
+		case err := <-inputErr:
+			if err != nil {
+				return err
+			}
+		default:
 		}
 	}
 	if err := output.Finish(); err != nil {
