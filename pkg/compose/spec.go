@@ -12,6 +12,7 @@ type ProjectSpec struct {
 	Name       string                   `yaml:"name,omitempty" json:"name,omitempty"`
 	Variables  map[string]EnvVarSpec    `yaml:"variables,omitempty" json:"variables,omitempty"`
 	Workspaces map[string]WorkspaceSpec `yaml:"workspaces,omitempty" json:"workspaces,omitempty"`
+	MCPs       map[string]MCPServerSpec `yaml:"mcps,omitempty" json:"mcps,omitempty"`
 	Volumes    map[string]VolumeSpec    `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 	Agents     map[string]AgentSpec     `yaml:"agents,omitempty" json:"agents,omitempty"`
 	Network    *NetworkSpec             `yaml:"network,omitempty" json:"network,omitempty"`
@@ -25,11 +26,36 @@ type AgentSpec struct {
 	Build        *BuildSpec            `yaml:"build,omitempty" json:"build,omitempty"`
 	Driver       *DriverSpec           `yaml:"driver,omitempty" json:"driver,omitempty"`
 	Env          map[string]EnvVarSpec `yaml:"env,omitempty" json:"env,omitempty"`
+	MCPs         AgentMCPEntriesSpec   `yaml:"mcps,omitempty" json:"mcps,omitempty"`
 	CapsetIDs    []string              `yaml:"capset_ids,omitempty" json:"capset_ids,omitempty"`
 	Volumes      []VolumeMountSpec     `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 	Workspace    *WorkspaceSpec        `yaml:"workspace,omitempty" json:"workspace,omitempty"`
 	Scheduler    *SchedulerSpec        `yaml:"scheduler,omitempty" json:"scheduler,omitempty"`
 	Jupyter      *JupyterSpec          `yaml:"jupyter,omitempty" json:"jupyter,omitempty"`
+}
+
+type AgentMCPEntriesSpec []AgentMCPEntrySpec
+
+type AgentMCPEntrySpec struct {
+	Ref       string                `yaml:"-" json:"-"`
+	Name      string                `yaml:"name,omitempty" json:"name,omitempty"`
+	Type      string                `yaml:"type,omitempty" json:"type,omitempty"`
+	Transport string                `yaml:"transport,omitempty" json:"transport,omitempty"`
+	Command   string                `yaml:"command,omitempty" json:"command,omitempty"`
+	Args      []string              `yaml:"args,omitempty" json:"args,omitempty"`
+	Env       map[string]EnvVarSpec `yaml:"env,omitempty" json:"env,omitempty"`
+	URL       string                `yaml:"url,omitempty" json:"url,omitempty"`
+	Headers   map[string]EnvVarSpec `yaml:"headers,omitempty" json:"headers,omitempty"`
+}
+
+type MCPServerSpec struct {
+	Type      string                `yaml:"type,omitempty" json:"type,omitempty"`
+	Transport string                `yaml:"transport,omitempty" json:"transport,omitempty"`
+	Command   string                `yaml:"command,omitempty" json:"command,omitempty"`
+	Args      []string              `yaml:"args,omitempty" json:"args,omitempty"`
+	Env       map[string]EnvVarSpec `yaml:"env,omitempty" json:"env,omitempty"`
+	URL       string                `yaml:"url,omitempty" json:"url,omitempty"`
+	Headers   map[string]EnvVarSpec `yaml:"headers,omitempty" json:"headers,omitempty"`
 }
 
 type BuildSpec struct {
@@ -222,6 +248,54 @@ func (s *TriggerSpec) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+func (s *AgentMCPEntrySpec) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		var raw string
+		if err := value.Decode(&raw); err != nil {
+			return err
+		}
+		*s = AgentMCPEntrySpec{Ref: raw}
+		return nil
+	case yaml.MappingNode:
+		type alias AgentMCPEntrySpec
+		var decoded alias
+		if err := value.Decode(&decoded); err != nil {
+			return err
+		}
+		decoded.Ref = ""
+		*s = AgentMCPEntrySpec(decoded)
+		return nil
+	default:
+		return fmt.Errorf("expected scalar or mapping, got %s", nodeKindName(value.Kind))
+	}
+}
+
+func (s *AgentMCPEntriesSpec) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode, yaml.MappingNode:
+		var entry AgentMCPEntrySpec
+		if err := value.Decode(&entry); err != nil {
+			return err
+		}
+		*s = AgentMCPEntriesSpec{entry}
+		return nil
+	case yaml.SequenceNode:
+		entries := make([]AgentMCPEntrySpec, 0, len(value.Content))
+		for _, item := range value.Content {
+			var entry AgentMCPEntrySpec
+			if err := item.Decode(&entry); err != nil {
+				return err
+			}
+			entries = append(entries, entry)
+		}
+		*s = AgentMCPEntriesSpec(entries)
+		return nil
+	default:
+		return fmt.Errorf("expected scalar, mapping, or sequence, got %s", nodeKindName(value.Kind))
+	}
+}
+
 type ParseError struct {
 	Path    string
 	Line    int
@@ -289,6 +363,7 @@ func validateProjectNode(node *yaml.Node) error {
 		"name":       validateScalar,
 		"variables":  validateEnvVarMap,
 		"workspaces": validateWorkspaceMap,
+		"mcps":       validateMCPMap,
 		"volumes":    validateVolumeMap,
 		"agents":     validateAgentMap,
 		"network":    validateNetwork,
@@ -312,11 +387,69 @@ func validateAgent(node *yaml.Node, path string) error {
 		"build":         validateBuild,
 		"driver":        validateDriver,
 		"env":           validateEnvVarMap,
+		"mcps":          validateAgentMCPEntries,
 		"capset_ids":    validateStringList,
 		"volumes":       validateVolumeMountList,
 		"workspace":     validateWorkspace,
 		"scheduler":     validateScheduler,
 		"jupyter":       validateJupyter,
+	})
+}
+
+func validateMCPMap(node *yaml.Node, path string) error {
+	return validateNamedMap(node, path, validateMCPServer)
+}
+
+func validateMCPServer(node *yaml.Node, path string) error {
+	return validateMapping(node, path, map[string]nodeValidator{
+		"type":      validateScalar,
+		"transport": validateScalar,
+		"command":   validateScalar,
+		"args":      validateStringList,
+		"env":       validateEnvVarMap,
+		"url":       validateScalar,
+		"headers":   validateEnvVarMap,
+	})
+}
+
+func validateAgentMCPEntries(node *yaml.Node, path string) error {
+	switch node.Kind {
+	case yaml.ScalarNode:
+		return validateScalar(node, path)
+	case yaml.MappingNode:
+		return validateAgentMCPEntry(node, path)
+	case yaml.SequenceNode:
+		for i, item := range node.Content {
+			itemPath := fmt.Sprintf("%s[%d]", path, i)
+			switch item.Kind {
+			case yaml.ScalarNode:
+				if err := validateScalar(item, itemPath); err != nil {
+					return err
+				}
+			case yaml.MappingNode:
+				if err := validateAgentMCPEntry(item, itemPath); err != nil {
+					return err
+				}
+			default:
+				return newParseError(item, itemPath, "expected scalar or mapping")
+			}
+		}
+		return nil
+	default:
+		return newParseError(node, path, "expected scalar, mapping, or sequence")
+	}
+}
+
+func validateAgentMCPEntry(node *yaml.Node, path string) error {
+	return validateMapping(node, path, map[string]nodeValidator{
+		"name":      validateScalar,
+		"type":      validateScalar,
+		"transport": validateScalar,
+		"command":   validateScalar,
+		"args":      validateStringList,
+		"env":       validateEnvVarMap,
+		"url":       validateScalar,
+		"headers":   validateEnvVarMap,
 	})
 }
 

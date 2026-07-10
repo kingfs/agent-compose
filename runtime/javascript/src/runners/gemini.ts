@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import path from "node:path";
 import readline from "node:readline";
+import { flattenEnvMap } from "../mcp-config.js";
 import { extractText, jsonString } from "../text.js";
 import { TranscriptWriter } from "../transcript.js";
 import type { AgentResult, RunnerOptions } from "../types.js";
@@ -8,6 +11,43 @@ export class GeminiRunner {
   private readonly writer = new TranscriptWriter();
 
   constructor(private readonly options: RunnerOptions) {}
+
+  async writeSettingsFile(): Promise<void> {
+    const mcps = this.options.mcpConfig as Record<string, Record<string, unknown>> | undefined;
+    const geminiDir = path.join(this.options.home, ".gemini");
+    await fs.mkdir(geminiDir, { recursive: true });
+    const settingsPath = path.join(geminiDir, "settings.json");
+    let settings: Record<string, unknown> = {};
+    try {
+      settings = JSON.parse(await fs.readFile(settingsPath, "utf-8"));
+    } catch {
+      settings = {};
+    }
+    if (!mcps || Object.keys(mcps).length === 0) {
+      if (Object.prototype.hasOwnProperty.call(settings, "mcpServers")) {
+        delete settings.mcpServers;
+        await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+      }
+      return;
+    }
+    const mcpServers: Record<string, unknown> = {};
+    for (const [name, server] of Object.entries(mcps)) {
+      if (server.type === "local") {
+        mcpServers[name] = {
+          command: server.command,
+          args: Array.isArray(server.args) ? server.args : [],
+          env: flattenEnvMap(server.env as Record<string, { value: string }> | undefined),
+        };
+      } else if (server.type === "remote") {
+        mcpServers[name] = {
+          ...(server.transport === "http" ? { httpUrl: server.url } : { url: server.url }),
+          headers: flattenEnvMap(server.headers as Record<string, { value: string }> | undefined),
+        };
+      }
+    }
+    settings.mcpServers = mcpServers;
+    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  }
 
   async runPrompt(promptText: string): Promise<AgentResult> {
     if (this.options.outputSchema) {
@@ -26,6 +66,8 @@ export class GeminiRunner {
     const userPrompt = this.options.systemContext
       ? `${this.options.systemContext}\n\n${promptText}`
       : promptText;
+
+    await this.writeSettingsFile();
 
     const child = spawn("gemini", [
       "-p", userPrompt,

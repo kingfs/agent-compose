@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { flattenEnvMap } from "../mcp-config.js";
 import { uniqueDirectories } from "../paths.js";
 import { readStoredThread, writeStoredThread } from "../session-state.js";
 import { jsonString } from "../text.js";
@@ -43,6 +44,36 @@ function claudeEnvironment(): NodeJS.ProcessEnv {
   return env;
 }
 
+function toClaudeMCPConfig(config: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+	if (!config || typeof config !== "object") {
+		return undefined;
+	}
+	const mapped: Record<string, unknown> = {};
+	for (const [name, server] of Object.entries(config)) {
+		if (!server || typeof server !== "object") {
+			continue;
+		}
+		const record = server as Record<string, unknown>;
+		if (record.type === "local") {
+			mapped[name] = {
+				type: "stdio",
+				command: record.command,
+				args: Array.isArray(record.args) ? record.args : [],
+				env: flattenEnvMap(record.env as Record<string, { value: string }> | undefined),
+			};
+			continue;
+		}
+		if (record.type === "remote") {
+			mapped[name] = {
+				type: record.transport === "sse" ? "sse" : "http",
+				url: record.url,
+				headers: flattenEnvMap(record.headers as Record<string, { value: string }> | undefined),
+			};
+		}
+	}
+	return Object.keys(mapped).length > 0 ? mapped : undefined;
+}
+
 export class ClaudeRunner {
   private readonly writer = new TranscriptWriter();
   private readonly pendingToolUses = new Map<string, PendingToolUse>();
@@ -51,6 +82,7 @@ export class ClaudeRunner {
 
   queryOptions(stored: StoredThread | null): Record<string, unknown> {
     const executable = claudeExecutable();
+    const mcpServers = toClaudeMCPConfig(this.options.mcpConfig as Record<string, unknown> | undefined);
     return {
       cwd: this.options.workspace,
       env: claudeEnvironment(),
@@ -61,6 +93,10 @@ export class ClaudeRunner {
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       resume: stored?.threadId,
+      ...(mcpServers ? {
+        mcpServers,
+        strictMcpConfig: true,
+      } : {}),
       ...(this.options.outputSchema ? {
         outputFormat: {
           type: "json_schema",

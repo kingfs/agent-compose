@@ -13,6 +13,10 @@ const codexMockState = vi.hoisted(() => ({
   threadOptions: null as unknown,
 }));
 
+const claudeMockState = vi.hoisted(() => ({
+	lastArgs: null as unknown,
+}));
+
 vi.mock("@openai/codex-sdk", () => ({
   Codex: vi.fn().mockImplementation(function Codex(options: unknown) {
     codexMockState.constructorOptions = options;
@@ -40,45 +44,48 @@ vi.mock("@openai/codex-sdk", () => ({
 }));
 
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
-  query: vi.fn(() => ({
-    close: vi.fn(),
-    [Symbol.asyncIterator]: async function* iterator() {
-      yield {
-        type: "stream_event",
-        session_id: "e2e-claude-session",
-        event: {
-          type: "content_block_start",
-          content_block: {
-            name: "Read",
-            input: { file_path: "README.md" },
-          },
-        },
-      };
-      yield {
-        type: "stream_event",
-        event: {
-          type: "content_block_delta",
-          delta: { type: "text_delta", text: "claude partial" },
-        },
-      };
-      yield {
-        type: "auth_status",
-        output: ["auth ok"],
-        error: "auth warning",
-      };
-      yield {
-        type: "system",
-        subtype: "local_command_output",
-        content: "local command output",
-      };
-      yield {
-        type: "result",
-        subtype: "success",
-        stop_reason: "end_turn",
-        structured_output: { answer: "claude final" },
-      };
-    },
-  })),
+  query: vi.fn((args: unknown) => {
+		claudeMockState.lastArgs = args;
+		return {
+			close: vi.fn(),
+			[Symbol.asyncIterator]: async function* iterator() {
+				yield {
+					type: "stream_event",
+					session_id: "e2e-claude-session",
+					event: {
+						type: "content_block_start",
+						content_block: {
+							name: "Read",
+							input: { file_path: "README.md" },
+						},
+					},
+				};
+				yield {
+					type: "stream_event",
+					event: {
+						type: "content_block_delta",
+						delta: { type: "text_delta", text: "claude partial" },
+					},
+				};
+				yield {
+					type: "auth_status",
+					output: ["auth ok"],
+					error: "auth warning",
+				};
+				yield {
+					type: "system",
+					subtype: "local_command_output",
+					content: "local command output",
+				};
+				yield {
+					type: "result",
+					subtype: "success",
+					stop_reason: "end_turn",
+					structured_output: { answer: "claude final" },
+				};
+			},
+		};
+	}),
 }));
 
 vi.mock("node:child_process", async (importOriginal) => {
@@ -86,15 +93,19 @@ vi.mock("node:child_process", async (importOriginal) => {
   return {
     ...original,
     spawn: vi.fn((command: string, args: string[], options: Record<string, unknown>) => {
-      if (command !== "gemini") {
+      if (command !== "gemini" && command !== "opencode") {
         return original.spawn(command, args, options);
       }
       const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: EventEmitter };
-      child.stdout = Readable.from([
-        JSON.stringify({ type: "init", sessionId: "e2e-gemini-session" }) + "\n",
-        JSON.stringify({ type: "message", content: "gemini says ok" }) + "\n",
-        JSON.stringify({ type: "result", result: "gemini final" }) + "\n",
-      ]);
+      child.stdout = Readable.from(command === "gemini"
+		? [
+			JSON.stringify({ type: "init", sessionId: "e2e-gemini-session" }) + "\n",
+			JSON.stringify({ type: "message", content: "gemini says ok" }) + "\n",
+			JSON.stringify({ type: "result", result: "gemini final" }) + "\n",
+		]
+		: [
+			JSON.stringify({ type: "result", result: "opencode final", sessionId: "e2e-opencode-session" }) + "\n",
+		]);
       child.stderr = new EventEmitter();
       const originalOnce = child.once.bind(child);
       child.once = ((eventName: string | symbol, listener: (...args: unknown[]) => void) => {
@@ -254,7 +265,19 @@ describe("runtime JavaScript E2E", () => {
   it("runs the Gemini prompt path through stream-json protocol output", async () => {
     await withTempSession(async (root) => {
       const messageFile = path.join(root, "message.txt");
+      const stateRoot = path.join(root, "state");
       await fs.writeFile(messageFile, "gemini prompt", "utf8");
+      await fs.mkdir(path.join(stateRoot, "agents", "mcp"), { recursive: true });
+      await fs.writeFile(path.join(stateRoot, "agents", "mcp", "config.json"), JSON.stringify({
+		mcps: {
+			docs: {
+				type: "remote",
+				transport: "http",
+				url: "https://docs.example/mcp",
+				headers: { Authorization: { value: "Bearer token" } },
+			},
+		},
+	  }), "utf8");
 
       const stdio = captureStdio();
       try {
@@ -267,7 +290,7 @@ describe("runtime JavaScript E2E", () => {
           "--message-file",
           messageFile,
           "--state-root",
-          path.join(root, "state"),
+          stateRoot,
           "--workspace",
           path.join(root, "workspace"),
           "--home",
@@ -281,6 +304,10 @@ describe("runtime JavaScript E2E", () => {
       expect(stdio.stdout).toContain("e2e-gemini-session");
       expect(stdio.stdout).toContain("gemini final");
       expect(stdio.stderr).toContain("gemini says ok");
+      const settings = JSON.parse(await fs.readFile(path.join(root, "home", ".gemini", "settings.json"), "utf8")) as Record<string, unknown>;
+      expect(settings.mcpServers).toMatchObject({
+		docs: { httpUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer token" } },
+	  });
     });
   });
 
@@ -288,11 +315,24 @@ describe("runtime JavaScript E2E", () => {
     await withTempSession(async (root) => {
       const messageFile = path.join(root, "message.txt");
       const schemaFile = path.join(root, "schema.json");
+      const stateRoot = path.join(root, "state");
       await fs.writeFile(messageFile, "claude prompt", "utf8");
       await fs.writeFile(schemaFile, JSON.stringify({
         type: "object",
         properties: { answer: { type: "string" } },
       }), "utf8");
+      await fs.mkdir(path.join(stateRoot, "agents", "mcp"), { recursive: true });
+      await fs.writeFile(path.join(stateRoot, "agents", "mcp", "config.json"), JSON.stringify({
+		mcps: {
+			filesystem: { type: "local", command: "npx", args: ["-y", "server"] },
+			docs: {
+				type: "remote",
+				transport: "sse",
+				url: "https://docs.example/sse",
+				headers: { Authorization: { value: "Bearer token" } },
+			},
+		},
+	  }), "utf8");
 
       const stdio = captureStdio();
       try {
@@ -305,7 +345,7 @@ describe("runtime JavaScript E2E", () => {
           "--message-file",
           messageFile,
           "--state-root",
-          path.join(root, "state"),
+          stateRoot,
           "--workspace",
           path.join(root, "workspace"),
           "--home",
@@ -324,6 +364,62 @@ describe("runtime JavaScript E2E", () => {
       expect(stdio.stderr).toContain("claude partial");
       expect(stdio.stderr).toContain("auth warning");
       expect(stdio.stderr).toContain("local command output");
+	  expect(claudeMockState.lastArgs).toMatchObject({
+		options: {
+			strictMcpConfig: true,
+			mcpServers: {
+				filesystem: { type: "stdio", command: "npx", args: ["-y", "server"] },
+				docs: { type: "sse", url: "https://docs.example/sse", headers: { Authorization: "Bearer token" } },
+			},
+		},
+	  });
     });
   });
+
+	it("runs the OpenCode prompt path and writes MCP config from state", async () => {
+		await withTempSession(async (root) => {
+			const messageFile = path.join(root, "message.txt");
+			const stateRoot = path.join(root, "state");
+			await fs.writeFile(messageFile, "opencode prompt", "utf8");
+			await fs.mkdir(path.join(stateRoot, "agents", "mcp"), { recursive: true });
+			await fs.writeFile(path.join(stateRoot, "agents", "mcp", "config.json"), JSON.stringify({
+				mcps: {
+					filesystem: {
+						type: "local",
+						command: "npx",
+						args: ["-y", "server"],
+						env: { TOKEN: { value: "secret" } },
+					},
+				},
+			}), "utf8");
+
+			const stdio = captureStdio();
+			try {
+				await createProgram({ exitOverride: true }).parseAsync([
+					"node",
+					"cli",
+					"prompt",
+					"--provider",
+					"opencode",
+					"--message-file",
+					messageFile,
+					"--state-root",
+					stateRoot,
+					"--workspace",
+					path.join(root, "workspace"),
+					"--home",
+					path.join(root, "home"),
+				]);
+			} finally {
+				stdio.restore();
+			}
+
+			expect(stdio.stdout).toContain("e2e-opencode-session");
+			expect(stdio.stdout).toContain("opencode final");
+			const config = JSON.parse(await fs.readFile(path.join(root, "home", ".config", "opencode", "opencode.json"), "utf8")) as Record<string, unknown>;
+			expect(config.mcp).toMatchObject({
+				filesystem: { type: "local", command: ["npx", "-y", "server"], environment: { TOKEN: "secret" } },
+			});
+		});
+	});
 });

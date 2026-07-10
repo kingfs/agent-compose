@@ -84,6 +84,9 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, session *domain.Sandb
 			}
 		}
 	}
+	if err := r.prepareAgentMCPConfig(ctx, session, agentDefinitionID, agent); err != nil {
+		return domain.ExecResult{}, domain.AgentRunResult{}, err
+	}
 	result, err := runtime.ExecStream(ctx, session, vmState, spec, stream)
 	if err != nil {
 		return execution.SanitizeAgentExecResult(result), domain.AgentRunResult{}, err
@@ -93,6 +96,49 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, session *domain.Sandb
 		return execution.SanitizeAgentExecResult(result), domain.AgentRunResult{}, err
 	}
 	return execution.SanitizeAgentExecResult(result), parsed, nil
+}
+
+func (r *AgentRunner) prepareAgentMCPConfig(ctx context.Context, session *domain.Sandbox, agentDefinitionID, agent string) error {
+	if session == nil {
+		return nil
+	}
+	provider := domain.NormalizeAgentKind(agent)
+	clearProvider := func() error {
+		if err := execution.WriteAgentMCPConfigFile(session, nil); err != nil {
+			return err
+		}
+		switch provider {
+		case "codex":
+			return llms.WriteCodexMCPConfig(session, nil)
+		case "opencode":
+			return llms.WriteOpenCodeMCPConfig(session, nil)
+		default:
+			return nil
+		}
+	}
+	if r == nil || r.agents == nil {
+		return clearProvider()
+	}
+	agentID := strings.TrimSpace(agentDefinitionID)
+	if agentID == "" {
+		return clearProvider()
+	}
+	definition, err := r.agents.GetAgentDefinition(ctx, agentID)
+	if err != nil {
+		return clearProvider()
+	}
+	mcps := llms.AgentMCPConfig(definition)
+	if err := execution.WriteAgentMCPConfigFile(session, mcps); err != nil {
+		return err
+	}
+	switch provider {
+	case "codex":
+		return llms.WriteCodexMCPConfig(session, mcps)
+	case "opencode":
+		return llms.WriteOpenCodeMCPConfig(session, mcps)
+	default:
+		return nil
+	}
 }
 
 func (r *AgentRunner) ResolveAgentSystemPrompt(ctx context.Context, session *domain.Sandbox, agentDefinitionID string) (string, error) {

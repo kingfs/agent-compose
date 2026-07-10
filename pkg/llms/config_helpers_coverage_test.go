@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
@@ -35,6 +36,48 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 	}
 	if err := WriteCodexRuntimeConfig(nil, "gpt", "http://runtime", ""); err != nil {
 		t.Fatalf("nil session codex config returned error: %v", err)
+	}
+	mcps := map[string]compose.NormalizedMCPServerSpec{
+		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}, Env: map[string]compose.EnvVarSpec{"TOKEN": {Value: "secret"}}},
+		"docs":       {Type: "remote", Transport: "http", URL: "https://docs.example/mcp", Headers: map[string]compose.EnvVarSpec{"Authorization": {Value: "Bearer token"}}},
+	}
+	if err := WriteCodexMCPConfig(session, mcps); err != nil {
+		t.Fatalf("WriteCodexMCPConfig returned error: %v", err)
+	}
+	if err := WriteCodexMCPConfig(session, mcps); err != nil {
+		t.Fatalf("second WriteCodexMCPConfig returned error: %v", err)
+	}
+	configPath := filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml")
+	if err := os.WriteFile(configPath, []byte("model = \"gpt\"\n\n"+codexManagedMCPStart+"\n[mcp_servers.stale]\ncommand = \"old\"\n"), 0o644); err != nil {
+		t.Fatalf("seed malformed codex mcp config: %v", err)
+	}
+	if err := WriteCodexMCPConfig(session, mcps); err != nil {
+		t.Fatalf("rewrite malformed WriteCodexMCPConfig returned error: %v", err)
+	}
+	codexConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
+	if err != nil || strings.Count(string(codexConfig), `[mcp_servers.filesystem]`) != 1 || !strings.Contains(string(codexConfig), `[mcp_servers.docs.http_headers]`) || strings.Contains(string(codexConfig), `[mcp_servers.stale]`) {
+		t.Fatalf("codex mcp config=%q err=%v", string(codexConfig), err)
+	}
+	if err := WriteOpenCodeMCPConfig(session, mcps); err != nil {
+		t.Fatalf("WriteOpenCodeMCPConfig returned error: %v", err)
+	}
+	openCodeConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json"))
+	if err != nil || !strings.Contains(string(openCodeConfig), `"mcp"`) || !strings.Contains(string(openCodeConfig), `"filesystem"`) {
+		t.Fatalf("opencode mcp config=%q err=%v", string(openCodeConfig), err)
+	}
+	if err := WriteCodexMCPConfig(session, nil); err != nil {
+		t.Fatalf("clear WriteCodexMCPConfig returned error: %v", err)
+	}
+	codexConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
+	if err != nil || strings.Contains(string(codexConfig), `[mcp_servers.`) {
+		t.Fatalf("cleared codex mcp config=%q err=%v", string(codexConfig), err)
+	}
+	if err := WriteOpenCodeMCPConfig(session, nil); err != nil {
+		t.Fatalf("clear WriteOpenCodeMCPConfig returned error: %v", err)
+	}
+	openCodeConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json"))
+	if err != nil || strings.Contains(string(openCodeConfig), `"mcp"`) == true {
+		t.Fatalf("cleared opencode mcp config=%q err=%v", string(openCodeConfig), err)
 	}
 	if got := GuestOpenCodeConfigPath(&appconfig.Config{GuestHomePath: "/guest"}); got != "/root/.config/opencode/opencode.json" {
 		t.Fatalf("GuestOpenCodeConfigPath = %q", got)
