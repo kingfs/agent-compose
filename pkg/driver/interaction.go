@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -149,6 +150,41 @@ type RuntimeInteraction interface {
 	CloseSend() error
 	Recv() (RuntimeOutputFrame, error)
 	Wait() (RuntimeResult, error)
+}
+
+// GuardRuntimeInteractionInput serializes Send and CloseSend so an input pump
+// can finish concurrently with the output loop without closing stdin twice or
+// sending after it has been closed.
+func GuardRuntimeInteractionInput(interaction RuntimeInteraction) RuntimeInteraction {
+	if interaction == nil {
+		return nil
+	}
+	return &guardedRuntimeInteraction{RuntimeInteraction: interaction}
+}
+
+type guardedRuntimeInteraction struct {
+	RuntimeInteraction
+	inputMu     sync.Mutex
+	inputClosed bool
+}
+
+func (i *guardedRuntimeInteraction) Send(frame RuntimeInputFrame) error {
+	i.inputMu.Lock()
+	defer i.inputMu.Unlock()
+	if i.inputClosed {
+		return io.ErrClosedPipe
+	}
+	return i.RuntimeInteraction.Send(frame)
+}
+
+func (i *guardedRuntimeInteraction) CloseSend() error {
+	i.inputMu.Lock()
+	defer i.inputMu.Unlock()
+	if i.inputClosed {
+		return nil
+	}
+	i.inputClosed = true
+	return i.RuntimeInteraction.CloseSend()
 }
 
 type RuntimeInteractor interface {

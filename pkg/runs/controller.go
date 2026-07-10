@@ -692,6 +692,7 @@ func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coo
 		transition.Error = fmt.Sprintf("command execution failed: %v", err)
 		return transition, err
 	}
+	interaction = driverpkg.GuardRuntimeInteractionInput(interaction)
 	defer func() { _ = interaction.CloseSend() }()
 	go pumpRunAttachInput(receive, interaction)
 	accumulator := execution.ExecStreamAccumulator{}
@@ -879,6 +880,7 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
 		return transition, err
 	}
+	interaction = driverpkg.GuardRuntimeInteractionInput(interaction)
 	defer func() { _ = interaction.CloseSend() }()
 	projector := newPromptAttachProjector(run, sandbox, logsPath, c.runLogs)
 	input := &promptWrapperInput{interaction: interaction}

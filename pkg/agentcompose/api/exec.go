@@ -155,6 +155,7 @@ func (r execAttachRunner) run(ctx context.Context) error {
 		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
+	interaction = driverpkg.GuardRuntimeInteractionInput(interaction)
 	defer func() { _ = interaction.CloseSend() }()
 	return r.runInteraction(interaction)
 }

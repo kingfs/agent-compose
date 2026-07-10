@@ -7,6 +7,34 @@ import (
 	"testing"
 )
 
+type guardedInteractionStub struct {
+	closeCalls int
+}
+
+func (s *guardedInteractionStub) Send(RuntimeInputFrame) error { return nil }
+func (s *guardedInteractionStub) CloseSend() error             { s.closeCalls++; return nil }
+func (s *guardedInteractionStub) Recv() (RuntimeOutputFrame, error) {
+	return RuntimeOutputFrame{}, io.EOF
+}
+func (s *guardedInteractionStub) Wait() (RuntimeResult, error) { return RuntimeResult{}, nil }
+
+func TestGuardRuntimeInteractionInputClosesOnceAndRejectsSend(t *testing.T) {
+	stub := &guardedInteractionStub{}
+	interaction := GuardRuntimeInteractionInput(stub)
+	if err := interaction.CloseSend(); err != nil {
+		t.Fatalf("CloseSend() error = %v", err)
+	}
+	if err := interaction.CloseSend(); err != nil {
+		t.Fatalf("second CloseSend() error = %v", err)
+	}
+	if stub.closeCalls != 1 {
+		t.Fatalf("underlying CloseSend() calls = %d, want 1", stub.closeCalls)
+	}
+	if err := interaction.Send(RuntimeInputFrame{Type: RuntimeInputStdin}); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("Send() after close error = %v, want io.ErrClosedPipe", err)
+	}
+}
+
 func TestRuntimeInteractionCapabilitiesValidateStartSpec(t *testing.T) {
 	caps := RuntimeInteractionCapabilities{
 		NativeExec: true,
