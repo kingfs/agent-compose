@@ -301,6 +301,58 @@ func TestExtractZipRejectsBackslashTraversal(t *testing.T) {
 	}
 }
 
+func TestExtractZipSanitizesEntryModes(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "modes.zip")
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("create zip: %v", err)
+	}
+	writer := zip.NewWriter(file)
+	dirHeader := &zip.FileHeader{Name: "bin/"}
+	dirHeader.SetMode(os.ModeDir | os.ModeSetgid | os.ModeSticky | 0o777)
+	if _, err := writer.CreateHeader(dirHeader); err != nil {
+		t.Fatalf("create zip dir entry: %v", err)
+	}
+	fileHeader := &zip.FileHeader{Name: "bin/run.sh"}
+	fileHeader.SetMode(os.ModeSetuid | os.ModeSetgid | os.ModeSticky | 0o755)
+	entry, err := writer.CreateHeader(fileHeader)
+	if err != nil {
+		t.Fatalf("create zip file entry: %v", err)
+	}
+	if _, err := entry.Write([]byte("#!/bin/sh\n")); err != nil {
+		t.Fatalf("write zip file entry: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close zip writer: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close zip file: %v", err)
+	}
+
+	out := filepath.Join(root, "out")
+	if err := extractZip(archivePath, out); err != nil {
+		t.Fatalf("extractZip returned error: %v", err)
+	}
+	dirInfo, err := os.Stat(filepath.Join(out, "bin"))
+	if err != nil {
+		t.Fatalf("stat extracted dir: %v", err)
+	}
+	if dirInfo.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
+		t.Fatalf("dir mode kept special bits: %v", dirInfo.Mode())
+	}
+	fileInfo, err := os.Stat(filepath.Join(out, "bin", "run.sh"))
+	if err != nil {
+		t.Fatalf("stat extracted file: %v", err)
+	}
+	if fileInfo.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
+		t.Fatalf("file mode kept special bits: %v", fileInfo.Mode())
+	}
+	if fileInfo.Mode().Perm() != 0o755 {
+		t.Fatalf("file perm = %v, want 0755", fileInfo.Mode().Perm())
+	}
+}
+
 func TestCopyWithExpandedLimitTracksActualBytes(t *testing.T) {
 	var expanded uint64
 	var out bytes.Buffer

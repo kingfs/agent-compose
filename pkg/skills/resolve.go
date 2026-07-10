@@ -812,7 +812,7 @@ func extractZip(path, dst string) error {
 		}
 		target := filepath.Join(dst, rel)
 		if file.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, file.Mode()); err != nil {
+			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err
 			}
 			continue
@@ -827,7 +827,7 @@ func extractZip(path, dst string) error {
 		if err != nil {
 			return err
 		}
-		dstFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, file.Mode())
+		dstFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, sanitizedZipFileMode(file.Mode()))
 		if err != nil {
 			_ = src.Close()
 			return err
@@ -846,6 +846,14 @@ func extractZip(path, dst string) error {
 		}
 	}
 	return nil
+}
+
+func sanitizedZipFileMode(mode os.FileMode) os.FileMode {
+	perm := mode.Perm()
+	if perm == 0 {
+		return 0o644
+	}
+	return perm
 }
 
 func copyWithExpandedLimit(dst io.Writer, src io.Reader, expanded *uint64, limit uint64) error {
