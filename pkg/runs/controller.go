@@ -896,14 +896,19 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
 		return transition, err
 	}
+	inputCtx, cancelInput := context.WithCancel(ctx)
+	defer cancelInput()
+	turnReady := make(chan struct{}, 1)
 	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
 		if err := input.HumanMessage(prompt); err != nil {
 			transition.ExitCode = 1
 			transition.Error = fmt.Sprintf("agent execution failed: %v", err)
 			return transition, err
 		}
+	} else {
+		releasePromptTurn(turnReady)
 	}
-	go pumpRunPromptAttachInput(receive, input, projector.AppendHumanMessage)
+	go pumpRunPromptAttachInput(inputCtx, receive, input, turnReady, projector.AppendHumanMessage)
 	var promptTransition *TransitionRequest
 	for {
 		frame, err := interaction.Recv()
@@ -954,19 +959,19 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 					transition.Error = fmt.Sprintf("agent execution failed: %v", err)
 					return transition, err
 				}
+				if resp.GetAgentTurnCompleted() != nil {
+					releasePromptTurn(turnReady)
+				}
 			}
 			if nextTransition != nil {
 				promptTransition = nextTransition
 			}
 		case driverpkg.RuntimeOutputStderr:
-			chunk := domain.ExecChunk{Text: string(frame.Data), Stream: domain.StdioStderr}
-			offset, err := appendProjectRunLogChunk(logsPath, chunk)
-			if err != nil {
+			if err := projector.AppendStderr(string(frame.Data)); err != nil {
 				transition.ExitCode = 1
 				transition.Error = fmt.Sprintf("agent execution failed: %v", err)
 				return transition, err
 			}
-			c.publishRunLogChunk(run.RunID, chunk, offset)
 			if err := send(runAttachOutputResponse(frame.Data, agentcomposev2.StdioStream_STDIO_STREAM_STDERR, false)); err != nil {
 				transition.ExitCode = 1
 				transition.Error = fmt.Sprintf("agent execution failed: %v", err)
@@ -1334,7 +1339,7 @@ func (w *promptWrapperInput) send(frame map[string]any) error {
 	return w.interaction.Send(driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputStdin, Data: data})
 }
 
-func pumpRunPromptAttachInput(receive RunAttachReceiver, input *promptWrapperInput, onHumanMessage func(string) error) {
+func pumpRunPromptAttachInput(ctx context.Context, receive RunAttachReceiver, input *promptWrapperInput, turnReady <-chan struct{}, onHumanMessage func(string) error) {
 	defer func() { _ = input.interaction.CloseSend() }()
 	for {
 		req, err := receive()
@@ -1345,23 +1350,13 @@ func pumpRunPromptAttachInput(receive RunAttachReceiver, input *promptWrapperInp
 		switch frame := req.GetFrame().(type) {
 		case *agentcomposev2.RunAttachRequest_HumanMessage:
 			text := frame.HumanMessage.GetText()
-			if err := input.HumanMessage(text); err != nil {
+			if !forwardPromptHumanMessage(ctx, input, turnReady, text, onHumanMessage) {
 				return
-			}
-			if onHumanMessage != nil {
-				if err := onHumanMessage(text); err != nil {
-					return
-				}
 			}
 		case *agentcomposev2.RunAttachRequest_Stdin:
 			text := string(frame.Stdin.GetData())
-			if err := input.HumanMessage(text); err != nil {
+			if !forwardPromptHumanMessage(ctx, input, turnReady, text, onHumanMessage) {
 				return
-			}
-			if onHumanMessage != nil {
-				if err := onHumanMessage(text); err != nil {
-					return
-				}
 			}
 		case *agentcomposev2.RunAttachRequest_StdinEof:
 			_ = input.EOF()
@@ -1376,15 +1371,40 @@ func pumpRunPromptAttachInput(receive RunAttachReceiver, input *promptWrapperInp
 	}
 }
 
+func forwardPromptHumanMessage(ctx context.Context, input *promptWrapperInput, turnReady <-chan struct{}, text string, onHumanMessage func(string) error) bool {
+	if turnReady != nil {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-turnReady:
+		}
+	}
+	if onHumanMessage != nil {
+		if err := onHumanMessage(text); err != nil {
+			return false
+		}
+	}
+	return input.HumanMessage(text) == nil
+}
+
+func releasePromptTurn(turnReady chan<- struct{}) {
+	select {
+	case turnReady <- struct{}{}:
+	default:
+	}
+}
+
 type promptAttachProjector struct {
-	run        domain.ProjectRunRecord
-	sandbox    *domain.Sandbox
-	logsPath   string
-	runLogs    *RunLogHub
-	mu         sync.Mutex
-	buffer     []byte
-	itemTexts  map[string]string
-	loggedText string
+	run                domain.ProjectRunRecord
+	sandbox            *domain.Sandbox
+	logsPath           string
+	runLogs            *RunLogHub
+	mu                 sync.Mutex
+	buffer             []byte
+	itemTexts          map[string]string
+	loggedText         string
+	hasLoggedText      bool
+	logEndsWithNewline bool
 }
 
 func newPromptAttachProjector(run domain.ProjectRunRecord, sandbox *domain.Sandbox, logsPath string, hub *RunLogHub) *promptAttachProjector {
@@ -1521,7 +1541,7 @@ func (p *promptAttachProjector) appendLogText(text string) error {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if err := p.appendLogChunkLocked(text); err != nil {
+	if err := p.appendLogChunkLocked(domain.ExecChunk{Text: text}); err != nil {
 		return err
 	}
 	p.loggedText += text
@@ -1539,14 +1559,14 @@ func (p *promptAttachProjector) appendLogFinalText(finalText string) error {
 		if text == "" {
 			return nil
 		}
-		if err := p.appendLogChunkLocked(text); err != nil {
+		if err := p.appendLogChunkLocked(domain.ExecChunk{Text: text}); err != nil {
 			return err
 		}
 		p.loggedText += text
 		return nil
 	}
 	if p.loggedText == "" {
-		if err := p.appendLogChunkLocked(finalText); err != nil {
+		if err := p.appendLogChunkLocked(domain.ExecChunk{Text: finalText}); err != nil {
 			return err
 		}
 		p.loggedText = finalText
@@ -1556,30 +1576,44 @@ func (p *promptAttachProjector) appendLogFinalText(finalText string) error {
 
 func (p *promptAttachProjector) AppendHumanMessage(message string) error {
 	text := promptAttachHumanLogText(message)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if text != "" {
+		if p.hasLoggedText && !p.logEndsWithNewline {
+			text = "\n" + text
+		}
+		if err := p.appendLogChunkLocked(domain.ExecChunk{Text: text}); err != nil {
+			return err
+		}
+	}
+	p.loggedText = ""
+	return nil
+}
+
+func (p *promptAttachProjector) AppendStderr(text string) error {
 	if text == "" {
 		return nil
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.loggedText != "" && !strings.HasSuffix(p.loggedText, "\n") {
-		text = "\n" + text
-	}
-	return p.appendLogChunkLocked(text)
+	return p.appendLogChunkLocked(domain.ExecChunk{Text: text, Stream: domain.StdioStderr})
 }
 
-func (p *promptAttachProjector) appendLogChunkLocked(text string) error {
-	chunk := domain.ExecChunk{Text: text}
+func (p *promptAttachProjector) appendLogChunkLocked(chunk domain.ExecChunk) error {
 	offset, err := appendProjectRunLogChunk(p.logsPath, chunk)
 	if err != nil {
 		return err
+	}
+	if chunk.Text != "" {
+		p.hasLoggedText = true
+		p.logEndsWithNewline = strings.HasSuffix(chunk.Text, "\n")
 	}
 	publishRunLogChunk(p.runLogs, p.run.RunID, chunk, offset)
 	return nil
 }
 
 func promptAttachHumanLogText(message string) string {
-	message = strings.TrimSpace(message)
-	if message == "" {
+	if strings.TrimSpace(message) == "" {
 		return ""
 	}
 	if strings.HasSuffix(message, "\n") {
