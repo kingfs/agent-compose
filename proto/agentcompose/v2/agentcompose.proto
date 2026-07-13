@@ -64,6 +64,10 @@ service SandboxService {
   rpc GetSandboxStats(GetSandboxStatsRequest) returns (GetSandboxStatsResponse);
 }
 
+service ResourceService {
+  rpc ResolveResource(ResolveResourceRequest) returns (ResolveResourceResponse);
+}
+
 enum ProjectValidationSeverity {
   PROJECT_VALIDATION_SEVERITY_UNSPECIFIED = 0;
   PROJECT_VALIDATION_SEVERITY_WARNING = 1;
@@ -185,6 +189,24 @@ enum CacheStatus {
   CACHE_STATUS_EXPIRED = 4;
   CACHE_STATUS_ORPHANED = 5;
   CACHE_STATUS_UNKNOWN = 6;
+}
+
+enum ResourceKind {
+  RESOURCE_KIND_UNSPECIFIED = 0;
+  RESOURCE_KIND_PROJECT = 1;
+  RESOURCE_KIND_AGENT = 2;
+  RESOURCE_KIND_RUN = 3;
+  RESOURCE_KIND_SANDBOX = 4;
+  RESOURCE_KIND_IMAGE = 5;
+  RESOURCE_KIND_CACHE = 6;
+  RESOURCE_KIND_VOLUME = 7;
+}
+
+enum ResourceMatchType {
+  RESOURCE_MATCH_TYPE_UNSPECIFIED = 0;
+  RESOURCE_MATCH_TYPE_NAME = 1;
+  RESOURCE_MATCH_TYPE_ID = 2;
+  RESOURCE_MATCH_TYPE_ID_PREFIX = 3;
 }
 
 message ValidateProjectRequest {
@@ -1178,4 +1200,25 @@ message SkillSpec {
   string username = 6;
   string password = 7;
   string token = 8;
+}
+
+message ResolveResourceRequest {
+  string ref = 1;
+  repeated ResourceKind kinds = 2;
+}
+
+message ResolveResourceResponse {
+  repeated ResolvedResource resources = 1;
+  repeated string warnings = 2;
+}
+
+message ResolvedResource {
+  ResourceKind kind = 1;
+  ResourceMatchType match_type = 2;
+  string id = 3;
+  string short_id = 4;
+  string name = 5;
+  string project_id = 6;
+  string project_name = 7;
+  string inspect_ref = 8;
 }

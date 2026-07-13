@@ -115,6 +115,7 @@ func (s *projectStore) ensureProjectSchema(ctx context.Context) error {
 	indexStatements := []string{
 		`CREATE INDEX IF NOT EXISTS idx_project_short_id ON project(short_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_project_agent_id ON project_agent(id);`,
+		`CREATE INDEX IF NOT EXISTS idx_project_agent_name ON project_agent(agent_name, project_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_project_scheduler_id ON project_scheduler(id);`,
 		`CREATE INDEX IF NOT EXISTS idx_project_run_sandbox ON project_run(sandbox_id);`,
 	}

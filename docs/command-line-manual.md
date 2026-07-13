@@ -427,14 +427,17 @@ agent-compose logs --run run_123 --json
 
 Inspect project resources, daemon images, or runtime cache items.
 `inspect project` and `inspect agent <agent>` require the project to already exist on the daemon; after `agent-compose down`, run `agent-compose up` again before using them.
+With a single untyped reference, the daemon resolves exact names first, then exact IDs, then unique ID prefixes across supported resource types. Ambiguous references fail and list the explicit resource types that can be used to disambiguate them.
 
 ```bash
+agent-compose inspect <name-or-id>
 agent-compose inspect project
 agent-compose inspect agent <agent>
 agent-compose inspect run <run-id>
 agent-compose inspect sandbox <sandbox>
 agent-compose inspect image <image>
 agent-compose inspect cache <cache-id>
+agent-compose inspect volume <name>
 ```
 
 Details:
@@ -445,6 +448,7 @@ Details:
 - `inspect sandbox <sandbox>` shows sandbox/runtime details.
 - `inspect image <image>` shows image details.
 - `inspect cache <cache-id>` shows one daemon runtime cache item, including references, blocked reasons, and warnings.
+- `inspect volume <name>` shows one daemon volume. Volumes are resolved by exact name only.
 
 ## Image Commands
 

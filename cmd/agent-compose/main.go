@@ -954,7 +954,7 @@ func newRootCommand(out, errOut io.Writer, runDaemon daemonRunner) *cobra.Comman
 	imageCmd.AddCommand(imageLSCmd, imagePullCmd, imageBuildCmd, imageRemoveCmd, imageInspectCmd)
 
 	inspectCmd := &cobra.Command{
-		Use:   "inspect <project|agent|run|sandbox|image|cache|volume> [name-or-id]",
+		Use:   "inspect <ref>|<project|agent|run|sandbox|image|cache|volume> [name-or-id]",
 		Short: "Inspect project, agent, run, sandbox, image, cache, or volume details",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -4499,6 +4499,9 @@ func writeDeprecatedWarning(out io.Writer, oldUsage string, newUsage string) err
 
 func runComposeInspectCommand(cmd *cobra.Command, cli cliOptions, args []string) error {
 	kind := strings.ToLower(strings.TrimSpace(args[0]))
+	if len(args) == 1 && !isComposeInspectResourceKind(kind) {
+		return runComposeResolvedInspectCommand(cmd, cli, args[0])
+	}
 	target := ""
 	if len(args) > 1 {
 		target = strings.TrimSpace(args[1])
@@ -4604,18 +4607,120 @@ func runComposeInspectCommand(cmd *cobra.Command, cli cliOptions, args []string)
 	default:
 		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("unsupported inspect target %q", kind)}
 	}
-	if cli.JSON {
-		data, err := json.MarshalIndent(output, "", "  ")
-		if err != nil {
-			return err
-		}
-		return writeCommandOutput(cmd.OutOrStdout(), append(data, '\n'))
-	}
+	return writeComposeInspectOutput(cmd, output)
+}
+
+func writeComposeInspectOutput(cmd *cobra.Command, output any) error {
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
 		return err
 	}
 	return writeCommandOutput(cmd.OutOrStdout(), append(data, '\n'))
+}
+
+func isComposeInspectResourceKind(kind string) bool {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "project", "agent", "run", "sandbox", "session", "image", "cache", "volume":
+		return true
+	default:
+		return false
+	}
+}
+
+func runComposeResolvedInspectCommand(cmd *cobra.Command, cli cliOptions, ref string) error {
+	clients, err := newCLIServiceClients(cli)
+	if err != nil {
+		return err
+	}
+	ref = strings.TrimSpace(ref)
+	response, err := clients.resource.ResolveResource(cmd.Context(), connect.NewRequest(&agentcomposev2.ResolveResourceRequest{Ref: ref}))
+	if err != nil {
+		return commandExitErrorForConnect(fmt.Errorf("resolve resource %s: %w", ref, err))
+	}
+	for _, warning := range response.Msg.GetWarnings() {
+		if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", warning); err != nil {
+			return err
+		}
+	}
+	resolved := response.Msg.GetResources()
+	if len(resolved) == 0 {
+		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("resource %q not found", ref)}
+	}
+	if len(resolved) > 1 {
+		matches := make([]string, 0, len(resolved))
+		for _, resource := range resolved {
+			matches = append(matches, composeResolvedResourceDescription(resource))
+		}
+		return commandExitError{
+			Code: exitCodeUsage,
+			Err:  fmt.Errorf("resource ref %q is ambiguous; matches: %s; use inspect <type> %s to select one", ref, strings.Join(matches, ", "), ref),
+		}
+	}
+	return runComposeResolvedResourceInspectCommand(cmd, cli, clients, resolved[0])
+}
+
+func runComposeResolvedResourceInspectCommand(cmd *cobra.Command, cli cliOptions, clients cliServiceClients, resource *agentcomposev2.ResolvedResource) error {
+	if resource == nil {
+		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("resolved resource is empty")}
+	}
+	inspectRef := firstNonEmptyString(resource.GetInspectRef(), resource.GetId(), resource.GetName())
+	switch resource.GetKind() {
+	case agentcomposev2.ResourceKind_RESOURCE_KIND_PROJECT:
+		project, err := clients.project.GetProject(cmd.Context(), connect.NewRequest(&agentcomposev2.GetProjectRequest{
+			Project:     &agentcomposev2.ProjectRef{ProjectId: resource.GetId()},
+			IncludeSpec: true,
+		}))
+		if err != nil {
+			return commandExitErrorForConnect(fmt.Errorf("inspect project %s: %w", inspectRef, err))
+		}
+		return writeComposeInspectOutput(cmd, composeProjectOutputFromProject(project.Msg.GetProject()))
+	case agentcomposev2.ResourceKind_RESOURCE_KIND_AGENT:
+		project, err := clients.project.GetProject(cmd.Context(), connect.NewRequest(&agentcomposev2.GetProjectRequest{
+			Project:     &agentcomposev2.ProjectRef{ProjectId: resource.GetProjectId()},
+			IncludeSpec: true,
+		}))
+		if err != nil {
+			return commandExitErrorForConnect(fmt.Errorf("inspect agent %s in project %s: %w", resource.GetName(), resource.GetProjectName(), err))
+		}
+		agent, err := composeAgentInspectOutputFor(cmd.Context(), clients, project.Msg.GetProject(), resource.GetName())
+		if err != nil {
+			return err
+		}
+		return writeComposeInspectOutput(cmd, agent)
+	case agentcomposev2.ResourceKind_RESOURCE_KIND_RUN:
+		run, err := getRunDetail(cmd.Context(), clients.run, resource.GetProjectId(), resource.GetId())
+		if err != nil {
+			return commandExitErrorForConnect(fmt.Errorf("inspect run %s: %w", inspectRef, err))
+		}
+		return writeComposeInspectOutput(cmd, composeRunOutputFromDetail(run.Msg.GetRun()))
+	case agentcomposev2.ResourceKind_RESOURCE_KIND_SANDBOX:
+		output, err := composeSandboxInspectOutputFor(cmd.Context(), clients, resource.GetId())
+		if err != nil {
+			return commandExitErrorForConnect(fmt.Errorf("inspect sandbox %s: %w", inspectRef, err))
+		}
+		return writeComposeInspectOutput(cmd, output)
+	case agentcomposev2.ResourceKind_RESOURCE_KIND_IMAGE:
+		return runComposeImageInspectCommand(cmd, cli, inspectRef)
+	case agentcomposev2.ResourceKind_RESOURCE_KIND_CACHE:
+		return runComposeCacheInspectCommand(cmd, cli, inspectRef)
+	case agentcomposev2.ResourceKind_RESOURCE_KIND_VOLUME:
+		return runComposeVolumeInspectCommand(cmd, cli, inspectRef)
+	default:
+		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("unsupported resolved resource type %s", resource.GetKind().String())}
+	}
+}
+
+func composeResolvedResourceDescription(resource *agentcomposev2.ResolvedResource) string {
+	if resource == nil {
+		return "unknown"
+	}
+	kind := strings.TrimPrefix(strings.ToLower(resource.GetKind().String()), "resource_kind_")
+	target := firstNonEmptyString(resource.GetName(), resource.GetShortId(), shortOpaqueID(resource.GetId()), resource.GetInspectRef(), "-")
+	project := firstNonEmptyString(resource.GetProjectName(), shortOpaqueID(resource.GetProjectId()))
+	if project != "" && resource.GetKind() != agentcomposev2.ResourceKind_RESOURCE_KIND_PROJECT {
+		return fmt.Sprintf("%s %s (project %s)", kind, target, project)
+	}
+	return fmt.Sprintf("%s %s", kind, target)
 }
 
 func composeSandboxInspectOutputFor(ctx context.Context, clients cliServiceClients, sandbox string) (composeSandboxOutput, error) {
@@ -4843,16 +4948,17 @@ type composeLogRunOutput struct {
 }
 
 type cliServiceClients struct {
-	project agentcomposev2connect.ProjectServiceClient
-	run     agentcomposev2connect.RunServiceClient
-	exec    agentcomposev2connect.ExecServiceClient
-	image   agentcomposev2connect.ImageServiceClient
-	cache   agentcomposev2connect.CacheServiceClient
-	volume  agentcomposev2connect.VolumeServiceClient
-	sandbox agentcomposev2connect.SandboxServiceClient
-	session agentcomposev1connect.SessionServiceClient
-	config  agentcomposev1connect.ConfigServiceClient
-	loader  agentcomposev1connect.LoaderServiceClient
+	project  agentcomposev2connect.ProjectServiceClient
+	run      agentcomposev2connect.RunServiceClient
+	exec     agentcomposev2connect.ExecServiceClient
+	resource agentcomposev2connect.ResourceServiceClient
+	image    agentcomposev2connect.ImageServiceClient
+	cache    agentcomposev2connect.CacheServiceClient
+	volume   agentcomposev2connect.VolumeServiceClient
+	sandbox  agentcomposev2connect.SandboxServiceClient
+	session  agentcomposev1connect.SessionServiceClient
+	config   agentcomposev1connect.ConfigServiceClient
+	loader   agentcomposev1connect.LoaderServiceClient
 }
 
 type composePSOutput struct {
@@ -5630,16 +5736,17 @@ func newCLIServiceClients(cli cliOptions) (cliServiceClients, error) {
 	}
 	httpClient := newDaemonHTTPClient(clientConfig)
 	return cliServiceClients{
-		project: agentcomposev2connect.NewProjectServiceClient(httpClient, clientConfig.BaseURL),
-		run:     agentcomposev2connect.NewRunServiceClient(httpClient, clientConfig.BaseURL),
-		exec:    agentcomposev2connect.NewExecServiceClient(httpClient, clientConfig.BaseURL),
-		image:   agentcomposev2connect.NewImageServiceClient(httpClient, clientConfig.BaseURL),
-		cache:   agentcomposev2connect.NewCacheServiceClient(httpClient, clientConfig.BaseURL),
-		volume:  agentcomposev2connect.NewVolumeServiceClient(httpClient, clientConfig.BaseURL),
-		sandbox: agentcomposev2connect.NewSandboxServiceClient(httpClient, clientConfig.BaseURL),
-		session: agentcomposev1connect.NewSessionServiceClient(httpClient, clientConfig.BaseURL),
-		config:  agentcomposev1connect.NewConfigServiceClient(httpClient, clientConfig.BaseURL),
-		loader:  agentcomposev1connect.NewLoaderServiceClient(httpClient, clientConfig.BaseURL),
+		project:  agentcomposev2connect.NewProjectServiceClient(httpClient, clientConfig.BaseURL),
+		run:      agentcomposev2connect.NewRunServiceClient(httpClient, clientConfig.BaseURL),
+		exec:     agentcomposev2connect.NewExecServiceClient(httpClient, clientConfig.BaseURL),
+		resource: agentcomposev2connect.NewResourceServiceClient(httpClient, clientConfig.BaseURL),
+		image:    agentcomposev2connect.NewImageServiceClient(httpClient, clientConfig.BaseURL),
+		cache:    agentcomposev2connect.NewCacheServiceClient(httpClient, clientConfig.BaseURL),
+		volume:   agentcomposev2connect.NewVolumeServiceClient(httpClient, clientConfig.BaseURL),
+		sandbox:  agentcomposev2connect.NewSandboxServiceClient(httpClient, clientConfig.BaseURL),
+		session:  agentcomposev1connect.NewSessionServiceClient(httpClient, clientConfig.BaseURL),
+		config:   agentcomposev1connect.NewConfigServiceClient(httpClient, clientConfig.BaseURL),
+		loader:   agentcomposev1connect.NewLoaderServiceClient(httpClient, clientConfig.BaseURL),
 	}, nil
 }
 

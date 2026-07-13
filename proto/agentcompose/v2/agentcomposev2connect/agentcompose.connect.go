@@ -35,6 +35,8 @@ const (
 	VolumeServiceName = "agentcompose.v2.VolumeService"
 	// SandboxServiceName is the fully-qualified name of the SandboxService service.
 	SandboxServiceName = "agentcompose.v2.SandboxService"
+	// ResourceServiceName is the fully-qualified name of the ResourceService service.
+	ResourceServiceName = "agentcompose.v2.ResourceService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -131,6 +133,9 @@ const (
 	// SandboxServiceGetSandboxStatsProcedure is the fully-qualified name of the SandboxService's
 	// GetSandboxStats RPC.
 	SandboxServiceGetSandboxStatsProcedure = "/agentcompose.v2.SandboxService/GetSandboxStats"
+	// ResourceServiceResolveResourceProcedure is the fully-qualified name of the ResourceService's
+	// ResolveResource RPC.
+	ResourceServiceResolveResourceProcedure = "/agentcompose.v2.ResourceService/ResolveResource"
 )
 
 // ProjectServiceClient is a client for the agentcompose.v2.ProjectService service.
@@ -1309,4 +1314,74 @@ func (UnimplementedSandboxServiceHandler) RemoveSandbox(context.Context, *connec
 
 func (UnimplementedSandboxServiceHandler) GetSandboxStats(context.Context, *connect.Request[v2.GetSandboxStatsRequest]) (*connect.Response[v2.GetSandboxStatsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.SandboxService.GetSandboxStats is not implemented"))
+}
+
+// ResourceServiceClient is a client for the agentcompose.v2.ResourceService service.
+type ResourceServiceClient interface {
+	ResolveResource(context.Context, *connect.Request[v2.ResolveResourceRequest]) (*connect.Response[v2.ResolveResourceResponse], error)
+}
+
+// NewResourceServiceClient constructs a client for the agentcompose.v2.ResourceService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewResourceServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ResourceServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	resourceServiceMethods := v2.File_agentcompose_v2_agentcompose_proto.Services().ByName("ResourceService").Methods()
+	return &resourceServiceClient{
+		resolveResource: connect.NewClient[v2.ResolveResourceRequest, v2.ResolveResourceResponse](
+			httpClient,
+			baseURL+ResourceServiceResolveResourceProcedure,
+			connect.WithSchema(resourceServiceMethods.ByName("ResolveResource")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// resourceServiceClient implements ResourceServiceClient.
+type resourceServiceClient struct {
+	resolveResource *connect.Client[v2.ResolveResourceRequest, v2.ResolveResourceResponse]
+}
+
+// ResolveResource calls agentcompose.v2.ResourceService.ResolveResource.
+func (c *resourceServiceClient) ResolveResource(ctx context.Context, req *connect.Request[v2.ResolveResourceRequest]) (*connect.Response[v2.ResolveResourceResponse], error) {
+	return c.resolveResource.CallUnary(ctx, req)
+}
+
+// ResourceServiceHandler is an implementation of the agentcompose.v2.ResourceService service.
+type ResourceServiceHandler interface {
+	ResolveResource(context.Context, *connect.Request[v2.ResolveResourceRequest]) (*connect.Response[v2.ResolveResourceResponse], error)
+}
+
+// NewResourceServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewResourceServiceHandler(svc ResourceServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	resourceServiceMethods := v2.File_agentcompose_v2_agentcompose_proto.Services().ByName("ResourceService").Methods()
+	resourceServiceResolveResourceHandler := connect.NewUnaryHandler(
+		ResourceServiceResolveResourceProcedure,
+		svc.ResolveResource,
+		connect.WithSchema(resourceServiceMethods.ByName("ResolveResource")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/agentcompose.v2.ResourceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ResourceServiceResolveResourceProcedure:
+			resourceServiceResolveResourceHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedResourceServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedResourceServiceHandler struct{}
+
+func (UnimplementedResourceServiceHandler) ResolveResource(context.Context, *connect.Request[v2.ResolveResourceRequest]) (*connect.Response[v2.ResolveResourceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.ResourceService.ResolveResource is not implemented"))
 }

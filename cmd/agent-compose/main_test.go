@@ -8363,6 +8363,106 @@ agents:
 	})
 }
 
+func TestIntegrationCLIInspectResolvesUntypedResourceRefs(t *testing.T) {
+	projectID := identity.NewID(identity.ResourceProject, "resolved-project")
+	runID := identity.NewID(identity.ResourceRun, "resolved-run")
+	sandboxID := identity.NewID(identity.ResourceSandbox, "resolved-sandbox")
+	cacheID := identity.NewID(identity.ResourceCache, "resolved-cache")
+	imageID := identity.NewID(identity.ResourceKind("image"), "resolved-image")
+	project := testCLIProject(projectID, "resolved-project", "/tmp/resolved-project/agent-compose.yml")
+
+	server := newComposeServiceStubServer(t, composeServiceStubs{
+		resource: resourceServiceStub{resolveResource: func(_ context.Context, req *connect.Request[agentcomposev2.ResolveResourceRequest]) (*connect.Response[agentcomposev2.ResolveResourceResponse], error) {
+			resources := map[string]*agentcomposev2.ResolvedResource{
+				"project-ref": {Kind: agentcomposev2.ResourceKind_RESOURCE_KIND_PROJECT, Id: projectID, Name: "resolved-project", InspectRef: projectID},
+				"agent-ref":   {Kind: agentcomposev2.ResourceKind_RESOURCE_KIND_AGENT, Id: project.GetAgents()[0].GetManagedAgentId(), Name: "reviewer", ProjectId: projectID, ProjectName: "resolved-project", InspectRef: "reviewer"},
+				"run-ref":     {Kind: agentcomposev2.ResourceKind_RESOURCE_KIND_RUN, Id: runID, ProjectId: projectID, ProjectName: "resolved-project", InspectRef: runID},
+				"sandbox-ref": {Kind: agentcomposev2.ResourceKind_RESOURCE_KIND_SANDBOX, Id: sandboxID, InspectRef: sandboxID},
+				"image-ref":   {Kind: agentcomposev2.ResourceKind_RESOURCE_KIND_IMAGE, Id: imageID, Name: "resolved:latest", InspectRef: "resolved:latest"},
+				"cache-ref":   {Kind: agentcomposev2.ResourceKind_RESOURCE_KIND_CACHE, Id: cacheID, InspectRef: cacheID},
+				"volume-ref":  {Kind: agentcomposev2.ResourceKind_RESOURCE_KIND_VOLUME, Name: "resolved-volume", InspectRef: "resolved-volume"},
+			}
+			resource := resources[req.Msg.GetRef()]
+			return connect.NewResponse(&agentcomposev2.ResolveResourceResponse{Resources: []*agentcomposev2.ResolvedResource{resource}}), nil
+		}},
+		project: projectServiceStub{getProject: func(context.Context, *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
+			return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: project}), nil
+		}},
+		run: runServiceStub{
+			getRun: func(context.Context, *connect.Request[agentcomposev2.GetRunRequest]) (*connect.Response[agentcomposev2.GetRunResponse], error) {
+				return connect.NewResponse(&agentcomposev2.GetRunResponse{Run: &agentcomposev2.RunDetail{Summary: &agentcomposev2.RunSummary{
+					RunId: runID, ProjectId: projectID, ProjectName: "resolved-project", AgentName: "reviewer",
+				}}}), nil
+			},
+			listRuns: func(context.Context, *connect.Request[agentcomposev2.ListRunsRequest]) (*connect.Response[agentcomposev2.ListRunsResponse], error) {
+				return connect.NewResponse(&agentcomposev2.ListRunsResponse{}), nil
+			},
+		},
+		session: sessionServiceStub{
+			getSession: func(context.Context, *connect.Request[agentcomposev1.SessionIDRequest]) (*connect.Response[agentcomposev1.SessionResponse], error) {
+				return connect.NewResponse(&agentcomposev1.SessionResponse{Session: &agentcomposev1.SessionDetail{Summary: &agentcomposev1.SessionSummary{SessionId: sandboxID}}}), nil
+			},
+			listSessions: func(context.Context, *connect.Request[agentcomposev1.ListSessionsRequest]) (*connect.Response[agentcomposev1.ListSessionsResponse], error) {
+				return connect.NewResponse(&agentcomposev1.ListSessionsResponse{}), nil
+			},
+		},
+		image: imageServiceStub{inspectImage: func(context.Context, *connect.Request[agentcomposev2.InspectImageRequest]) (*connect.Response[agentcomposev2.InspectImageResponse], error) {
+			return connect.NewResponse(&agentcomposev2.InspectImageResponse{Image: &agentcomposev2.Image{ImageId: imageID, ImageRef: "resolved:latest"}}), nil
+		}},
+		cache: cacheServiceStub{inspectCache: func(context.Context, *connect.Request[agentcomposev2.InspectCacheRequest]) (*connect.Response[agentcomposev2.InspectCacheResponse], error) {
+			return connect.NewResponse(&agentcomposev2.InspectCacheResponse{Cache: &agentcomposev2.CacheItem{CacheId: cacheID}}), nil
+		}},
+		volume: volumeServiceStub{inspectVolume: func(context.Context, *connect.Request[agentcomposev2.InspectVolumeRequest]) (*connect.Response[agentcomposev2.InspectVolumeResponse], error) {
+			return connect.NewResponse(&agentcomposev2.InspectVolumeResponse{Volume: &agentcomposev2.Volume{Name: "resolved-volume"}}), nil
+		}},
+	})
+	defer server.Close()
+
+	for _, tc := range []struct {
+		ref  string
+		want string
+	}{
+		{ref: "project-ref", want: "resolved-project"},
+		{ref: "agent-ref", want: "reviewer"},
+		{ref: "run-ref", want: displayOpaqueID(runID)},
+		{ref: "sandbox-ref", want: displayOpaqueID(sandboxID)},
+		{ref: "image-ref", want: "resolved:latest"},
+		{ref: "cache-ref", want: shortOpaqueID(cacheID)},
+		{ref: "volume-ref", want: "resolved-volume"},
+	} {
+		t.Run(tc.ref, func(t *testing.T) {
+			stdout, stderr, _, exitCode := executeCLICommand("inspect", "--host", server.URL, tc.ref)
+			if exitCode != 0 || stderr != "" || !strings.Contains(stdout, tc.want) {
+				t.Fatalf("inspect %s code/stdout/stderr = %d/%q/%q, want output containing %q", tc.ref, exitCode, stdout, stderr, tc.want)
+			}
+		})
+	}
+}
+
+func TestIntegrationCLIInspectUntypedRefReportsAmbiguityAndNotFound(t *testing.T) {
+	server := newComposeServiceStubServer(t, composeServiceStubs{resource: resourceServiceStub{
+		resolveResource: func(_ context.Context, req *connect.Request[agentcomposev2.ResolveResourceRequest]) (*connect.Response[agentcomposev2.ResolveResourceResponse], error) {
+			if req.Msg.GetRef() == "ambiguous" {
+				return connect.NewResponse(&agentcomposev2.ResolveResourceResponse{Resources: []*agentcomposev2.ResolvedResource{
+					{Kind: agentcomposev2.ResourceKind_RESOURCE_KIND_PROJECT, Name: "ambiguous", Id: strings.Repeat("a", 64)},
+					{Kind: agentcomposev2.ResourceKind_RESOURCE_KIND_VOLUME, Name: "ambiguous", InspectRef: "ambiguous"},
+				}}), nil
+			}
+			return connect.NewResponse(&agentcomposev2.ResolveResourceResponse{}), nil
+		},
+	}})
+	defer server.Close()
+
+	stdout, stderr, _, exitCode := executeCLICommand("inspect", "--host", server.URL, "ambiguous")
+	if exitCode != exitCodeUsage || stdout != "" || !strings.Contains(stderr, "project ambiguous") || !strings.Contains(stderr, "volume ambiguous") {
+		t.Fatalf("ambiguous inspect code/stdout/stderr = %d/%q/%q", exitCode, stdout, stderr)
+	}
+	stdout, stderr, _, exitCode = executeCLICommand("inspect", "--host", server.URL, "missing")
+	if exitCode != exitCodeUsage || stdout != "" || !strings.Contains(stderr, `resource "missing" not found`) {
+		t.Fatalf("missing inspect code/stdout/stderr = %d/%q/%q", exitCode, stdout, stderr)
+	}
+}
+
 func TestCLICommandBranchSweepWorkflows(t *testing.T) {
 	t.Run("project pull and build empty or invalid", func(t *testing.T) {
 		noImageCompose := writeComposeFile(t, t.TempDir(), `
@@ -8565,7 +8665,7 @@ agents:
 			{args: []string{"inspect", "--file", composePath, "run"}, code: exitCodeUsage, want: "requires a run id"},
 			{args: []string{"inspect", "--file", composePath, "sandbox"}, code: exitCodeUsage, want: "requires a sandbox"},
 			{args: []string{"inspect", "--file", composePath, "session"}, code: exitCodeUsage, want: "requires a sandbox"},
-			{args: []string{"inspect", "--file", composePath, "unknown"}, code: exitCodeUsage, want: "unsupported inspect target"},
+			{args: []string{"inspect", "--file", composePath, "unknown", "target"}, code: exitCodeUsage, want: "unsupported inspect target"},
 			{args: []string{"inspect", "--host", server.URL, "--file", composePath, "project"}, code: exitCodeUsage, want: "has not been started"},
 			{args: []string{"inspect", "--host", server.URL, "--file", composePath, "run", "missing"}, code: exitCodeUsage, want: "run missing"},
 			{args: []string{"inspect", "--host", server.URL, "--file", composePath, "sandbox", "sandbox-1"}, code: exitCodeUnavailable, want: "sandbox unavailable"},
@@ -9331,16 +9431,30 @@ func newRunServiceStubServer(t *testing.T, stub runServiceStub) *httptest.Server
 }
 
 type composeServiceStubs struct {
-	project projectServiceStub
-	run     runServiceStub
-	exec    execServiceStub
-	image   imageServiceStub
-	cache   cacheServiceStub
-	volume  volumeServiceStub
-	sandbox sandboxServiceStub
-	session sessionServiceStub
-	config  configServiceStub
-	loader  loaderServiceStub
+	project  projectServiceStub
+	run      runServiceStub
+	exec     execServiceStub
+	resource resourceServiceStub
+	image    imageServiceStub
+	cache    cacheServiceStub
+	volume   volumeServiceStub
+	sandbox  sandboxServiceStub
+	session  sessionServiceStub
+	config   configServiceStub
+	loader   loaderServiceStub
+}
+
+type resourceServiceStub struct {
+	resolveResource func(context.Context, *connect.Request[agentcomposev2.ResolveResourceRequest]) (*connect.Response[agentcomposev2.ResolveResourceResponse], error)
+
+	agentcomposev2connect.UnimplementedResourceServiceHandler
+}
+
+func (s resourceServiceStub) ResolveResource(ctx context.Context, req *connect.Request[agentcomposev2.ResolveResourceRequest]) (*connect.Response[agentcomposev2.ResolveResourceResponse], error) {
+	if s.resolveResource == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("ResolveResource stub is not configured"))
+	}
+	return s.resolveResource(ctx, req)
 }
 
 type projectServiceStub struct {
@@ -9737,6 +9851,10 @@ func newComposeServiceStubServer(t *testing.T, stubs composeServiceStubs) *httpt
 	}
 	if stubs.exec.exec != nil || stubs.exec.execStream != nil || stubs.exec.execAttach != nil {
 		path, handler := agentcomposev2connect.NewExecServiceHandler(stubs.exec)
+		mux.Handle(path, handler)
+	}
+	if stubs.resource.resolveResource != nil {
+		path, handler := agentcomposev2connect.NewResourceServiceHandler(stubs.resource)
 		mux.Handle(path, handler)
 	}
 	if stubs.image.listImages != nil || stubs.image.pullImage != nil || stubs.image.inspectImage != nil || stubs.image.removeImage != nil || stubs.image.buildImage != nil {

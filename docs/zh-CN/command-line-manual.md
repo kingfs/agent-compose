@@ -440,14 +440,17 @@ agent-compose logs --run run_123 --json
 
 查看 project 下资源、daemon image 或 runtime cache item 的详细信息。
 `inspect project` 和 `inspect agent <agent>` 要求该 project 已存在于 daemon 中；执行 `agent-compose down` 后，需要先重新执行 `agent-compose up`，再使用它们。
+仅提供一个未指定类型的引用时，daemon 会依次按精确名称、精确 ID、唯一 ID 前缀在支持的资源类型中解析。存在歧义时命令会失败，并列出可用于消除歧义的显式资源类型。
 
 ```bash
+agent-compose inspect <name-or-id>
 agent-compose inspect project
 agent-compose inspect agent <agent>
 agent-compose inspect run <run-id>
 agent-compose inspect sandbox <sandbox>
 agent-compose inspect image <image>
 agent-compose inspect cache <cache-id>
+agent-compose inspect volume <name>
 ```
 
 说明：
@@ -458,6 +461,7 @@ agent-compose inspect cache <cache-id>
 - `inspect sandbox <sandbox>` 查看 sandbox/runtime 详情。
 - `inspect image <image>` 查看镜像详情。
 - `inspect cache <cache-id>` 查看一个 daemon runtime cache item，包括引用、阻止删除原因和 warnings。
+- `inspect volume <name>` 查看一个 daemon volume。volume 仅按精确名称解析。
 
 ## 镜像命令
 
