@@ -20,8 +20,8 @@
 
 - 已确认：resume 严格保持 sandbox workspace；旧 sandbox 原样迁移；首版无 reset API；真实 runtime 使用 Docker E2E。
 - 已完成文档：技术规格、实施计划。
-- 代码任务：2/20 完成。
-- 当前下一目标：2.1 实现 Provisioner 状态编排和并发控制。
+- 代码任务：3/20 完成。
+- 当前下一目标：2.2 实现 staging、提升和失败重试。
 
 ## 执行规则
 
@@ -107,7 +107,7 @@
 
 参考：[实施计划阶段 2](docs/plan/workspace-resume-preservation-implementation-plan.md#阶段-2实现一次性-workspace-provisioner)
 
-- [ ] 2.1 实现 Provisioner 状态编排和并发控制
+- [x] 2.1 实现 Provisioner 状态编排和并发控制
   - 依赖：1.2。
   - 工作内容：
     - 在 `pkg/workspaces` 增加 Provisioner 及 workspace config/sandbox store/materializer 窄接口。
@@ -116,17 +116,34 @@
     - 同步最终持久化对象回调用方并保留 transient env。
     - 把 `golang.org/x/sync` 提升为 direct dependency。
   - 可并行子任务：
-    - [ ] 可并行：fake store/materializer 测试夹具。
-    - [ ] 可并行：legacy、ready、unknown/no-workspace 分支测试。
-    - [ ] 可并行：同 sandbox singleflight 与不同 sandbox 并发测试。
+    - [x] 可并行：fake store/materializer 测试夹具。
+    - [x] 可并行：legacy、ready、unknown/no-workspace 分支测试。
+    - [x] 可并行：同 sandbox singleflight 与不同 sandbox 并发测试。
   - 测试方案：`./scripts/with-go-toolchain.sh go test -race ./pkg/workspaces -run 'Test.*Provisioner' -count=1`。
   - 验收标准：ready 分支在 config store/materializer 被调用即 panic 的测试中通过；同 sandbox 只执行一次共享操作；所有调用方获得最终 metadata。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
-    - 下一目标：2.2。
+    - 状态：已完成。
+    - 变更：
+      - 在 `pkg/workspaces` 增加 Provisioner、workspace config/sandbox store/materializer 窄接口和现有 materializer 适配层，尚未接入生产 service graph。
+      - `Ensure` 以 sandbox ID 使用 `singleflight` 共享执行，在共享函数内重载持久化 metadata，并在共享成功或失败后为每个调用方再次重载最终对象并恢复 transient env。
+      - 固化 no-workspace、legacy nil、ready、pending/failed 和未知状态分支；legacy 只持久化 ready，ready 不解析 config 或调用 materializer，未知状态 fail closed。
+      - 等待者可按自身 context 取消而不取消已运行的共享 attempt；共享错误与 post-reload 错误使用 `errors.Join` 保留。
+      - 将 `golang.org/x/sync v0.20.0` 提升为 direct dependency。
+      - 增加状态分支、panic guard、authoritative reload、错误后同步、transient 保留、同/不同 sandbox 并发和等待者取消测试。
+    - 验证：
+      - `./scripts/with-go-toolchain.sh go test -race ./pkg/workspaces -run 'Test.*Provisioner' -count=1`：通过。
+      - `./scripts/with-go-toolchain.sh go test -race ./pkg/workspaces -run 'Test.*Provisioner.*Concurrent' -count=20`：通过。
+      - `./scripts/with-go-toolchain.sh go test ./pkg/workspaces ./pkg/model ./pkg/storage/sessionstore -count=1`：通过。
+      - `./scripts/with-go-toolchain.sh golangci-lint fmt --no-config --diff ./pkg/workspaces ./pkg/model ./pkg/storage/sessionstore`：通过。
+      - `./scripts/with-go-toolchain.sh golangci-lint run --no-config --allow-parallel-runners ./pkg/workspaces ./pkg/model ./pkg/storage/sessionstore`：通过，`0 issues`。
+      - `./scripts/with-go-toolchain.sh go mod graph` 与 `go list -m -json golang.org/x/sync`：确认主模块直接使用 `v0.20.0`。
+      - `git diff --check`：通过。
+    - 审计与例外：
+      - ready 分支分别以 config store 和 injected materializer panic guard 证明零 source/materializer 副作用；stale caller path 由持久化对象覆盖。
+      - 2.1 的 pending 初始化仍是未接入生产图的 materializer 编排骨架；正式 staging/promotion、attempt 失败写 failed、持久化双重错误和 ready 保存失败语义由依赖任务 2.2 收口，3.x 接入前不得保留直接正式路径 materialization。
+      - 额外执行 `./scripts/with-go-toolchain.sh go mod tidy -diff` 时，Go 枚举仓库现有 `data/skills/*` 遇到 `permission denied`；该命令不是 2.1 门禁，direct dependency 已由 module graph 证明，完整 tidy/diff 审计仍按计划在 2.3 执行。残余风险限于尚未获得 tidy diff 证据。
+      - 未修改 proto、SQLite、公开 CLI、环境变量、compose、runtime mount 或现有生命周期调用点。
+    - 下一目标：2.2 实现 staging、提升和失败重试。
 
 - [ ] 2.2 实现 staging、提升和失败重试
   - 依赖：2.1。

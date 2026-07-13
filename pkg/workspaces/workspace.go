@@ -8,11 +8,14 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-type Store interface {
+type WorkspaceConfigStore interface {
 	GetWorkspaceConfig(ctx context.Context, id string) (domain.WorkspaceConfig, error)
 }
 
-func PrepareSessionWorkspace(ctx context.Context, config *appconfig.Config, configDB Store, session *domain.Sandbox) error {
+// Store is retained as a compatibility alias for workspace config readers.
+type Store = WorkspaceConfigStore
+
+func PrepareSessionWorkspace(ctx context.Context, config *appconfig.Config, configDB WorkspaceConfigStore, session *domain.Sandbox) error {
 	workspaceID := strings.TrimSpace(session.WorkspaceID)
 	if session.Workspace != nil && strings.TrimSpace(session.Workspace.ID) != "" {
 		workspace := domain.WorkspaceConfig{
