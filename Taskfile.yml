@@ -90,7 +90,16 @@ tasks:
   test:
     desc: Run all test shapes with coverage quality gates
     cmds:
+      - task: test:deploy
       - GOCACHE={{.GO_BUILD_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} ./scripts/test-coverage.sh
+
+  test:deploy:
+    desc: Run deterministic installer, Compose, and release-asset deployment checks
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - ./deploy/install_test.sh
+      - ./scripts/test-compose-kvm-config.sh
+      - ./scripts/test-installer-assets.sh
 
   test:unit:
     desc: Run unit tests

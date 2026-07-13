@@ -9,8 +9,8 @@
 - 当前变更：platform-runtime-build。
 - 已确认产物：macOS Docker-only binary、Linux 三 Driver binary、Linux 三 Driver multi-arch Docker image。
 - 发布边界：binary 只用于本地和 CI 验证，不进入 GitHub Release。
-- 当前进度：13/18 个父任务完成。
-- 当前下一目标：5.3 接入部署测试、Release Payload与阶段门禁。
+- 当前进度：14/18 个父任务完成。
+- 当前下一目标：6.1 增加Darwin与Linux Binary CI矩阵。
 
 ## 文档索引
 
@@ -557,7 +557,7 @@
       - 本任务未修改Taskfile、CI、release payload、`.env.example`、部署文档、proto、SQLite schema、guest protocol、coverage baseline/exclusion、默认Docker driver或暂停的Workspace Resume账本；按用户要求未检查远端CI。focused验证未创建Docker runtime资源，最终label审计无container、network或volume残留。
     - 下一目标：5.3 接入部署测试、Release Payload与阶段门禁。
 
-- [ ] 5.3 接入部署测试、Release Payload 与阶段门禁
+- [x] 5.3 接入部署测试、Release Payload 与阶段门禁
   - 依赖：5.2。
   - 工作内容：
     - 新增稳定task test:deploy并纳入task test前置门禁。
@@ -565,9 +565,9 @@
     - .env.example记录RUNTIME_DRIVER=docker、可选COMPOSE_FILE和KVM边界。
     - 验证release tar包含两个Compose文件且仍无binary。
   - 可并行子任务：
-    - [ ] 可并行：部署shell测试和Task接入。
-    - [ ] 可并行：release payload及tar内容测试。
-    - [ ] 可并行：.env.example部署变量审计。
+    - [x] 可并行：部署shell测试和Task接入。
+    - [x] 可并行：release payload及tar内容测试。
+    - [x] 可并行：.env.example部署变量审计。
   - 测试方案：
     - task test:deploy
     - task test
@@ -575,11 +575,25 @@
     - docker compose两种组合config。
   - 验收标准：部署测试失败阻断task test但不计入Go/JS coverage；installer payload完整；coverage baseline不变；Release范围不变。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
-    - 下一目标：6.1。
+    - 状态：已完成。
+    - 变更：
+      - `Taskfile.yml`新增稳定`test:deploy`，依次运行installer状态机、真实Compose拓扑和release asset测试；`task test`在原coverage命令前执行该task，shell失败直接阻断且不进入Go/JS coverage计算。
+      - 新增`scripts/build-installer-assets.sh`作为本地与release workflow共用owner：输出仅包含standalone `install.sh`、可复现的`agent-compose-installer.tar.gz`和`SHASUMS256.txt`；tar固定metadata/mode并包含基础Compose、KVM overlay、`.env.example`、README、installer及image manifest，不包含binary。
+      - 新增`scripts/test-installer-assets.sh`，以两次独立构造验证asset/payload精确集合、byte content、mode、manifest refs、checksum、reproducibility、stale-output拒绝、无binary和`.env.example`部署合同。
+      - `.github/workflows/images.yml`的PR path filter加入`docker-compose.kvm.yml`，tag-only release job改为调用共享builder；publish条件、权限、merge依赖、三项release asset和multi-arch registry引用合同保持不变。
+      - `.env.example`保持active `RUNTIME_DRIVER=docker`和空secret，comment说明基础Compose无需KVM、BoxLite/Microsandbox需要overlay、installer会持久化选择，并提供非active的手动`COMPOSE_FILE=docker-compose.yml:docker-compose.kvm.yml`示例。
+    - 验证：
+      - `bash -n deploy/install.sh deploy/install_test.sh scripts/test-compose-kvm-config.sh scripts/build-installer-assets.sh scripts/test-installer-assets.sh`：通过。
+      - `task test:deploy`：通过；installer KVM选择/回滚、基础与KVM Compose渲染、release asset构造全部通过。
+      - 本地以测试version/image prefix构造installer assets并执行`tar -tzf`：release顶层精确为`install.sh`、`agent-compose-installer.tar.gz`、`SHASUMS256.txt`；archive精确包含两个Compose文件及README、`.env.example`、installer和manifest配套文件，无binary。
+      - PyYAML解析`.github/workflows/images.yml`：通过；`task --dry test`确认deploy checks先于coverage。
+      - `task lint`：通过，`0 issues`；`task build`：通过；`task test`：通过且实际先执行`test:deploy`，coverage为unit `77.25%`、integration `65.96%`、E2E `61.84%`、combined `79.54%`。
+      - `git diff --check`：通过。
+    - 审计与例外：
+      - 三个read-only subagent分别复核release builder/workflow、Task/coverage ordering和env/scope边界，最终均PASS；coverage脚本和`TESTING.md`阈值仍为`60%/60%/60%/70%`。
+      - 当前环境无`actionlint`，因此workflow验证使用本地PyYAML语法解析、共享builder真实执行、精确asset/tar断言和Task dry run；按用户要求未检查或触发远端CI/Release。
+      - 未修改proto、SQLite schema、guest protocol、默认Docker driver、coverage baseline/exclusion、deploy README/design文档或暂停的Workspace Resume账本；这些文档同步仍留给7.1。focused/gate验证未启动Docker runtime，最终label审计无container、network或volume残留，且无`upload`或installer临时目录残留。
+    - 下一目标：6.1 增加Darwin与Linux Binary CI矩阵。
 
 ## 6. 平台 Binary 与完整 Image CI
 

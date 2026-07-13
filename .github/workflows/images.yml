@@ -8,6 +8,7 @@ on:
       - cmd/**
       - deploy/**
       - docker-compose.yml
+      - docker-compose.kvm.yml
       - docker-compose.override.yml
       - .env.example
       - guest-images/**
@@ -205,34 +206,7 @@ jobs:
       - name: Build installer assets
         env:
           VERSION: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          frontend_version="${AGENT_COMPOSE_FRONTEND_VERSION:-latest}"
-          out="${PWD}/upload"
-          mkdir -p "${out}"
-
-          # Standalone installer script for the `curl ... | bash` one-liner.
-          cp deploy/install.sh "${out}/install.sh"
-
-          # Arch-agnostic installer payload: deploy files + image manifest that
-          # pins the compose image refs to this release. install.sh pulls the
-          # multi-arch images from the registry.
-          payload="$(mktemp -d)/agent-compose-installer"
-          mkdir -p "${payload}/images"
-          cp docker-compose.yml "${payload}/docker-compose.yml"
-          cp .env.example deploy/README.md deploy/install.sh "${payload}/"
-          chmod +x "${payload}/install.sh"
-          {
-            echo "AGENT_COMPOSE_IMAGE=${IMAGE_PREFIX}/agent-compose:${VERSION}"
-            echo "AGENT_COMPOSE_FRONTEND_VERSION=${frontend_version}"
-            echo "AGENT_COMPOSE_FRONTEND_IMAGE=${IMAGE_PREFIX}/agent-compose-ui:${frontend_version}"
-            echo "DEFAULT_IMAGE=${IMAGE_PREFIX}/agent-compose-guest:${VERSION}"
-          } > "${payload}/images/manifest.env"
-
-          # Tar archive used by `curl | bash` remote mode and manual installs.
-          tar -C "$(dirname "${payload}")" -czf "${out}/agent-compose-installer.tar.gz" agent-compose-installer
-
-          ( cd "${out}" && sha256sum ./*.tar.gz > SHASUMS256.txt )
+        run: ./scripts/build-installer-assets.sh ./upload
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
