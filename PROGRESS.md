@@ -20,8 +20,8 @@
 
 - 已确认：resume 严格保持 sandbox workspace；旧 sandbox 原样迁移；首版无 reset API；真实 runtime 使用 Docker E2E。
 - 已完成文档：技术规格、实施计划。
-- 代码任务：18/20 完成。
-- 当前下一目标：6.2 执行完整 harness 质量门禁。
+- 代码任务：19/20 完成。
+- 当前下一目标：6.3 完成交付审阅和账本总结。
 
 ## 执行规则
 
@@ -701,7 +701,7 @@
       - 三项并行审计和独立只读最终审计均为 PASS，无其他例外或未运行的 6.1 门禁。
     - 下一目标：6.2 执行完整 harness 质量门禁。
 
-- [ ] 6.2 执行完整 harness 质量门禁
+- [x] 6.2 执行完整 harness 质量门禁
   - 依赖：6.1。
   - 工作内容：
     - 依次运行 race test、真实 Docker workspace E2E、lint、coverage test 和 build。
@@ -716,11 +716,29 @@
     - `task build`
   - 验收标准：所有命令通过；coverage 为 unit ≥ 60%、integration ≥ 60%、E2E ≥ 60%、combined ≥ 70%；Docker E2E 非 skip。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成，覆盖率使用表格记录。
-    - 审计与例外：待完成。
-    - 下一目标：6.3。
+    - 状态：已完成，代码任务 19/20。
+    - 变更：本任务仅执行完整 harness 质量门禁、coverage 和资源清理审计；未修改 production、测试选择器、coverage exclusion、阈值、Task、设计或 CI，产品代码无变更。
+    - 验证：
+      - `./scripts/with-go-toolchain.sh go test -race ./pkg/workspaces -count=1`：通过，`ok agent-compose/pkg/workspaces 1.658s`。
+      - `task test:e2e:docker-workspace-resume`：真实 Docker test 非 skip 通过，`TestE2EDockerFileWorkspaceResumePreservesState` 用时 `3.25s`。
+      - `task lint`：通过，format 无 diff，golangci-lint `0 issues`。
+      - `task test`：clean 单进程复跑通过，四项 statement coverage 均满足门禁：
+
+        | Shape | 实际覆盖率 | 最低门禁 | 结果 |
+        | --- | ---: | ---: | --- |
+        | Unit | 77.00% | 60% | 通过 |
+        | Integration | 65.12% | 60% | 通过 |
+        | E2E | 61.10% | 60% | 通过 |
+        | Combined | 79.82% | 70% | 通过 |
+
+      - `task build`：通过；daemon、v2 proto packages、runtime SDK ESM/CJS/types build 和 offline packaging verification 全部成功。
+      - `git diff --check`：通过；`.cache/coverage` 四项 Go shape/JS combined artifacts 均存在且非空。
+    - 审计与例外：
+      - Docker 运行前后 `agent-compose.driver=docker` label container 均为 `38` 个，排序 ID 集 SHA-256 均为 `0bebb07b677f66638675bb7f40894045cd5b289123069a1d12d18099e2b34822`；无 `build/agent-compose daemon` 进程或 `agent-compose-docker-workspace-e2e-*` 临时 root，测试未遗留容器、daemon、socket、listener 或目录。
+      - 首次收集 `task test` 输出时，tool output cell 在命令仍运行时结束，随后为获取 coverage summary 发起的复跑与其短暂重叠并共写 ignored `.cache/coverage`；两棵本任务 test process tree 已精确终止，未接受该轮证据。随后确认无残留进程，由一个 tracked session 从清空 cache 开始完整复跑并取得上述通过结果和完整 artifacts，无产品文件或共享 runtime 资源受影响。
+      - 最终 gate 严格按 race → real Docker E2E → lint → clean coverage → build 完成；Docker image 为本地 `agent-compose-guest:latest`（`sha256:eb83ec2...`），未 pull、未 skip，也未运行 BoxLite/Microsandbox provisioning E2E。
+      - 最终工作区审计在账本更新前保持 clean；无失败需要回退到所属实现阶段，无 release blocker 或其他未运行的 6.2 门禁。
+    - 下一目标：6.3 完成交付审阅和账本总结。
 
 - [ ] 6.3 完成交付审阅和账本总结
   - 依赖：6.2。
