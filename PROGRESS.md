@@ -9,8 +9,8 @@
 - 当前变更：platform-runtime-build。
 - 已确认产物：macOS Docker-only binary、Linux 三 Driver binary、Linux 三 Driver multi-arch Docker image。
 - 发布边界：binary 只用于本地和 CI 验证，不进入 GitHub Release。
-- 当前进度：1/18 个父任务完成。
-- 当前下一目标：1.2 收紧 BoxLite、Microsandbox 和共享 CGO build constraints。
+- 当前进度：2/18 个父任务完成。
+- 当前下一目标：1.3 更新 runtime smoke tags 并完成阶段 1 门禁。
 
 ## 文档索引
 
@@ -89,7 +89,7 @@
       - 未修改现有 runtime/cache constraints、Taskfile、coverage exclusion、proto、SQLite、默认 Driver 或生产 runtime 选择路径；这些后续接入保持在依赖任务中。
     - 下一目标：1.2 收紧 BoxLite、Microsandbox 和共享 CGO build constraints。
 
-- [ ] 1.2 收紧 BoxLite、Microsandbox 和共享 CGO build constraints
+- [x] 1.2 收紧 BoxLite、Microsandbox 和共享 CGO build constraints
   - 依赖：1.1。
   - 工作内容：
     - BoxLite真实实现、cache/source及测试统一使用 linux && cgo && boxlitecgo，stub/no-source使用完整互补条件。
@@ -97,20 +97,35 @@
     - env_path.go、local_docker_oci.go、runtime_mount_manifest_smoke_test.go等共享helper使用 linux && cgo && (boxlitecgo || microsandboxcgo)。
     - 审计所有 pkg/driver Go build constraints，确保普通CGO不再声称Microsandbox能力。
   - 可并行子任务：
-    - [ ] 可并行：BoxLite文件和测试constraints。
-    - [ ] 可并行：Microsandbox文件和测试constraints。
-    - [ ] 可并行：共享CGO helper、runtime cache source与rg审计。
+    - [x] 可并行：BoxLite文件和测试constraints。
+    - [x] 可并行：Microsandbox文件和测试constraints。
+    - [x] 可并行：共享CGO helper、runtime cache source与rg审计。
   - 测试方案：
     - CGO_ENABLED=0 ./scripts/with-go-toolchain.sh go test ./pkg/driver -count=1
     - 准备两套artifact后，CGO_ENABLED=1和tags boxlitecgo,microsandboxcgo运行pkg/driver非KVM unit tests。
     - rg -n '^//go:build' pkg/driver --glob '*.go'
   - 验收标准：Docker-only和Linux full两类build均可编译；runtime与cache source能力一致；full-tag unit构造不访问KVM；无宽泛cgo条件残留在Microsandbox实现。
   - 完成总结：
-    - 状态：待完成。
-    - 变更：待完成。
-    - 验证：待完成。
-    - 审计与例外：待完成。
-    - 下一目标：1.3。
+    - 状态：已完成。
+    - 变更：
+      - BoxLite 真实 runtime、image materialization、cache/source、专属测试和 smoke 统一使用 `linux && cgo && boxlitecgo`；stub/no-source 使用完整互补条件，手工 repro 保留额外 `boxlite_repro` tag。
+      - Microsandbox 真实 runtime、image resolver、cache/source、专属测试和 smoke 统一使用 `linux && cgo && microsandboxcgo`；stub/no-source 使用完整互补条件。
+      - 共享 env/path、Docker OCI materialization、Docker probe、native-driver pull policy 和 smoke helper 使用 `linux && cgo && (boxlitecgo || microsandboxcgo)`；把 native-only pull-policy helper 从通用 Docker image 文件拆出。
+      - 增加 cache source 与 `CompiledRuntimeDrivers` 的矩阵一致性测试，固定 BoxLite、Microsandbox source 的注册顺序和能力边界。
+    - 验证：
+      - `CGO_ENABLED=0 ./scripts/with-go-toolchain.sh go test ./pkg/driver -count=1`：通过。
+      - `CGO_ENABLED=1 ./scripts/with-go-toolchain.sh go test ./pkg/driver -count=1`：通过，普通 CGO 只选择 stub/no-source。
+      - `CGO_ENABLED=0` 配合双显式 tag 的 `pkg/driver` 测试：通过，证明互补 stub 在关闭 CGO 时完整。
+      - `CGO_ENABLED=1` 配合单独 `microsandboxcgo` 的 `pkg/driver` 测试：通过，无 artifact/KVM 初始化。
+      - 两套 artifact 就绪后，`CGO_ENABLED=1`、`boxlitecgo,microsandboxcgo` 的完整 `pkg/driver` 测试：通过；full-tag unit 构造未访问 KVM。
+      - Docker-only 与 Linux full 两类 `cmd/agent-compose` build：通过；Darwin amd64、关闭 CGO、双 tag 的 `pkg/driver` cross-compile：通过。
+      - `go list` 验证默认、BoxLite 单 tag、Microsandbox 单 tag、Linux full 和 Darwin full-tag 五组文件选择；`rg` 确认无宽泛 `cgo` 条件残留在 native 实现。
+      - `task lint`：通过，`0 issues`。
+    - 审计与例外：
+      - Docker build 容器访问 GitHub Release 失败（curl 28）；随后从本机与当前 Dockerfile 固定版本一致的完整 `boxlite-build` stage 和 `agent-compose:latest` 镜像导出两套 artifact，文件存在性检查后完成真实 full-tag 链接与测试。
+      - lint 首轮发现 Docker probe 与 native pull-policy helper 在默认构建中失去调用方；已按真实依赖收窄/拆分，没有使用 lint suppress 或扩大 package constraint。
+      - 本任务未修改 Taskfile、coverage exclusion、proto、SQLite、默认 Driver 或 runtime 生产选择；阶段 1 的全量 coverage 门禁和 smoke task tag 更新按账本留给 1.3。
+    - 下一目标：1.3 更新 runtime smoke tags 并完成阶段 1 门禁。
 
 - [ ] 1.3 更新 runtime smoke tags 并完成阶段 1 门禁
   - 依赖：1.2。
@@ -525,3 +540,4 @@
     - 验证：待完成。
     - 审计与例外：待完成。
     - 下一目标：无。
+
