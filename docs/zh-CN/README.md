@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="octobuslogo.jpg" alt="OctoBus" width="240">
+  <img src="../../agent-composelogo.png" alt="Agent-compose" width="240">
 </p>
 
 # agent-compose 中文文档
