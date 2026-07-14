@@ -54,10 +54,9 @@ func applyDockerDaemonPullPolicy(ctx context.Context, imageRef, pullPolicy strin
 
 	switch strings.ToLower(strings.TrimSpace(pullPolicy)) {
 	case "never":
-		if _, ok, resolveErr := resolveLocalDockerImageRef(ctx, dockerClient, imageRef); resolveErr == nil && ok {
-			return nil
-		}
-		return fmt.Errorf("guest image %s: not found locally (pull_policy=never)", imageRef)
+		resolvedRef, ok, resolveErr := resolveLocalDockerImageRef(ctx, dockerClient, imageRef)
+		_, err := requireLocalDockerImage(imageRef, resolvedRef, ok, resolveErr)
+		return err
 
 	case "always":
 		pullCtx := ctx

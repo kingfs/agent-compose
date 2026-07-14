@@ -31,12 +31,8 @@ func ensureDockerImage(ctx context.Context, imageRef string, pullPolicy string, 
 
 	switch pullPolicy {
 	case "never":
-		if resolvedRef, ok, err := resolveLocalDockerImageRef(ctx, dockerClient, imageRef); err == nil && ok {
-			return resolvedRef, nil
-		} else if err != nil {
-			return "", fmt.Errorf("inspect guest image %s: %w", imageRef, err)
-		}
-		return "", fmt.Errorf("guest image %s: not found locally (pull_policy=never)", imageRef)
+		resolvedRef, ok, resolveErr := resolveLocalDockerImageRef(ctx, dockerClient, imageRef)
+		return requireLocalDockerImage(imageRef, resolvedRef, ok, resolveErr)
 
 	case "always":
 		pullCtx, pullCancel := context.WithTimeout(ctx, pullTimeout)
@@ -76,6 +72,16 @@ func ensureDockerImage(ctx context.Context, imageRef string, pullPolicy string, 
 		}
 		return imageRef, nil
 	}
+}
+
+func requireLocalDockerImage(imageRef, resolvedRef string, ok bool, resolveErr error) (string, error) {
+	if resolveErr != nil {
+		return "", fmt.Errorf("inspect guest image %s: %w", imageRef, resolveErr)
+	}
+	if ok {
+		return resolvedRef, nil
+	}
+	return "", fmt.Errorf("guest image %s: not found locally (pull_policy=never)", imageRef)
 }
 
 func dockerImagePull(ctx context.Context, dockerClient *client.Client, imageRef string) error {
