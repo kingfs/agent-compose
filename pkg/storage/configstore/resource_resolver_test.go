@@ -107,3 +107,10 @@ func TestConfigStoreResolveStoredResourcesExactID(t *testing.T) {
 		t.Fatalf("exact matches = %#v", matches)
 	}
 }
+
+func TestIdentityLookupRejectsUnknownColumn(t *testing.T) {
+	clause, args, matchType, ok := identityLookup("external_input", strings.Repeat("a", 64))
+	if ok || clause != "" || args != nil || matchType != "" {
+		t.Fatalf("identityLookup accepted unknown column: clause=%q args=%v matchType=%q ok=%t", clause, args, matchType, ok)
+	}
+}

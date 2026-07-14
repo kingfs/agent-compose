@@ -86,7 +86,7 @@ func (r *Resolver) Resolve(ctx context.Context, options domain.ResourceResolveOp
 	}
 	results := make(chan sourceResult, len(tasks))
 	for _, task := range tasks {
-		go func() { results <- task() }()
+		go func(task func() sourceResult) { results <- task() }(task)
 	}
 	for range tasks {
 		part := <-results

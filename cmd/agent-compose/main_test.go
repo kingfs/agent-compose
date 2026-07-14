@@ -8364,6 +8364,15 @@ agents:
 }
 
 func TestIntegrationCLIInspectResolvesUntypedResourceRefs(t *testing.T) {
+	testCLIInspectResolvesUntypedResourceRefs(t)
+}
+
+func TestE2ECLIInspectResolvesUntypedResourceRefs(t *testing.T) {
+	testCLIInspectResolvesUntypedResourceRefs(t)
+}
+
+func testCLIInspectResolvesUntypedResourceRefs(t *testing.T) {
+	t.Helper()
 	projectID := identity.NewID(identity.ResourceProject, "resolved-project")
 	runID := identity.NewID(identity.ResourceRun, "resolved-run")
 	sandboxID := identity.NewID(identity.ResourceSandbox, "resolved-sandbox")
@@ -8440,6 +8449,15 @@ func TestIntegrationCLIInspectResolvesUntypedResourceRefs(t *testing.T) {
 }
 
 func TestIntegrationCLIInspectUntypedRefReportsAmbiguityAndNotFound(t *testing.T) {
+	testCLIInspectUntypedRefReportsAmbiguityAndNotFound(t)
+}
+
+func TestE2ECLIInspectUntypedRefReportsAmbiguityAndNotFound(t *testing.T) {
+	testCLIInspectUntypedRefReportsAmbiguityAndNotFound(t)
+}
+
+func testCLIInspectUntypedRefReportsAmbiguityAndNotFound(t *testing.T) {
+	t.Helper()
 	server := newComposeServiceStubServer(t, composeServiceStubs{resource: resourceServiceStub{
 		resolveResource: func(_ context.Context, req *connect.Request[agentcomposev2.ResolveResourceRequest]) (*connect.Response[agentcomposev2.ResolveResourceResponse], error) {
 			if req.Msg.GetRef() == "ambiguous" {

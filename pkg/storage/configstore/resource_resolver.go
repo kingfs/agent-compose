@@ -208,6 +208,11 @@ func queryStoredResources(
 }
 
 func identityLookup(column, ref string) (string, []any, domain.ResourceMatchType, bool) {
+	switch column {
+	case "id", "pa.id", "run_id":
+	default:
+		return "", nil, "", false
+	}
 	ref = strings.TrimSpace(strings.ToLower(ref))
 	ref = strings.TrimPrefix(ref, identity.Prefix)
 	if !identity.IsIDPrefix(ref) {
