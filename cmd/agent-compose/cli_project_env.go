@@ -12,7 +12,15 @@ import (
 )
 
 func resolveCLIProjectEnv(spec *compose.ProjectSpec, composePath string) (map[string]string, error) {
-	envFiles, err := resolveCLIProjectEnvFiles(spec.EnvFiles, composePath)
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("resolve current directory for project env: %w", err)
+	}
+	return resolveCLIProjectEnvFromDir(spec, composePath, workingDir)
+}
+
+func resolveCLIProjectEnvFromDir(spec *compose.ProjectSpec, composePath, workingDir string) (map[string]string, error) {
+	envFiles, err := resolveCLIProjectEnvFiles(spec.EnvFiles, composePath, workingDir)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +44,7 @@ func resolveCLIProjectEnv(spec *compose.ProjectSpec, composePath string) (map[st
 	return values, nil
 }
 
-func resolveCLIProjectEnvFiles(configured compose.EnvFileSpec, composePath string) ([]string, error) {
+func resolveCLIProjectEnvFiles(configured compose.EnvFileSpec, composePath, workingDir string) ([]string, error) {
 	projectDir := filepath.Dir(composePath)
 	if configured != nil {
 		paths := make([]string, 0, len(configured))
@@ -62,10 +70,6 @@ func resolveCLIProjectEnvFiles(configured compose.EnvFileSpec, composePath strin
 		return []string{projectEnv}, nil
 	}
 
-	workingDir, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("resolve current directory for project env: %w", err)
-	}
 	workingEnv := filepath.Join(workingDir, ".env")
 	if filepath.Clean(workingEnv) == filepath.Clean(projectEnv) {
 		return nil, nil

@@ -52,20 +52,7 @@ func TestResolveCLIProjectEnvAutoDiscovery(t *testing.T) {
 	composePath := filepath.Join(projectDir, "agent-compose.yml")
 	writeTestFile(t, filepath.Join(workingDir, ".env"), "SOURCE=working\n")
 
-	previousWorkingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd returned error: %v", err)
-	}
-	if err := os.Chdir(workingDir); err != nil {
-		t.Fatalf("Chdir returned error: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := os.Chdir(previousWorkingDir); err != nil {
-			t.Errorf("restore working directory: %v", err)
-		}
-	})
-
-	values, err := resolveCLIProjectEnv(&compose.ProjectSpec{}, composePath)
+	values, err := resolveCLIProjectEnvFromDir(&compose.ProjectSpec{}, composePath, workingDir)
 	if err != nil {
 		t.Fatalf("resolve cwd env returned error: %v", err)
 	}
@@ -74,7 +61,7 @@ func TestResolveCLIProjectEnvAutoDiscovery(t *testing.T) {
 	}
 
 	writeTestFile(t, filepath.Join(projectDir, ".env"), "SOURCE=project\n")
-	values, err = resolveCLIProjectEnv(&compose.ProjectSpec{}, composePath)
+	values, err = resolveCLIProjectEnvFromDir(&compose.ProjectSpec{}, composePath, workingDir)
 	if err != nil {
 		t.Fatalf("resolve project env returned error: %v", err)
 	}
