@@ -288,7 +288,11 @@ func NewConfig(di do.Injector) (*Config, error) {
 	}
 
 	cacheTTL := 7 * 24 * time.Hour
-	if raw := strings.TrimSpace(os.Getenv("CACHE_TTL")); raw != "" {
+	cacheTTLRaw, err := envWithLegacy(logger, "CACHE_TTL", "BOX_CACHE_TTL")
+	if err != nil {
+		return nil, err
+	}
+	if raw := strings.TrimSpace(cacheTTLRaw); raw != "" {
 		parsed, parseErr := time.ParseDuration(raw)
 		if parseErr != nil {
 			return nil, fmt.Errorf("parse CACHE_TTL %q: %w", raw, parseErr)

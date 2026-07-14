@@ -727,6 +727,41 @@ func TestNewConfigCacheTTL(t *testing.T) {
 	}
 }
 
+func TestNewConfigCacheTTLAcceptsDeprecatedBoxCacheTTL(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", root)
+	t.Setenv("BOX_CACHE_TTL", "12h")
+	var logs strings.Builder
+	di := do.New()
+	do.ProvideValue(di, slog.New(slog.NewTextHandler(&logs, nil)))
+
+	config, err := NewConfig(di)
+	if err != nil || config.CacheTTL != 12*time.Hour {
+		t.Fatalf("NewConfig CacheTTL = %v, err=%v; want 12h", config.CacheTTL, err)
+	}
+	if !strings.Contains(logs.String(), "using deprecated environment variable") || !strings.Contains(logs.String(), "BOX_CACHE_TTL") {
+		t.Fatalf("logs = %q, want BOX_CACHE_TTL deprecation warning", logs.String())
+	}
+}
+
+func TestNewConfigCacheTTLPrecedesDeprecatedBoxCacheTTL(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", root)
+	t.Setenv("CACHE_TTL", "2h")
+	t.Setenv("BOX_CACHE_TTL", "12h")
+	var logs strings.Builder
+	di := do.New()
+	do.ProvideValue(di, slog.New(slog.NewTextHandler(&logs, nil)))
+
+	config, err := NewConfig(di)
+	if err != nil || config.CacheTTL != 2*time.Hour {
+		t.Fatalf("NewConfig CacheTTL = %v, err=%v; want 2h", config.CacheTTL, err)
+	}
+	if !strings.Contains(logs.String(), "deprecated environment variable ignored") || !strings.Contains(logs.String(), "BOX_CACHE_TTL") {
+		t.Fatalf("logs = %q, want ignored BOX_CACHE_TTL warning", logs.String())
+	}
+}
+
 func TestNewConfigPreservesUNCDockerHostSandboxRoot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))

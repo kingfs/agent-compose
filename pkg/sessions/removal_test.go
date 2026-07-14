@@ -164,6 +164,7 @@ func TestRemovalCoordinatorPruneSeparatesRecordsAndResidues(t *testing.T) {
 		{Driver: "docker", RuntimeID: "known-runtime", SandboxID: owned.Summary.ID, UpdatedAt: now.Add(-48 * time.Hour), OwnershipValid: true, Removable: true},
 		{Driver: "docker", RuntimeID: "orphan-runtime", SandboxID: "sandbox-orphan", UpdatedAt: now.Add(-48 * time.Hour), OwnershipValid: true, Removable: true},
 		{Driver: "docker", RuntimeID: "unsafe-runtime", SandboxID: "", UpdatedAt: now.Add(-48 * time.Hour), OwnershipValid: false},
+		{Driver: "docker", RuntimeID: "second-orphan-runtime", SandboxID: "sandbox-second-orphan", UpdatedAt: now.Add(-48 * time.Hour), OwnershipValid: true, Removable: true},
 	}}
 	coordinator := &sessions.RemovalCoordinator{
 		SandboxRoot: root, Store: store, Runtime: &removalTestRuntime{}, Residues: residues, Now: func() time.Time { return now },
@@ -176,11 +177,14 @@ func TestRemovalCoordinatorPruneSeparatesRecordsAndResidues(t *testing.T) {
 		t.Fatalf("record-only prune = %#v err=%v residue calls=%d", dryRun, err, residues.listCalls)
 	}
 	result, err := coordinator.Prune(context.Background(), sessions.PruneRequest{ProjectID: "project-a", Driver: "docker", OlderThan: 24 * time.Hour, IncludeOrphans: true, Force: true})
-	if err != nil || result.DryRun || len(result.Matched) != 3 || len(result.Removed) != 2 || len(result.Skipped) != 1 {
+	if err != nil || result.DryRun || len(result.Matched) != 4 || len(result.Removed) != 3 || len(result.Skipped) != 1 {
 		t.Fatalf("forced prune = %#v err=%v", result, err)
 	}
-	if residues.removeCalls != 1 || result.Removed[1] != "sandbox-orphan" {
+	if residues.removeCalls != 2 || result.Removed[1] != "sandbox-orphan" || result.Removed[2] != "sandbox-second-orphan" {
 		t.Fatalf("residue removal calls/result = %d/%#v", residues.removeCalls, result.Removed)
+	}
+	if len(residues.removed) != 2 || residues.removed[0].RuntimeID != "orphan-runtime" || residues.removed[1].RuntimeID != "second-orphan-runtime" {
+		t.Fatalf("removed residues = %#v", residues.removed)
 	}
 }
 
@@ -350,6 +354,7 @@ type removalTestResidues struct {
 	items       []sessions.RuntimeResidue
 	listCalls   int
 	removeCalls int
+	removed     []sessions.RuntimeResidue
 }
 
 func (r *removalTestResidues) ListRuntimeResidues(context.Context) ([]sessions.RuntimeResidue, []string, error) {
@@ -357,7 +362,8 @@ func (r *removalTestResidues) ListRuntimeResidues(context.Context) ([]sessions.R
 	return append([]sessions.RuntimeResidue(nil), r.items...), nil, nil
 }
 
-func (r *removalTestResidues) RemoveRuntimeResidue(context.Context, sessions.RuntimeResidue) error {
+func (r *removalTestResidues) RemoveRuntimeResidue(_ context.Context, residue sessions.RuntimeResidue) error {
 	r.removeCalls++
+	r.removed = append(r.removed, residue)
 	return nil
 }

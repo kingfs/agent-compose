@@ -145,26 +145,3 @@ func readMicrosandboxDiskOwnership(home, manifestPath string) (microsandboxDiskO
 	}
 	return ownership, nil
 }
-
-func validateMicrosandboxOwnedPath(home, path string) error {
-	root, err := filepath.Abs(filepath.Join(home, "docker-disks"))
-	if err != nil {
-		return err
-	}
-	target, err := filepath.Abs(path)
-	if err != nil {
-		return err
-	}
-	rel, err := filepath.Rel(root, target)
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("microsandbox owned path %s escapes docker-disks root", path)
-	}
-	info, err := os.Lstat(target)
-	if err != nil {
-		return err
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("microsandbox owned path %s is a symlink", path)
-	}
-	return nil
-}

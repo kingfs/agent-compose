@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	domain "agent-compose/pkg/model"
@@ -115,7 +114,7 @@ type RemovalCoordinator struct {
 	Locks       *LifecycleLocks
 	Now         func() time.Time
 
-	locks sync.Map
+	locks LifecycleLocks
 }
 
 func (c *RemovalCoordinator) Remove(ctx context.Context, sandboxID string, force bool) (RemovalResult, error) {
@@ -323,10 +322,7 @@ func (c *RemovalCoordinator) lock(id string) func() {
 	if c.Locks != nil {
 		return c.Locks.Lock(id)
 	}
-	value, _ := c.locks.LoadOrStore(id, &sync.Mutex{})
-	mu := value.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
+	return c.locks.Lock(id)
 }
 
 func (c *RemovalCoordinator) now() time.Time {
