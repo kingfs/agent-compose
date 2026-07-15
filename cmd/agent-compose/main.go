@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -2163,7 +2164,7 @@ func runComposeSchedulerLogsCommand(cmd *cobra.Command, cli cliOptions, options 
 	}
 	var selected *composeSchedulerRunItem
 	if runRef != "" {
-		selected, err = getComposeSchedulerRun(cmd.Context(), clients.run, projectID, runRef)
+		selected, err = getComposeSchedulerRun(cmd.Context(), clients, normalized, projectID, runRef)
 		if err != nil {
 			return err
 		}
@@ -2179,7 +2180,7 @@ func runComposeSchedulerLogsCommand(cmd *cobra.Command, cli cliOptions, options 
 	if selected == nil {
 		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("no scheduler runs found")}
 	}
-	events, err := listSchedulerRunEvents(cmd.Context(), clients.run, *selected)
+	events, err := listSchedulerRunEvents(cmd.Context(), clients, projectID, *selected)
 	if err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("list scheduler run %s logs: %w", selected.RunID, err))
 	}
@@ -2219,8 +2220,8 @@ func runComposeSchedulerInspectCommand(cmd *cobra.Command, cli cliOptions, args 
 		setSchedulerTriggerInspectOutput(&output, trigger)
 	} else {
 		ref := strings.TrimSpace(args[0])
-		if shouldResolveComposeLogResourceRef(ref) {
-			run, runErr := getComposeSchedulerRun(cmd.Context(), clients.run, projectID, ref)
+		if shouldResolveSchedulerRunRef(ref) {
+			run, runErr := getComposeSchedulerRun(cmd.Context(), clients, normalized, projectID, ref)
 			if runErr == nil {
 				output.Resource = "run"
 				output.AgentName = run.AgentName
@@ -2232,6 +2233,11 @@ func runComposeSchedulerInspectCommand(cmd *cobra.Command, cli cliOptions, args 
 		if output.Resource == "" {
 			scheduler, schedulerErr := resolveComposeScheduler(normalized, projectID, ref)
 			if schedulerErr == nil {
+				triggers, listErr := listComposeSchedulerTriggers(cmd.Context(), clients, normalized, projectID, scheduler.AgentName)
+				if listErr != nil {
+					return listErr
+				}
+				scheduler.TriggerCount = len(triggers)
 				output.Resource = "scheduler"
 				output.AgentName = scheduler.AgentName
 				output.Scheduler = scheduler
@@ -2275,17 +2281,24 @@ func isSchedulerResourceNotFound(err error) bool {
 	return errors.As(err, &target)
 }
 
-func getComposeSchedulerRun(ctx context.Context, client agentcomposev2connect.RunServiceClient, projectID, runRef string) (*composeSchedulerRunItem, error) {
-	resp, err := client.GetRun(ctx, connect.NewRequest(&agentcomposev2.GetRunRequest{ProjectId: projectID, RunId: strings.TrimSpace(runRef)}))
+func getComposeSchedulerRun(ctx context.Context, clients cliServiceClients, normalized *compose.NormalizedProjectSpec, projectID, runRef string) (*composeSchedulerRunItem, error) {
+	runID, err := resolveSchedulerRunID(ctx, clients.resource, projectID, runRef)
+	if err != nil {
+		if !isSchedulerResourceNotFound(err) {
+			return nil, err
+		}
+		return resolveSchedulerRuntimeRun(ctx, clients.project, normalized, projectID, runRef)
+	}
+	resp, err := clients.run.GetRun(ctx, connect.NewRequest(&agentcomposev2.GetRunRequest{ProjectId: projectID, RunId: runID}))
 	if err != nil {
 		if connect.CodeOf(err) == connect.CodeNotFound {
-			return nil, schedulerResourceNotFoundError{kind: "run", ref: runRef}
+			return resolveSchedulerRuntimeRun(ctx, clients.project, normalized, projectID, runRef)
 		}
 		return nil, commandExitErrorForConnect(fmt.Errorf("get scheduler run %s: %w", runRef, err))
 	}
 	summary := resp.Msg.GetRun().GetSummary()
-	if summary == nil || summary.GetSource() != agentcomposev2.RunSource_RUN_SOURCE_SCHEDULER {
-		return nil, schedulerResourceNotFoundError{kind: "run", ref: runRef}
+	if summary == nil || strings.TrimSpace(summary.GetSchedulerId()) == "" {
+		return resolveSchedulerRuntimeRun(ctx, clients.project, normalized, projectID, runRef)
 	}
 	loaderID, idErr := domain.StableManagedLoaderID(projectID, summary.GetAgentName(), "")
 	if idErr != nil {
@@ -2295,6 +2308,44 @@ func getComposeSchedulerRun(ctx context.Context, client agentcomposev2connect.Ru
 	item.ResultJSON = resp.Msg.GetRun().GetResultJson()
 	item.ArtifactsDir = resp.Msg.GetRun().GetArtifactsDir()
 	return &item, nil
+}
+
+func resolveSchedulerRunID(ctx context.Context, client agentcomposev2connect.ResourceServiceClient, projectID, runRef string) (string, error) {
+	runRef = strings.TrimSpace(runRef)
+	if identity.IsID(runRef) {
+		return runRef, nil
+	}
+	if strings.Contains(runRef, "-") {
+		return "", schedulerResourceNotFoundError{kind: "run", ref: runRef}
+	}
+	resp, err := client.ResolveID(ctx, connect.NewRequest(&agentcomposev2.ResolveResourceIDRequest{
+		Id:    runRef,
+		Kinds: []agentcomposev2.ResourceKind{agentcomposev2.ResourceKind_RESOURCE_KIND_RUN},
+	}))
+	if err != nil {
+		if connect.CodeOf(err) == connect.CodeNotFound {
+			return "", schedulerResourceNotFoundError{kind: "run", ref: runRef}
+		}
+		return "", commandExitErrorForConnect(fmt.Errorf("resolve scheduler run %s: %w", runRef, err))
+	}
+	matches := make([]string, 0, len(resp.Msg.GetTargets()))
+	for _, target := range resp.Msg.GetTargets() {
+		if target.GetKind() == agentcomposev2.ResourceKind_RESOURCE_KIND_RUN && (target.GetProjectId() == "" || target.GetProjectId() == projectID) {
+			matches = append(matches, target.GetId())
+		}
+	}
+	if len(matches) == 0 {
+		return "", schedulerResourceNotFoundError{kind: "run", ref: runRef}
+	}
+	if len(matches) > 1 {
+		return "", commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("scheduler run reference %q is ambiguous", runRef)}
+	}
+	return matches[0], nil
+}
+
+func shouldResolveSchedulerRunRef(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	return shouldResolveComposeLogResourceRef(ref) || (len(ref) >= 6 && strings.Contains(ref, "-"))
 }
 
 func setSchedulerTriggerInspectOutput(output *composeSchedulerInspectOutput, trigger composeSchedulerTriggerItem) {
@@ -2408,7 +2459,6 @@ func listComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, no
 			ProjectId:   projectID,
 			AgentName:   agent.Name,
 			SchedulerId: schedulerID,
-			Source:      agentcomposev2.RunSource_RUN_SOURCE_SCHEDULER,
 			Status:      runStatus,
 			Limit:       limit,
 		}))
@@ -2440,6 +2490,19 @@ func listComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, no
 			}
 			items = append(items, schedulerRunItem(agent.Name, schedulerID, loaderID, run))
 		}
+		runtimeRuns, runtimeErr := listSchedulerRuntimeRuns(ctx, clients.project, projectID, agent.Name, schedulerID, loaderID, 500)
+		if runtimeErr != nil {
+			return nil, runtimeErr
+		}
+		for _, run := range runtimeRuns {
+			if statusText != "" && run.Status != statusText {
+				continue
+			}
+			if triggerRef != "" && !schedulerRunTriggerMatches(run.TriggerID, triggerRef, triggers) {
+				continue
+			}
+			items = append(items, run)
+		}
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].StartedAt == items[j].StartedAt {
@@ -2451,6 +2514,18 @@ func listComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, no
 		items = items[:limit]
 	}
 	return items, nil
+}
+
+func schedulerRunTriggerMatches(runTriggerID, ref string, triggers []composeSchedulerTriggerItem) bool {
+	if resourceRefMatches(ref, runTriggerID) {
+		return true
+	}
+	for _, trigger := range triggers {
+		if resourceRefMatches(ref, trigger.Name, trigger.TriggerID, trigger.RawTriggerID) && resourceRefMatches(runTriggerID, trigger.TriggerID, trigger.RawTriggerID) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseSchedulerRunStatusFilter(value string) (agentcomposev2.RunStatus, string, error) {
@@ -2492,32 +2567,145 @@ func schedulerRunItem(agentName, schedulerID, loaderID string, run *agentcompose
 	}
 }
 
-func listSchedulerRunEvents(ctx context.Context, client agentcomposev2connect.RunServiceClient, run composeSchedulerRunItem) ([]composeSchedulerLogEvent, error) {
-	resp, err := client.ListRunEvents(ctx, connect.NewRequest(&agentcomposev2.ListRunEventsRequest{RunId: run.RunID, Limit: 10000}))
-	if err != nil {
-		return nil, err
+func listSchedulerRunEvents(ctx context.Context, clients cliServiceClients, projectID string, run composeSchedulerRunItem) ([]composeSchedulerLogEvent, error) {
+	if run.schedulerRuntime {
+		return listSchedulerRuntimeLogEvents(ctx, clients.project, projectID, run)
 	}
 	events := make([]composeSchedulerLogEvent, 0)
 	sandboxID := ""
 	if len(run.SandboxIDs) > 0 {
 		sandboxID = run.SandboxIDs[0]
 	}
-	for _, event := range resp.Msg.GetEvents() {
-		events = append(events, composeSchedulerLogEvent{
-			ID:          event.GetId(),
-			RunID:       event.GetRunId(),
-			AgentName:   run.AgentName,
-			TriggerID:   run.TriggerID,
-			Type:        schedulerRunEventType(event.GetKind()),
-			Level:       "info",
-			Message:     firstNonEmptyString(event.GetText(), event.GetName()),
-			PayloadJSON: event.GetPayloadJson(),
-			SandboxID:   sandboxID,
-			CreatedAt:   formatProtoTimestamp(event.GetCreatedAt()),
-		})
+	cursor := ""
+	for {
+		resp, err := clients.run.ListRunEvents(ctx, connect.NewRequest(&agentcomposev2.ListRunEventsRequest{RunId: run.RunID, Limit: 500, Cursor: cursor}))
+		if err != nil {
+			return nil, err
+		}
+		for _, event := range resp.Msg.GetEvents() {
+			events = append(events, composeSchedulerLogEvent{
+				ID:          event.GetId(),
+				RunID:       event.GetRunId(),
+				AgentName:   run.AgentName,
+				TriggerID:   run.TriggerID,
+				Type:        schedulerRunEventType(event.GetKind()),
+				Level:       "info",
+				Message:     firstNonEmptyString(event.GetText(), event.GetName()),
+				PayloadJSON: event.GetPayloadJson(),
+				SandboxID:   sandboxID,
+				CreatedAt:   formatProtoTimestamp(event.GetCreatedAt()),
+			})
+		}
+		nextCursor := strings.TrimSpace(resp.Msg.GetNextCursor())
+		if nextCursor == "" || nextCursor == cursor {
+			break
+		}
+		cursor = nextCursor
 	}
 	sort.SliceStable(events, func(i, j int) bool { return events[i].CreatedAt < events[j].CreatedAt })
 	return events, nil
+}
+
+func listSchedulerRuntimeRuns(ctx context.Context, client agentcomposev2connect.ProjectServiceClient, projectID, agentName, schedulerID, loaderID string, eventLimit uint32) ([]composeSchedulerRunItem, error) {
+	resp, err := client.ListSchedulerEvents(ctx, connect.NewRequest(&agentcomposev2.ListSchedulerEventsRequest{
+		Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, AgentName: agentName, Limit: eventLimit,
+	}))
+	if err != nil {
+		return nil, commandExitErrorForConnect(fmt.Errorf("list scheduler events for agent %s: %w", agentName, err))
+	}
+	byID := make(map[string]*composeSchedulerRunItem)
+	for _, event := range resp.Msg.GetEvents() {
+		runID := strings.TrimSpace(event.GetRunId())
+		if runID == "" {
+			continue
+		}
+		run := byID[runID]
+		if run == nil {
+			run = &composeSchedulerRunItem{RunID: runID, RunShortID: shortOpaqueID(runID), AgentName: agentName, SchedulerID: schedulerID, ManagedLoaderID: loaderID, TriggerID: event.GetTriggerId(), Status: "running", schedulerRuntime: true}
+			byID[runID] = run
+		}
+		applySchedulerRuntimeEvent(run, event)
+	}
+	runs := make([]composeSchedulerRunItem, 0, len(byID))
+	for _, run := range byID {
+		if run.StartedAt != "" && run.CompletedAt != "" {
+			started, startErr := time.Parse(time.RFC3339Nano, run.StartedAt)
+			completed, completeErr := time.Parse(time.RFC3339Nano, run.CompletedAt)
+			if startErr == nil && completeErr == nil {
+				run.DurationMs = completed.Sub(started).Milliseconds()
+			}
+		}
+		runs = append(runs, *run)
+	}
+	return runs, nil
+}
+
+func applySchedulerRuntimeEvent(run *composeSchedulerRunItem, event *agentcomposev2.SchedulerEvent) {
+	eventType := strings.TrimSpace(event.GetType())
+	createdAt := formatProtoTimestamp(event.GetCreatedAt())
+	switch eventType {
+	case "loader.run.started":
+		run.StartedAt = createdAt
+	case "loader.run.completed":
+		run.Status, run.CompletedAt = "succeeded", createdAt
+	case "loader.run.failed":
+		run.Status, run.CompletedAt, run.Error = "failed", createdAt, event.GetMessage()
+	}
+	var payload map[string]any
+	if json.Unmarshal([]byte(event.GetPayloadJson()), &payload) == nil {
+		if sandboxID, ok := payload["sandboxId"].(string); ok && sandboxID != "" && !slices.Contains(run.SandboxIDs, sandboxID) {
+			run.SandboxIDs = append(run.SandboxIDs, sandboxID)
+		}
+		if result, ok := payload["resultJson"].(string); ok {
+			run.ResultJSON = result
+		}
+	}
+}
+
+func resolveSchedulerRuntimeRun(ctx context.Context, client agentcomposev2connect.ProjectServiceClient, normalized *compose.NormalizedProjectSpec, projectID, ref string) (*composeSchedulerRunItem, error) {
+	matches := make([]composeSchedulerRunItem, 0)
+	for _, agent := range normalized.Agents {
+		if agent.Scheduler == nil {
+			continue
+		}
+		schedulerID, _ := domain.StableProjectSchedulerID(projectID, agent.Name, "")
+		loaderID, _ := domain.StableManagedLoaderID(projectID, agent.Name, "")
+		runs, err := listSchedulerRuntimeRuns(ctx, client, projectID, agent.Name, schedulerID, loaderID, 500)
+		if err != nil {
+			return nil, err
+		}
+		for _, run := range runs {
+			if resourceRefMatches(ref, run.RunID, run.RunShortID) {
+				matches = append(matches, run)
+			}
+		}
+	}
+	if len(matches) == 1 {
+		return &matches[0], nil
+	}
+	if len(matches) > 1 {
+		return nil, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("scheduler run reference %q is ambiguous", ref)}
+	}
+	return nil, schedulerResourceNotFoundError{kind: "run", ref: ref}
+}
+
+func listSchedulerRuntimeLogEvents(ctx context.Context, client agentcomposev2connect.ProjectServiceClient, projectID string, run composeSchedulerRunItem) ([]composeSchedulerLogEvent, error) {
+	resp, err := client.ListSchedulerEvents(ctx, connect.NewRequest(&agentcomposev2.ListSchedulerEventsRequest{Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, AgentName: run.AgentName, Limit: 500}))
+	if err != nil {
+		return nil, err
+	}
+	events := make([]composeSchedulerLogEvent, 0)
+	for _, event := range resp.Msg.GetEvents() {
+		if event.GetRunId() == run.RunID {
+			events = append(events, composeSchedulerLogEvent{ID: event.GetId(), RunID: run.RunID, AgentName: run.AgentName, TriggerID: event.GetTriggerId(), Type: schedulerDisplayEventType(event.GetType()), Level: event.GetLevel(), Message: event.GetMessage(), PayloadJSON: event.GetPayloadJson(), CreatedAt: formatProtoTimestamp(event.GetCreatedAt())})
+		}
+	}
+	sort.SliceStable(events, func(i, j int) bool { return events[i].CreatedAt < events[j].CreatedAt })
+	return events, nil
+}
+
+func schedulerDisplayEventType(value string) string {
+	return strings.Replace(strings.TrimSpace(value), "loader.", "scheduler.", 1)
 }
 
 func schedulerRunEventType(kind agentcomposev2.RunEventKind) string {
@@ -5509,24 +5697,25 @@ type composeSchedulerRunsOutput struct {
 }
 
 type composeSchedulerRunItem struct {
-	RunID           string   `json:"run_id"`
-	RunShortID      string   `json:"run_short_id"`
-	AgentName       string   `json:"agent_name"`
-	SchedulerID     string   `json:"scheduler_id"`
-	ManagedLoaderID string   `json:"managed_loader_id"`
-	TriggerID       string   `json:"trigger_id,omitempty"`
-	TriggerKind     string   `json:"trigger_kind,omitempty"`
-	TriggerSource   string   `json:"trigger_source,omitempty"`
-	Status          string   `json:"status"`
-	SandboxIDs      []string `json:"sandbox_ids,omitempty"`
-	StartedAt       string   `json:"started_at,omitempty"`
-	CompletedAt     string   `json:"completed_at,omitempty"`
-	DurationMs      int64    `json:"duration_ms,omitempty"`
-	Error           string   `json:"error,omitempty"`
-	ResultJSON      string   `json:"result_json,omitempty"`
-	PayloadJSON     string   `json:"payload_json,omitempty"`
-	ArtifactsDir    string   `json:"artifacts_dir,omitempty"`
-	rawRun          *agentcomposev2.RunSummary
+	RunID            string   `json:"run_id"`
+	RunShortID       string   `json:"run_short_id"`
+	AgentName        string   `json:"agent_name"`
+	SchedulerID      string   `json:"scheduler_id"`
+	ManagedLoaderID  string   `json:"managed_loader_id"`
+	TriggerID        string   `json:"trigger_id,omitempty"`
+	TriggerKind      string   `json:"trigger_kind,omitempty"`
+	TriggerSource    string   `json:"trigger_source,omitempty"`
+	Status           string   `json:"status"`
+	SandboxIDs       []string `json:"sandbox_ids,omitempty"`
+	StartedAt        string   `json:"started_at,omitempty"`
+	CompletedAt      string   `json:"completed_at,omitempty"`
+	DurationMs       int64    `json:"duration_ms,omitempty"`
+	Error            string   `json:"error,omitempty"`
+	ResultJSON       string   `json:"result_json,omitempty"`
+	PayloadJSON      string   `json:"payload_json,omitempty"`
+	ArtifactsDir     string   `json:"artifacts_dir,omitempty"`
+	rawRun           *agentcomposev2.RunSummary
+	schedulerRuntime bool
 }
 
 type composeSchedulerLogsOutput struct {
