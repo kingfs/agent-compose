@@ -54,10 +54,10 @@ func TestLegacyDefaultNormalizedProjectPreservesAgentConfiguration(t *testing.T)
 	}
 }
 
-func TestLegacyDefaultNormalizedProjectRejectsLossyMappings(t *testing.T) {
+func TestLegacyDefaultNormalizedProjectRequiresLoadedWorkspacePreset(t *testing.T) {
 	_, err := legacyDefaultNormalizedProject([]domain.AgentDefinition{{ID: "agent-1", Name: "worker", Enabled: true, Provider: "codex", WorkspaceID: "workspace-1"}}, nil)
-	if err == nil {
-		t.Fatal("expected workspace preset compatibility error")
+	if err == nil || !strings.Contains(err.Error(), "was not loaded") {
+		t.Fatalf("legacyDefaultNormalizedProject error = %v", err)
 	}
 }
 

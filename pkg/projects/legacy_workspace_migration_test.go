@@ -1,0 +1,171 @@
+package projects
+
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"agent-compose/pkg/compose"
+	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/workspaces"
+)
+
+func TestMapLegacyWorkspaceConfigToExistingV2Shapes(t *testing.T) {
+	t.Run("git", func(t *testing.T) {
+		workspace, local, err := mapLegacyWorkspaceConfig(nil, domain.WorkspaceConfig{
+			ID:   "git-workspace",
+			Type: "git",
+			ConfigJSON: `{
+				"url":"https://example.test/team/repo.git",
+				"branch":"main",
+				"credential":"user:token",
+				"path":"source"
+			}`,
+		})
+		if err != nil {
+			t.Fatalf("mapLegacyWorkspaceConfig returned error: %v", err)
+		}
+		if local || workspace.Provider != "git" || workspace.URL != "https://user:token@example.test/team/repo.git" || workspace.Branch != "main" || workspace.Path != "source" {
+			t.Fatalf("mapped git workspace = %#v, local = %v", workspace, local)
+		}
+	})
+
+	t.Run("file", func(t *testing.T) {
+		root := t.TempDir()
+		config := &appconfig.Config{DataRoot: root}
+		workspaceID := "file-workspace"
+		workspace, local, err := mapLegacyWorkspaceConfig(config, domain.WorkspaceConfig{
+			ID:         workspaceID,
+			Type:       "file",
+			ConfigJSON: workspaces.DefaultFileConfigJSON(config, workspaceID),
+		})
+		if err != nil {
+			t.Fatalf("mapLegacyWorkspaceConfig returned error: %v", err)
+		}
+		wantPath := filepath.ToSlash(filepath.Join("workspaces", workspaceID, workspaces.FileWorkspaceContentDirName))
+		if !local || workspace.Provider != "local" || workspace.Path != wantPath {
+			t.Fatalf("mapped file workspace = %#v, local = %v, want path %q", workspace, local, wantPath)
+		}
+	})
+}
+
+func TestMapLegacyWorkspaceConfigRejectsUnrepresentableCommit(t *testing.T) {
+	_, _, err := mapLegacyWorkspaceConfig(nil, domain.WorkspaceConfig{
+		ID:         "git-workspace",
+		Type:       "git",
+		ConfigJSON: `{"url":"https://example.test/repo.git","commit":"abc123"}`,
+	})
+	if err == nil || !strings.Contains(err.Error(), "pins commit") {
+		t.Fatalf("mapLegacyWorkspaceConfig error = %v", err)
+	}
+}
+
+func TestLegacyDefaultNormalizedProjectMapsNamedWorkspaces(t *testing.T) {
+	projection := legacyWorkspaceProjection{
+		workspaces: map[string]compose.WorkspaceSpec{
+			"source": {Provider: "git", URL: "https://example.test/source.git", Path: "."},
+			"tasks":  {Provider: "git", URL: "https://example.test/tasks.git", Path: "."},
+		},
+		nameByID: map[string]string{
+			"workspace-source": "source",
+			"workspace-tasks":  "tasks",
+		},
+	}
+	agents := []domain.AgentDefinition{{
+		ID:          "agent-1",
+		Name:        "worker",
+		Enabled:     true,
+		Provider:    "codex",
+		WorkspaceID: "workspace-source",
+	}}
+	loaders := []domain.Loader{{
+		Summary: domain.LoaderSummary{
+			ID:          "loader-1",
+			Name:        "task",
+			Enabled:     false,
+			Runtime:     domain.LoaderRuntimeScheduler,
+			AgentID:     "agent-1",
+			WorkspaceID: "workspace-tasks",
+		},
+		Script: "scheduler.interval('task', function task() {}, 60000);",
+	}}
+
+	project, err := legacyDefaultNormalizedProjectWithWorkspaces(agents, loaders, projection)
+	if err != nil {
+		t.Fatalf("legacyDefaultNormalizedProjectWithWorkspaces returned error: %v", err)
+	}
+	if len(project.Spec.Workspaces) != 2 || len(project.Spec.Agents) != 2 {
+		t.Fatalf("project workspaces/agents = %#v/%#v", project.Spec.Workspaces, project.Spec.Agents)
+	}
+	source := findLegacyProjectAgent(t, project, "worker")
+	if source.Workspace == nil || source.Workspace.Name != "source" || source.Scheduler != nil {
+		t.Fatalf("source agent = %#v", source)
+	}
+	var taskAgent compose.NormalizedAgentSpec
+	for _, agent := range project.Spec.Agents {
+		if agent.Scheduler != nil {
+			taskAgent = agent
+		}
+	}
+	if taskAgent.Workspace == nil || taskAgent.Workspace.Name != "tasks" || project.managedLoaderOverrides[taskAgent.Name].Summary.ID != "loader-1" {
+		t.Fatalf("task agent/override = %#v/%#v", taskAgent, project.managedLoaderOverrides)
+	}
+}
+
+func TestLegacyProjectWorkspaceNamesAreStableAndValid(t *testing.T) {
+	configs := []domain.WorkspaceConfig{
+		{ID: "workspace-z", Name: "共享空间"},
+		{ID: "workspace-b", Name: "source"},
+		{ID: "workspace-a", Name: "source"},
+		{ID: "workspace-valid", Name: "review-repo"},
+	}
+	names := legacyProjectWorkspaceNames(configs)
+	if names["workspace-valid"] != "review-repo" {
+		t.Fatalf("valid workspace name = %q", names["workspace-valid"])
+	}
+	seen := make(map[string]struct{}, len(names))
+	for id, name := range names {
+		if !domain.IsProjectStableIdentifier(name) {
+			t.Fatalf("workspace %s mapped to invalid name %q", id, name)
+		}
+		if _, exists := seen[name]; exists {
+			t.Fatalf("duplicate mapped workspace name %q", name)
+		}
+		seen[name] = struct{}{}
+	}
+
+	reversed := []domain.WorkspaceConfig{configs[3], configs[2], configs[1], configs[0]}
+	reversedNames := legacyProjectWorkspaceNames(reversed)
+	for id, name := range names {
+		if reversedNames[id] != name {
+			t.Fatalf("workspace %s name depends on input order: %q != %q", id, reversedNames[id], name)
+		}
+	}
+}
+
+func TestLegacySingleWorkspaceDoesNotBecomeDefaultForUnassignedAgents(t *testing.T) {
+	projection := legacyWorkspaceProjection{
+		workspaces: map[string]compose.WorkspaceSpec{
+			"source": {Provider: "git", URL: "https://example.test/source.git", Path: "."},
+		},
+		nameByID: map[string]string{"workspace-source": "source"},
+	}
+	agents := []domain.AgentDefinition{
+		{ID: "agent-with", Name: "with-workspace", Enabled: true, Provider: "codex", WorkspaceID: "workspace-source"},
+		{ID: "agent-without", Name: "without-workspace", Enabled: true, Provider: "codex"},
+	}
+
+	project, err := legacyDefaultNormalizedProjectWithWorkspaces(agents, nil, projection)
+	if err != nil {
+		t.Fatalf("legacyDefaultNormalizedProjectWithWorkspaces returned error: %v", err)
+	}
+	if len(project.Spec.Workspaces) != 0 {
+		t.Fatalf("single global workspace would become an implicit default: %#v", project.Spec.Workspaces)
+	}
+	withWorkspace := findLegacyProjectAgent(t, project, "with-workspace")
+	withoutWorkspace := findLegacyProjectAgent(t, project, "without-workspace")
+	if withWorkspace.Workspace == nil || withWorkspace.Workspace.Provider != "git" || withoutWorkspace.Workspace != nil {
+		t.Fatalf("projected workspaces = with %#v, without %#v", withWorkspace.Workspace, withoutWorkspace.Workspace)
+	}
+}

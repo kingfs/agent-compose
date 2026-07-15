@@ -38,9 +38,20 @@ func (c *Controller) SyncLegacyDefaultProject(ctx context.Context) (ApplyResult,
 	if len(agents) == 0 && len(legacyLoaders) == 0 {
 		return ApplyResult{}, nil
 	}
-	normalized, err := legacyDefaultNormalizedProject(agents, legacyLoaders)
+	workspaceProjection, err := c.loadLegacyWorkspaceProjection(ctx, agents, legacyLoaders)
 	if err != nil {
 		return ApplyResult{}, err
+	}
+	normalized, err := legacyDefaultNormalizedProjectWithWorkspaces(agents, legacyLoaders, workspaceProjection)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	normalized.SourcePath = workspaceProjection.sourcePath
+	if normalized.SourcePath != "" {
+		normalized.legacyProjectID, err = domain.StableProjectID(LegacyDefaultProjectName, "")
+		if err != nil {
+			return ApplyResult{}, fmt.Errorf("resolve legacy default project id: %w", err)
+		}
 	}
 	return c.ApplyProject(ctx, ApplyRequest{Normalized: normalized})
 }
@@ -103,7 +114,11 @@ func (c *Controller) listLegacyDefaultLoaders(ctx context.Context) ([]domain.Loa
 }
 
 func legacyDefaultNormalizedProject(agents []domain.AgentDefinition, legacyLoaders []domain.Loader) (NormalizedProject, error) {
-	spec := &compose.NormalizedProjectSpec{Name: LegacyDefaultProjectName}
+	return legacyDefaultNormalizedProjectWithWorkspaces(agents, legacyLoaders, legacyWorkspaceProjection{})
+}
+
+func legacyDefaultNormalizedProjectWithWorkspaces(agents []domain.AgentDefinition, legacyLoaders []domain.Loader, workspaceProjection legacyWorkspaceProjection) (NormalizedProject, error) {
+	spec := &compose.NormalizedProjectSpec{Name: LegacyDefaultProjectName, Workspaces: workspaceProjection.workspaces}
 	agents = append([]domain.AgentDefinition(nil), agents...)
 	sort.Slice(agents, func(i, j int) bool {
 		if agents[i].Name == agents[j].Name {
@@ -122,6 +137,10 @@ func legacyDefaultNormalizedProject(agents []domain.AgentDefinition, legacyLoade
 		}
 		agent.Name = names[index]
 		agent.DisplayName = distinctLegacyDisplayName(agent.DisplayName, agent.Name)
+		agent.Workspace, err = workspaceProjection.reference(definition.WorkspaceID)
+		if err != nil {
+			return NormalizedProject{}, fmt.Errorf("map legacy agent %s workspace: %w", definition.ID, err)
+		}
 		if legacyID := strings.TrimSpace(definition.ID); legacyID != "" {
 			agentByLegacyID[legacyID] = len(spec.Agents)
 		}
@@ -130,7 +149,11 @@ func legacyDefaultNormalizedProject(agents []domain.AgentDefinition, legacyLoade
 		spec.Agents = append(spec.Agents, agent)
 	}
 
-	overrides := projectLegacyLoaders(spec, legacyLoaders, agentByLegacyID, agentByName, usedNames)
+	overrides, err := projectLegacyLoaders(spec, legacyLoaders, agentByLegacyID, agentByName, usedNames, workspaceProjection)
+	if err != nil {
+		return NormalizedProject{}, err
+	}
+	removeImplicitLegacyWorkspaceDefault(spec)
 	sort.Slice(spec.Agents, func(i, j int) bool { return spec.Agents[i].Name < spec.Agents[j].Name })
 	hash, err := spec.Hash()
 	if err != nil {
@@ -180,7 +203,7 @@ func legacyProjectAgentNames(agents []domain.AgentDefinition) []string {
 	return names
 }
 
-func projectLegacyLoaders(spec *compose.NormalizedProjectSpec, legacyLoaders []domain.Loader, agentByLegacyID, agentByName map[string]int, usedNames map[string]struct{}) map[string]domain.Loader {
+func projectLegacyLoaders(spec *compose.NormalizedProjectSpec, legacyLoaders []domain.Loader, agentByLegacyID, agentByName map[string]int, usedNames map[string]struct{}, workspaceProjection legacyWorkspaceProjection) (map[string]domain.Loader, error) {
 	legacyLoaders = append([]domain.Loader(nil), legacyLoaders...)
 	sort.Slice(legacyLoaders, func(i, j int) bool {
 		iManaged := strings.TrimSpace(legacyLoaders[i].Summary.ManagedAgentName) != ""
@@ -201,6 +224,7 @@ func projectLegacyLoaders(spec *compose.NormalizedProjectSpec, legacyLoaders []d
 		managedName := legacyCanonicalAgentName(loader.Summary.ManagedAgentName)
 		trustedManagedBinding := managedName != ""
 		targetIndex := -1
+		targetCreated := false
 
 		if managedName != "" {
 			if index, exists := agentByName[managedName]; exists {
@@ -209,6 +233,7 @@ func projectLegacyLoaders(spec *compose.NormalizedProjectSpec, legacyLoaders []d
 				}
 			} else {
 				targetIndex = appendLegacyLoaderAgent(spec, loader, managedName, sourceIndex, sourceFound, true)
+				targetCreated = true
 				agentByName[managedName] = targetIndex
 				usedNames[managedName] = struct{}{}
 			}
@@ -227,7 +252,13 @@ func projectLegacyLoaders(spec *compose.NormalizedProjectSpec, legacyLoaders []d
 			}
 			targetName := reserveLegacyStableName(prefix, identity.ResourceLoader, loader.Summary.ID, loader.Summary.Name, usedNames)
 			targetIndex = appendLegacyLoaderAgent(spec, loader, targetName, sourceIndex, sourceFound, associated)
+			targetCreated = true
 			agentByName[targetName] = targetIndex
+		}
+		var err error
+		targetIndex, err = projectLegacyLoaderWorkspace(spec, loader, targetIndex, targetCreated, agentByName, usedNames, workspaceProjection)
+		if err != nil {
+			return nil, err
 		}
 
 		targetName := spec.Agents[targetIndex].Name
@@ -253,9 +284,31 @@ func projectLegacyLoaders(spec *compose.NormalizedProjectSpec, legacyLoaders []d
 		overrides[targetName] = projected
 	}
 	if len(overrides) == 0 {
-		return nil
+		return nil, nil
 	}
-	return overrides
+	return overrides, nil
+}
+
+func projectLegacyLoaderWorkspace(spec *compose.NormalizedProjectSpec, loader domain.Loader, targetIndex int, targetCreated bool, agentByName map[string]int, usedNames map[string]struct{}, workspaceProjection legacyWorkspaceProjection) (int, error) {
+	workspace, err := workspaceProjection.reference(loader.Summary.WorkspaceID)
+	if err != nil {
+		return -1, fmt.Errorf("map legacy loader %s workspace: %w", loader.Summary.ID, err)
+	}
+	if workspace == nil {
+		return targetIndex, nil
+	}
+	existing := spec.Agents[targetIndex].Workspace
+	if targetCreated || existing == nil || existing.Name == workspace.Name {
+		spec.Agents[targetIndex].Workspace = workspace
+		return targetIndex, nil
+	}
+
+	source := spec.Agents[targetIndex]
+	name := reserveLegacyStableName(source.Name+"-loader", identity.ResourceLoader, loader.Summary.ID, loader.Summary.Name, usedNames)
+	targetIndex = appendLegacyLoaderAgent(spec, loader, name, targetIndex, true, true)
+	spec.Agents[targetIndex].Workspace = workspace
+	agentByName[name] = targetIndex
+	return targetIndex, nil
 }
 
 func appendLegacyLoaderAgent(spec *compose.NormalizedProjectSpec, loader domain.Loader, name string, sourceIndex int, sourceFound, associated bool) int {
@@ -327,9 +380,6 @@ func reserveLegacyStableName(prefix string, kind identity.ResourceKind, id, fall
 }
 
 func normalizedAgentFromLegacy(definition domain.AgentDefinition) (compose.NormalizedAgentSpec, error) {
-	if strings.TrimSpace(definition.WorkspaceID) != "" {
-		return compose.NormalizedAgentSpec{}, fmt.Errorf("legacy agent %s uses workspace preset %s, which cannot be projected losslessly", definition.ID, definition.WorkspaceID)
-	}
 	config, err := decodeLegacyAgentConfig(definition.ConfigJSON)
 	if err != nil {
 		return compose.NormalizedAgentSpec{}, fmt.Errorf("decode legacy agent %s config: %w", definition.ID, err)

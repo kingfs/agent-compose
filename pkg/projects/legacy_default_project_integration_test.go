@@ -17,6 +17,7 @@ import (
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
 	"agent-compose/pkg/storage/configstore"
+	"agent-compose/pkg/workspaces"
 )
 
 func TestIntegrationLegacyDefaultProjectAdoptsLoaderHistoryAtCurrentRevision(t *testing.T) {
@@ -40,6 +41,15 @@ func TestIntegrationLegacyDefaultProjectAdoptsLoaderHistoryAtCurrentRevision(t *
 		}
 	})
 
+	workspace, err := store.CreateWorkspaceConfig(ctx, domain.WorkspaceConfig{
+		ID:         "legacy-file-workspace",
+		Name:       "news-source",
+		Type:       "file",
+		ConfigJSON: workspaces.DefaultFileConfigJSON(config, "legacy-file-workspace"),
+	})
+	if err != nil {
+		t.Fatalf("create legacy workspace: %v", err)
+	}
 	agent, err := store.CreateAgentDefinition(ctx, domain.AgentDefinition{
 		ID:          "legacy-agent-source",
 		Name:        "ai资讯推送",
@@ -48,6 +58,7 @@ func TestIntegrationLegacyDefaultProjectAdoptsLoaderHistoryAtCurrentRevision(t *
 		Provider:    "codex",
 		Driver:      driverpkg.RuntimeDriverDocker,
 		GuestImage:  "guest:latest",
+		WorkspaceID: workspace.ID,
 	})
 	if err != nil {
 		t.Fatalf("create legacy agent: %v", err)
@@ -64,6 +75,7 @@ scheduler.on("news.ready", "on-news", function onNews() {});
 			Enabled:       false,
 			Runtime:       domain.LoaderRuntimeScheduler,
 			AgentID:       agent.ID,
+			WorkspaceID:   workspace.ID,
 			Driver:        driverpkg.RuntimeDriverDocker,
 			GuestImage:    "guest:latest",
 			DefaultAgent:  "codex",
@@ -115,6 +127,9 @@ scheduler.on("news.ready", "on-news", function onNews() {});
 	if len(result.Agents) != 1 || !strings.HasPrefix(result.Agents[0].AgentName, "legacy-agent-") {
 		t.Fatalf("projected Chinese agents = %#v", result.Agents)
 	}
+	if result.Project.SourcePath != filepath.Clean(root) || result.RevisionSpec == nil || len(result.RevisionSpec.Workspaces) != 1 || len(result.RevisionSpec.Agents) != 1 {
+		t.Fatalf("projected file workspace project = %#v, spec = %#v", result.Project, result.RevisionSpec)
+	}
 	projectedAgent := result.RevisionSpec.Agents[0]
 	if projectedAgent.DisplayName != "ai资讯推送" || projectedAgent.Description != "每日推送最新的 AI 资讯" {
 		t.Fatalf("projected agent metadata = %#v", projectedAgent)
@@ -124,6 +139,14 @@ scheduler.on("news.ready", "on-news", function onNews() {});
 	}
 	if !strings.Contains(result.Agents[0].SpecJSON, `"display_name":"ai资讯推送"`) || !strings.Contains(result.Agents[0].SpecJSON, `"description":"每日推送最新的 AI 资讯"`) {
 		t.Fatalf("persisted project agent spec = %s", result.Agents[0].SpecJSON)
+	}
+	if projectedAgent.Workspace == nil || projectedAgent.Workspace.Name != "news-source" {
+		t.Fatalf("projected agent workspace = %#v", projectedAgent.Workspace)
+	}
+	projectedWorkspace := result.RevisionSpec.Workspaces["news-source"]
+	wantWorkspacePath := filepath.ToSlash(filepath.Join("workspaces", workspace.ID, workspaces.FileWorkspaceContentDirName))
+	if projectedWorkspace.Provider != "local" || projectedWorkspace.Path != wantWorkspacePath {
+		t.Fatalf("projected workspace = %#v, want path %q", projectedWorkspace, wantWorkspacePath)
 	}
 
 	projectID, err := domain.StableProjectID(projects.LegacyDefaultProjectName, "")
@@ -146,7 +169,7 @@ scheduler.on("news.ready", "on-news", function onNews() {});
 	if err != nil {
 		t.Fatalf("load adopted loader: %v", err)
 	}
-	if adopted.Summary.ManagedProjectID != project.ID || adopted.Summary.ManagedRevision != project.CurrentRevision || adopted.Summary.ManagedAgentName != page[0].AgentName || adopted.Summary.Enabled || adopted.Summary.Name != "资讯推送任务" || adopted.Summary.Description != "每小时检查并推送资讯" {
+	if adopted.Summary.ManagedProjectID != project.ID || adopted.Summary.ManagedRevision != project.CurrentRevision || adopted.Summary.ManagedAgentName != page[0].AgentName || adopted.Summary.Enabled || adopted.Summary.WorkspaceID != workspace.ID || adopted.Summary.Name != "资讯推送任务" || adopted.Summary.Description != "每小时检查并推送资讯" {
 		t.Fatalf("adopted loader = %#v", adopted.Summary)
 	}
 	triggerEnabled := make(map[string]bool, len(adopted.Triggers))
