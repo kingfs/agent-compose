@@ -1,0 +1,12 @@
+{
+  "name": "agent-compose-genpages",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node render-pages.mjs && node check-pages.mjs",
+    "test": "node render-pages.mjs && node check-pages.mjs"
+  },
+  "dependencies": {
+    "marked": "15.0.12"
+  }
+}

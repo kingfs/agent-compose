@@ -1,7 +1,5 @@
 # agent-compose Webhook / Event Ingress Current State
 
-Chinese version: [../zh-CN/design/webhook_design.md](../zh-CN/design/webhook_design.md)
-
 This document describes the external event ingress and topic event dispatch
 model currently implemented in code, and records the target design still to be
 completed. Relevant implementation lives mainly in:

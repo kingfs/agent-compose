@@ -1,7 +1,5 @@
 # OctoBus Integration Implementation Spec
 
-Chinese version: [../zh-CN/design/octobus_integration.md](../zh-CN/design/octobus_integration.md)
-
 OctoBus repository: [chaitin/OctoBus](https://github.com/chaitin/OctoBus).
 
 agent-compose integrates published OctoBus capability sets, injects selected

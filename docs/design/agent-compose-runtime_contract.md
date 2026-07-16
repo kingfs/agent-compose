@@ -1,7 +1,5 @@
 # agent-compose And agent-compose-runtime Call Contract
 
-Chinese version: [../zh-CN/design/agent-compose-runtime_contract.md](../zh-CN/design/agent-compose-runtime_contract.md)
-
 This document describes the call boundary between the Go host side
 `agent-compose` process and the JavaScript runtime
 `agent-compose-runtime` inside the sandbox. The current runtime is primarily

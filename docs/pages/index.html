@@ -31,6 +31,7 @@
 
       html {
         scroll-behavior: smooth;
+        overflow-x: hidden;
       }
 
       body {
@@ -59,6 +60,8 @@
 
       .page {
         min-height: 100vh;
+        min-width: 0;
+        overflow-x: hidden;
       }
 
       .topbar {
@@ -70,6 +73,8 @@
       .shell,
       .hero,
       .content {
+        width: 100%;
+        min-width: 0;
         max-width: 1240px;
         margin: 0 auto;
         padding-left: 28px;
@@ -90,6 +95,28 @@
         display: flex;
         align-items: center;
         gap: 10px;
+      }
+
+      .site-nav {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .site-nav a {
+        padding: 8px 11px;
+        border-radius: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        transition: color 160ms ease, background 160ms ease;
+      }
+
+      .site-nav a:hover,
+      .site-nav a.active {
+        color: var(--text);
+        background: rgba(102, 224, 197, 0.1);
       }
 
       .lang-switch {
@@ -179,6 +206,7 @@
       .section,
       .protocol-table,
       .diagram-card {
+        min-width: 0;
         animation: none;
       }
 
@@ -294,6 +322,7 @@
         font-size: 14px;
         line-height: 1.8;
         white-space: pre-wrap;
+        overflow-wrap: anywhere;
       }
 
       .install-note {
@@ -1299,6 +1328,7 @@
         font-size: 13px;
         line-height: 1.74;
         white-space: pre-wrap;
+        overflow-wrap: anywhere;
       }
 
       .code-snippet {
@@ -2503,6 +2533,10 @@
           justify-content: space-between;
         }
 
+        .site-nav {
+          width: 100%;
+        }
+
         .footer-links,
         .footer-links.compact {
           grid-template-columns: 1fr;
@@ -2597,6 +2631,23 @@
     <div class="page">
       <header class="topbar">
         <div class="shell">
+          <nav class="site-nav" aria-label="Documentation">
+            <a class="active" href="./" data-zh="首页" data-en="Home">首页</a>
+            <a
+              href="command-line-manual.html"
+              data-href-zh="zh-CN/command-line-manual.html"
+              data-href-en="command-line-manual.html"
+              data-zh="命令行手册"
+              data-en="CLI Manual"
+            >命令行手册</a>
+            <a
+              href="agent-compose-yaml-manual.html"
+              data-href-zh="zh-CN/agent-compose-yaml-manual.html"
+              data-href-en="agent-compose-yaml-manual.html"
+              data-zh="YAML 配置手册"
+              data-en="YAML Manual"
+            >YAML 配置手册</a>
+          </nav>
           <div class="topbar-actions">
             <div class="lang-switch">
               <button class="lang-button active" data-set-lang="en">EN</button>
@@ -2903,11 +2954,11 @@ agent-compose ps</code>
             <a
               class="footer-link"
               href="https://github.com/chaitin/agent-compose/blob/main/README.md"
-              data-href-zh="https://github.com/chaitin/agent-compose/blob/main/docs/zh-CN/README.md"
+              data-href-zh="./"
               data-href-en="https://github.com/chaitin/agent-compose/blob/main/README.md"
             >
-              <strong data-zh="README" data-en="README">README</strong>
-              <span data-zh="仓库主说明，覆盖 CLI 入口、compose 模型、scheduler、workspace、API 和镜像管理。" data-en="The main repository guide covering CLI entrypoints, the compose model, schedulers, workspaces, APIs, and image management.">仓库主说明，覆盖 CLI 入口、compose 模型、scheduler、workspace、API 和镜像管理。</span>
+              <strong data-zh="文档首页" data-en="README">文档首页</strong>
+              <span data-zh="回到中文文档首页。" data-en="The main repository guide covering CLI entrypoints, the compose model, schedulers, workspaces, APIs, and image management.">回到中文文档首页。</span>
             </a>
           </div>
         </section>

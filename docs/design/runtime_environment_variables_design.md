@@ -1,7 +1,5 @@
 # Runtime Environment Variables
 
-Chinese version: [../zh-CN/design/runtime_environment_variables_design.md](../zh-CN/design/runtime_environment_variables_design.md)
-
 This document describes the runtime environment variables that agent-compose
 currently injects into and reads from guests, containers, and sandboxes.
 

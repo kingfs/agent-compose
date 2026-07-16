@@ -4,8 +4,6 @@
 [Success Criteria (Phase 1, verified)](#success-criteria-phase-1-verified) document what shipped in
 this change. [Next Steps](#next-steps) lists work that was **not** part of Phase 1.
 
-Chinese version: [../zh-CN/design/agent_system_prompt_design.md](../zh-CN/design/agent_system_prompt_design.md)
-
 Related documents:
 
 - Runtime invocation contract: [agent-compose-runtime_contract.md](agent-compose-runtime_contract.md)
@@ -430,5 +428,5 @@ system context size.
 
 ### Frontend surfacing
 
-The Agents UI already edits `system_prompt`. `docs/README.md` notes that the
+The Agents UI already edits `system_prompt`. The root `README.md` notes that the
 field is runtime-active. Optional follow-up: in-app hints or expanded user docs.

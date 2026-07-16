@@ -1,7 +1,5 @@
 # Driver-Specific Runtime Mount Manifest
 
-Chinese version: [../zh-CN/design/runtime_mount_manifest_driver_specific_design.md](../zh-CN/design/runtime_mount_manifest_driver_specific_design.md)
-
 This document describes current mount manifest behavior for the three runtime
 drivers. The core rule is: keep one logical runtime mount list, then apply it
 with driver-specific mechanics. Docker can use fine-grained directory and file

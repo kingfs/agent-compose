@@ -1,7 +1,5 @@
 # OpenCode CLI Provider Support
 
-Chinese version: [../zh-CN/design/opencode_cli_support.md](../zh-CN/design/opencode_cli_support.md)
-
 This document records the implementation for adding `opencode` as a guest agent
 provider. It follows the current runtime contract in
 [agent-compose-runtime_contract.md](agent-compose-runtime_contract.md):

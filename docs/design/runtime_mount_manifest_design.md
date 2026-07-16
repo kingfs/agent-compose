@@ -1,7 +1,5 @@
 # Runtime Mount Manifest
 
-Chinese version: [../zh-CN/design/runtime_mount_manifest_design.md](../zh-CN/design/runtime_mount_manifest_design.md)
-
 This document describes the current runtime mount manifest behavior in code.
 Before starting or resuming runtime, agent-compose generates a driver-specific
 manifest from one logical runtime mount list. Docker applies that list as

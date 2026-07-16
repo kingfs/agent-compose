@@ -1,7 +1,5 @@
 # agent-compose Architecture
 
-Chinese version: [../zh-CN/design/agent-compose_design.md](../zh-CN/design/agent-compose_design.md)
-
 This document describes the agent-compose architecture currently implemented in
 the codebase, including the daemon and CLI design that has already landed.
 Earlier refactoring plans, phase plans, and acceptance checklists are no longer
@@ -153,10 +151,11 @@ variables:
     value: ${OPENAI_API_KEY}
     secret: true
 
-workspace:
-  provider: git
-  url: https://github.com/org/repo.git
-  branch: main
+workspaces:
+  default:
+    provider: git
+    url: https://github.com/org/repo.git
+    branch: main
 
 agents:
   reviewer:

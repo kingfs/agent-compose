@@ -71,6 +71,31 @@ tasks:
     cmds:
       - task: generate:proto
 
+  docs:build:
+    desc: Render the GitHub Pages documentation site
+    dir: '{{.TASKFILE_DIR}}/tools/genpages'
+    sources:
+      - '../../docs/pages/**/*.md'
+      - '../../docs/pages/index.html'
+      - '../../docs/pages/manual.css'
+      - '../../pkg/compose/spec.go'
+      - 'check-pages.mjs'
+      - 'render-pages.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+    generates:
+      - '../../build/pages/index.html'
+      - '../../build/pages/manual.css'
+      - '../../build/pages/command-line-manual.html'
+      - '../../build/pages/agent-compose-yaml-manual.html'
+      - '../../build/pages/guest-image-abi.html'
+      - '../../build/pages/zh-CN/command-line-manual.html'
+      - '../../build/pages/zh-CN/agent-compose-yaml-manual.html'
+      - '../../build/pages/zh-CN/guest-image-abi.html'
+    cmds:
+      - npm ci --no-audit --no-fund
+      - npm run build
+
   generate:proto:
     desc: Generate Go protobuf and Connect sources with buf
     dir: '{{.TASKFILE_DIR}}'

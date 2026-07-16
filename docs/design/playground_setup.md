@@ -1,7 +1,5 @@
 # Playground Deployment And Verification
 
-Chinese version: [../zh-CN/design/playground_setup.md](../zh-CN/design/playground_setup.md)
-
 This document describes the external shared playground deployment. It is not a
 repository-local development environment.
 

@@ -1,7 +1,5 @@
 # Resource Identity and CLI Display Design
 
-Chinese version: [../zh-CN/design/resource_identity_cli_design.md](../zh-CN/design/resource_identity_cli_design.md)
-
 Status: design proposal. This document describes the intended CLI-facing
 resource identity model and output shape. It does not require code changes by
 itself.

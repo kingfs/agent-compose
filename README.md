@@ -17,7 +17,7 @@
 
 > Public preview. APIs, runtime packaging, and deployment defaults may still change. It is suitable for experimentation, local development, and preview deployments — not yet a stable production platform.
 
-📖 中文文档：[docs/zh-CN/README.md](docs/zh-CN/README.md)
+📖 中文文档：[GitHub Pages](https://chaitin.github.io/agent-compose/)
 
 ## What is agent-compose?
 
@@ -170,7 +170,7 @@ agents:
           prompt: "Review the current project state and summarize changes."
 ```
 
-See the [command line manual](docs/command-line-manual.md) for the full field reference.
+See the [command line manual](docs/pages/command-line-manual.md) for the full field reference.
 
 ## CLI overview
 
@@ -193,7 +193,7 @@ See the [command line manual](docs/command-line-manual.md) for the full field re
 Useful global flags: `--file, -f` (choose a compose file), `--project-name`,
 `--json` (stable JSON for scripts), `--host` / `AGENT_COMPOSE_HOST` (connect to a
 TCP daemon), and `AGENT_COMPOSE_SOCKET` (Unix socket path). Full reference:
-[docs/command-line-manual.md](docs/command-line-manual.md).
+[docs/pages/command-line-manual.md](docs/pages/command-line-manual.md).
 
 ## Runtime drivers
 
@@ -273,7 +273,7 @@ Gemini CLI's own login, persisted under the sandbox home (`~/.gemini`).
 
 See [`.env.example`](.env.example) for the full list (timeouts, endpoint aliases,
 `OPENAI_API_KEY` / `ANTHROPIC_AUTH_TOKEN`) and the
-[Runtime LLM Facade design](docs/zh-CN/design/agent-compose-runtime-llm-facade.md)
+[daemon LLM client design](docs/design/agent-compose_design.md#daemon-llm-client)
 for how brokering works.
 
 ## Deployment & configuration
@@ -371,9 +371,9 @@ Linux binaries. The JavaScript runtime components live under `runtime/`.
 
 ## Documentation
 
-- [Documentation index](docs/README.md)
-- [Command line manual](docs/command-line-manual.md)
-- [Chinese documentation (中文文档)](docs/zh-CN/README.md)
+- [Documentation homepage](https://chaitin.github.io/agent-compose/)
+- [Command line manual](docs/pages/command-line-manual.md)
+- [agent-compose.yml manual](docs/pages/agent-compose-yaml-manual.md)
 
 ## Contributing
 
