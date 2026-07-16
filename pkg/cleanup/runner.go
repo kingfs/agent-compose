@@ -3,6 +3,7 @@ package cleanup
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,10 @@ type Runner struct {
 	Policies []Policy
 	Now      func() time.Time
 	Logger   *slog.Logger
+
+	mu     sync.Mutex
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 func (r *Runner) Enabled() bool {
@@ -46,7 +51,40 @@ func (r *Runner) Start(ctx context.Context) {
 	if !r.Enabled() {
 		return
 	}
-	go r.run(ctx)
+	r.mu.Lock()
+	if r.done != nil {
+		r.mu.Unlock()
+		return
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	r.cancel = cancel
+	r.done = make(chan struct{})
+	done := r.done
+	r.mu.Unlock()
+	go func() {
+		defer close(done)
+		r.run(runCtx)
+	}()
+}
+
+func (r *Runner) Shutdown(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	cancel := r.cancel
+	done := r.done
+	r.mu.Unlock()
+	if cancel == nil || done == nil {
+		return nil
+	}
+	cancel()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (r *Runner) run(ctx context.Context) {

@@ -18,6 +18,7 @@ import (
 	"agent-compose/pkg/cache"
 	"agent-compose/pkg/capabilities"
 	"agent-compose/pkg/capproxy"
+	"agent-compose/pkg/cleanup"
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/dashboard"
 	"agent-compose/pkg/driver"
@@ -83,6 +84,7 @@ func RegisterDependencies(di do.Injector) {
 	do.Provide(di, NewRunController)
 	do.Provide(di, NewSandboxRunTargetResolver)
 	do.Provide(di, NewSandboxRemovalCoordinator)
+	do.Provide(di, NewCleanupRunner)
 	do.Provide(di, NewRunSupervisor)
 	do.Provide(di, NewProjectController)
 }
@@ -195,15 +197,40 @@ func NewSandboxRemovalCoordinator(di do.Injector) (*sessions.RemovalCoordinator,
 	}, nil
 }
 
+func NewCleanupRunner(di do.Injector) (*cleanup.Runner, error) {
+	config := do.MustInvoke[*appconfig.Config](di)
+	store := do.MustInvoke[*sessionstore.Store](di)
+	imageCache, err := imagecache.New(imagecache.Config{
+		Root: config.ImageCacheRoot, DefaultRegistry: config.ImageRegistry,
+		InsecureRegistries: config.ImageInsecureRegistries,
+	})
+	if err != nil {
+		return nil, err
+	}
+	store.SetCacheDependencyLocker(imageCache)
+	return &cleanup.Runner{
+		Interval: config.CleanupInterval,
+		Policies: []cleanup.Policy{
+			{TTL: config.WorkspaceCleanupTTL, Cleaner: &sessions.WorkspaceCleaner{Store: store, Locks: do.MustInvoke[*sessions.LifecycleLocks](di)}},
+			{TTL: config.ImageCacheCleanupTTL, Cleaner: &adapters.ImageCacheCleaner{Cache: imageCache, Sandboxes: store, SandboxRoot: config.SandboxRoot}},
+		},
+	}, nil
+}
+
 func StartBackground(di do.Injector) error {
+	// Constructing the cleanup runner installs the cache-dependency lock on the
+	// sandbox store. Do this before resolving or starting any component that can
+	// create a sandbox, so the initial cleanup pass cannot race registration.
+	runner := do.MustInvoke[*cleanup.Runner](di)
 	for _, warning := range do.MustInvoke[*sessions.RemovalCoordinator](di).Recover(do.MustInvoke[context.Context](di)) {
 		slog.Warn("failed to recover sandbox deletion", "warning", warning)
 	}
 	if err := syncLegacyDefaultProject(do.MustInvoke[context.Context](di), do.MustInvoke[*projects.Controller](di)); err != nil {
 		slog.Warn("failed to sync legacy v1 agents into the default project", "error", err)
 	}
-	return startBackgroundManagers(
-		do.MustInvoke[context.Context](di),
+	ctx := do.MustInvoke[context.Context](di)
+	if err := startBackgroundManagers(
+		ctx,
 		do.MustInvoke[*sessionstore.Store](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[*adapters.SandboxRPCBridge](di),
@@ -211,7 +238,19 @@ func StartBackground(di do.Injector) error {
 		do.MustInvoke[*events.Dispatcher](di),
 		do.MustInvoke[*capproxy.Server](di),
 		do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
-	)
+	); err != nil {
+		return err
+	}
+	runner.Start(ctx)
+	return nil
+}
+
+func StopBackground(ctx context.Context, di do.Injector) error {
+	runner, err := do.Invoke[*cleanup.Runner](di)
+	if err != nil {
+		return err
+	}
+	return runner.Shutdown(ctx)
 }
 
 func NewCapProxyServer(di do.Injector) (*capproxy.Server, error) {

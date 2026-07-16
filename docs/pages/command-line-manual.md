@@ -595,6 +595,8 @@ agent-compose cache rm <cache-id> --force
 
 `CACHE_TTL` defaults to `168h`; `0` disables expiration classification. TTL never triggers background/startup deletion. Use `cache prune --expired --force` explicitly. `--older-than` remains an independent filter. `cache prune` and `cache rm` default to dry-run; `--force` authorizes execution but never bypasses `active`, `referenced`, or `unknown` protection. BoxLite v0.9.7 runtime image inventory is read-only because its ABI has no safe image remove/prune operation; Microsandbox shared images use the SDK inventory/remove APIs. `sandbox prune` does not delete cache artifacts.
 
+The daemon can optionally run time-based retention cleanup. `WORKSPACE_CLEANUP_TTL` reclaims only the workspace directory of eligible stopped sandboxes, while preserving metadata, logs, and state for audit; a reclaimed sandbox cannot be resumed. `IMAGE_CACHE_CLEANUP_TTL` removes unreferenced OCI and materialized data owned by `IMAGE_CACHE_ROOT`, using last-used time when available and pull time or filesystem modification time as a fallback. Both default to `0`, which disables that cleaner. `CLEANUP_INTERVAL` defaults to `1h`. Automatic cleanup does not touch workspace sources, Docker daemon images, BoxLite home, or Microsandbox SDK caches, and it does not implement a disk-space watermark.
+
 Compatibility:
 
 - `agent-compose image ls` is deprecated; use `agent-compose images`.
