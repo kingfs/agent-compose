@@ -50,14 +50,14 @@ type composeSchedulerStopOutput struct {
 }
 
 func addComposeSchedulerExecutionFlags(cmd *cobra.Command, options *composeSchedulerTriggerOptions) {
-	cmd.Flags().StringVar(&options.SandboxID, "sandbox", "", "Deprecated: unsupported for complete scheduler runs")
-	cmd.Flags().StringVar(&options.Driver, "driver", "", "Deprecated: unsupported for complete scheduler runs")
-	cmd.Flags().StringVar(&options.Prompt, "prompt", "", "Deprecated: scheduler scripts own their agent prompts")
+	cmd.Flags().StringVar(&options.SandboxID, "sandbox", "", "Unsupported for complete scheduler runs")
+	cmd.Flags().StringVar(&options.Driver, "driver", "", "Unsupported for complete scheduler runs")
+	cmd.Flags().StringVar(&options.Prompt, "prompt", "", "Unsupported for complete scheduler runs; scheduler scripts own their agent prompts")
 	cmd.Flags().StringVar(&options.PayloadJSON, "payload", "", "JSON payload passed to main or the trigger callback")
-	cmd.Flags().BoolVar(&options.KeepRunning, "keep-running", false, "Deprecated: unsupported for complete scheduler runs")
-	cmd.Flags().BoolVar(&options.Remove, "rm", false, "Deprecated: unsupported for complete scheduler runs")
-	cmd.Flags().BoolVar(&options.Jupyter, "jupyter", false, "Deprecated: unsupported for complete scheduler runs")
-	cmd.Flags().BoolVar(&options.JupyterExpose, "jupyter-expose", false, "Deprecated: unsupported for complete scheduler runs")
+	cmd.Flags().BoolVar(&options.KeepRunning, "keep-running", false, "Unsupported for complete scheduler runs")
+	cmd.Flags().BoolVar(&options.Remove, "rm", false, "Unsupported for complete scheduler runs")
+	cmd.Flags().BoolVar(&options.Jupyter, "jupyter", false, "Unsupported for complete scheduler runs")
+	cmd.Flags().BoolVar(&options.JupyterExpose, "jupyter-expose", false, "Unsupported for complete scheduler runs")
 	cmd.Flags().BoolVarP(&options.Detach, "detach", "d", false, "Start the scheduler run and return immediately")
 }
 
@@ -218,7 +218,7 @@ func rejectChangedSchedulerExecutionFlags(cmd *cobra.Command, command string) er
 		if flag == nil || !flag.Changed {
 			continue
 		}
-		return deprecatedSchedulerExecutionFlagError(command, flagName)
+		return unsupportedSchedulerExecutionFlagError(command, flagName)
 	}
 	return nil
 }
@@ -228,7 +228,7 @@ func normalizeComposeSchedulerExecutionOptions(command string, options composeSc
 	options.Driver = strings.TrimSpace(options.Driver)
 	options.Prompt = strings.TrimSpace(options.Prompt)
 	options.PayloadJSON = strings.TrimSpace(options.PayloadJSON)
-	for _, deprecated := range []struct {
+	for _, unsupported := range []struct {
 		name string
 		used bool
 	}{
@@ -240,8 +240,8 @@ func normalizeComposeSchedulerExecutionOptions(command string, options composeSc
 		{name: "jupyter", used: options.Jupyter},
 		{name: "jupyter-expose", used: options.JupyterExpose},
 	} {
-		if deprecated.used {
-			return options, deprecatedSchedulerExecutionFlagError(command, deprecated.name)
+		if unsupported.used {
+			return options, unsupportedSchedulerExecutionFlagError(command, unsupported.name)
 		}
 	}
 	if options.PayloadJSON != "" {
@@ -254,8 +254,8 @@ func normalizeComposeSchedulerExecutionOptions(command string, options composeSc
 	return options, nil
 }
 
-func deprecatedSchedulerExecutionFlagError(command, flagName string) error {
-	return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("%s --%s is deprecated and unsupported by complete scheduler runs", command, flagName)}
+func unsupportedSchedulerExecutionFlagError(command, flagName string) error {
+	return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("%s --%s is unsupported for complete scheduler runs", command, flagName)}
 }
 
 func composeSchedulerRunOutputFromProto(run *agentcomposev2.SchedulerRun, projectName string) composeSchedulerRunOutput {

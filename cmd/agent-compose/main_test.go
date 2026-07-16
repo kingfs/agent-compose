@@ -3133,8 +3133,8 @@ func TestNormalizeComposeSchedulerTriggerOptionsPayload(t *testing.T) {
 	if _, err := normalizeComposeSchedulerTriggerOptions(composeSchedulerTriggerOptions{PayloadJSON: "{bad"}); err == nil {
 		t.Fatalf("invalid payload returned nil error")
 	}
-	if _, err := normalizeComposeSchedulerTriggerOptions(composeSchedulerTriggerOptions{Prompt: "override"}); err == nil || !strings.Contains(err.Error(), "deprecated") {
-		t.Fatalf("deprecated prompt error = %v", err)
+	if _, err := normalizeComposeSchedulerTriggerOptions(composeSchedulerTriggerOptions{Prompt: "override"}); err == nil || !strings.Contains(err.Error(), "unsupported for complete scheduler runs") {
+		t.Fatalf("unsupported prompt error = %v", err)
 	}
 }
 
@@ -3345,7 +3345,7 @@ agents:
 	}
 }
 
-func TestRunComposeSchedulerTriggerRejectsDeprecatedPrompt(t *testing.T) {
+func TestRunComposeSchedulerTriggerRejectsUnsupportedPrompt(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("prompt", "", "")
 	if err := cmd.Flags().Set("prompt", " "); err != nil {
@@ -3353,7 +3353,7 @@ func TestRunComposeSchedulerTriggerRejectsDeprecatedPrompt(t *testing.T) {
 	}
 	err := runComposeSchedulerTriggerCommand(cmd, cliOptions{}, composeSchedulerTriggerOptions{Prompt: " "}, "reviewer", "nightly")
 	var exitErr commandExitError
-	if !errors.As(err, &exitErr) || exitErr.Code != exitCodeUsage || !strings.Contains(err.Error(), "--prompt is deprecated") {
+	if !errors.As(err, &exitErr) || exitErr.Code != exitCodeUsage || !strings.Contains(err.Error(), "--prompt is unsupported for complete scheduler runs") {
 		t.Fatalf("prompt error = %#v", err)
 	}
 }

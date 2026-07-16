@@ -65,9 +65,9 @@ agents:
 	}
 }
 
-func TestCLISchedulerExecutionRejectsDeprecatedFlags(t *testing.T) {
+func TestCLISchedulerExecutionRejectsUnsupportedFlags(t *testing.T) {
 	composePath := writeComposeFile(t, t.TempDir(), `
-name: cli-scheduler-deprecated
+name: cli-scheduler-unsupported
 agents:
   reviewer:
     scheduler:
@@ -95,14 +95,14 @@ agents:
 			args = append(args, test.args...)
 			args = append(args, "reviewer", "nightly")
 			stdout, stderr, _, exitCode := executeCLICommand(args...)
-			if exitCode != exitCodeUsage || stdout != "" || !strings.Contains(stderr, test.flag+" is deprecated") {
-				t.Fatalf("deprecated flag code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
+			if exitCode != exitCodeUsage || stdout != "" || !strings.Contains(stderr, test.flag+" is unsupported for complete scheduler runs") {
+				t.Fatalf("unsupported flag code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
 			}
 		})
 	}
 	stdout, stderr, _, exitCode := executeCLICommand("scheduler", "run", "--file", composePath, "--prompt", "override", "reviewer")
-	if exitCode != exitCodeUsage || stdout != "" || !strings.Contains(stderr, "scheduler run --prompt is deprecated") {
-		t.Fatalf("scheduler run deprecated flag code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
+	if exitCode != exitCodeUsage || stdout != "" || !strings.Contains(stderr, "scheduler run --prompt is unsupported for complete scheduler runs") {
+		t.Fatalf("scheduler run unsupported flag code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
 	}
 }
 
