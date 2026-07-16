@@ -1,16 +1,19 @@
-# AGENTS
+# Repository Guidelines
 
 ## Project Map
 
-This repo contains the agent-compose sandbox control plane. It creates, resumes, stops, and proxies isolated notebook runtimes, and exposes agent, loader, LLM, configuration, and workspace APIs.
+This repo contains the agent-compose daemon and CLI control plane. It applies declarative agent projects, runs AI coding agents in isolated sandboxes, schedules work, and exposes Connect/HTTP, runtime LLM facade, and Jupyter proxy APIs.
 
 - `cmd/agent-compose`: CLI, process startup, dependency composition, and shutdown.
 - `pkg/agentcompose/app`: use-case and component lifecycle orchestration.
 - `pkg/agentcompose/api`: Connect transport handlers and transport/domain mapping.
 - `pkg/agentcompose/adapters`, `pkg/agentcompose/proxy`, `pkg/storage`, and `pkg/driver`: external and infrastructure boundaries.
 - `pkg/loaders`, `pkg/projects`, `pkg/runs`, and `pkg/sessions`: domain owners. Other `pkg` packages provide focused capabilities; location under `pkg` alone does not make a package a domain owner.
-- `proto`: API sources and generated Go clients. Do not edit generated files manually.
-- `runtime`: JavaScript runtime and runtime SDK packages.
+- `pkg/compose`: compose-file schema, validation, normalization, and source loading; `pkg/resources` resolves resource identifiers; `pkg/cache` owns shared runtime cache policy; `pkg/skills` resolves skill sources.
+- `proto`: v2 and health API sources plus generated Go and Connect clients. Edit `.proto` sources and regenerate; do not edit generated files manually.
+- `runtime`: the guest JavaScript runtime, runtime SDK, and Jupyter JavaScript kernel metadata.
+- `test/e2e`: opt-in host-daemon and image lifecycle tests. Package-local `_test.go` files contain unit, integration, and coverage-shape tests.
+- `docs/design` and `docs/spec`: architecture and specifications. `docs/pages` is the source for the published documentation site, rendered by `tools/genpages` into `build/pages`.
 
 ## Code Organization
 
@@ -119,19 +122,22 @@ Product support and compiled capability are separate. The stable build matrix is
 
 `compiled_drivers` in `agent-compose --json version` and `/api/version` reports what was built into the binary. It does not check Docker daemon reachability, KVM access, runtime artifact health, or whether a driver can start. The default driver remains `docker`; BoxLite and Microsandbox runtime initialization is lazy, and operations that select a driver absent from the current binary fail as unsupported before runtime state is created or changed.
 
-Important defaults:
+Important native application defaults (images and deployment configuration override some of these):
 
-- `DATA_ROOT`: `./data/`
-- `SANDBOX_ROOT`: `<data-root>/sandboxes`
-- `HTTP_LISTEN`: `127.0.0.1:7410`
+- `DATA_ROOT`: `$XDG_DATA_HOME/agent-compose`, or `$HOME/.local/share/agent-compose` when `XDG_DATA_HOME` is unset
+- `SANDBOX_ROOT`: `<data-root>/sandboxes`; a non-empty legacy `<data-root>/sessions` is retained automatically
+- `AGENT_COMPOSE_SOCKET`: `$XDG_RUNTIME_DIR/agent-compose.sock`, or `/var/run/agent-compose.sock` when `XDG_RUNTIME_DIR` is unset
+- `HTTP_LISTEN`: empty, so native TCP listening is disabled unless explicitly configured
 - `DEFAULT_IMAGE`: `debian:bookworm-slim`
+- `RUNTIME_DRIVER`: `docker`
 - `JUPYTER_PROXY_BASE`: `/jupyter`
 
 ## Deployment Configuration
 
 Current Docker build behavior:
 
-- `Dockerfile` builds the full Linux `cmd/agent-compose` binary and published daemon image
+- `Dockerfile` is the self-contained source for the published full Linux daemon image and also exports BoxLite and Microsandbox development artifacts
+- `Dockerfile.agent-compose-local` builds a local daemon image from artifacts already exported under `build/`; `task image:agent-compose` selects this local-development Dockerfile
 - `guest-images/Dockerfile.agent-compose-guest` builds the guest image used by sandbox deployments
 - `scripts/build-agent-compose.sh` defaults to `IMAGE_NAME=agent-compose:latest` and `DOCKERFILE=Dockerfile`
 - `task build:agent-compose:boxlite` is a deprecated alias for `task build:agent-compose:linux`; it does not define a separate BoxLite-only profile
@@ -139,13 +145,14 @@ Current Docker build behavior:
 
 Current compose behavior:
 
-- `docker-compose.yml` deploys the `agent-compose` service and the published `agent-compose-frontend` nginx image
-- the agent-compose service listens on `7410`
-- data is mounted from `./data`
+- `docker-compose.yml` deploys the `agent-compose` service; the optional `agent-compose-frontend` service uses the published `agent-compose-ui` image under the `with-ui` profile
+- the daemon listens on container port `7410`, published only on host loopback as `127.0.0.1:7410`; the UI profile publishes `${AGENT_COMPOSE_HTTP_PORT:-80}`
+- data is mounted from `${AGENT_COMPOSE_DATA_DIR:-./data}` to `/data`
 - the user-created `.env` is mounted read-only at `/data/work/.env` for daemon configuration
+- `.env.example` and the installer set `DEFAULT_IMAGE=ghcr.io/chaitin/agent-compose-guest:latest`, overriding the application's minimal Debian default for deployed sandboxes
 - the base file mounts the Docker socket but does not set `privileged` or expose `/dev/kvm`; it supports the default Docker driver on its own
 - `docker-compose.kvm.yml` is the explicit overlay that adds `privileged` and `/dev/kvm` for BoxLite or Microsandbox deployments
-- the installer detects `/dev/kvm` for a new installation and persists the selected Compose file set in `.env`; this selection is not a runtime health check
+- the installer detects `/dev/kvm` for a new installation and persists the selected Compose file set in `.env`; upgrades also preserve a populated legacy `./data/agent-compose` data directory. Neither behavior is a runtime health check
 
 Compose and environment variable conventions:
 
@@ -154,19 +161,38 @@ Compose and environment variable conventions:
 - Keep defaults in the application or image rather than duplicating them in Compose. Expose only deployment knobs in `.env.example`, grouped by purpose, and use commented examples for optional settings.
 - Keep secrets and required deployment credentials in `.env.example` empty unless a safe example value exists, and document that operators must set them before exposing a deployment.
 
+## Documentation and Generated Sources
+
+- Edit public manuals under `docs/pages`; keep English and `docs/pages/zh-CN` variants aligned when changing shared behavior. Run `task docs:build` and never edit `build/pages` directly.
+- When changing the compose schema in `pkg/compose/spec.go`, update the YAML manuals and run the documentation build because the renderer validates schema coverage.
+- Change API definitions in `proto/**/*.proto`, run `task generate` (or `task generate:proto`), and commit the regenerated Go and Connect outputs. `buf.yaml` and `buf.gen.yaml` define generation behavior.
+
+## Commits and Pull Requests
+
+- Prefer the scoped Conventional Commit style used by current history, for example `feat(cli): load project environment files`, `fix(deploy): preserve legacy data directories`, or `test(runs): avoid duplicate capability revoke`. Use `docs`, `refactor`, `chore`, `build`, and `ci` where appropriate; keep each commit focused.
+- Keep pull requests scoped to one change. Complete the template with a problem/solution summary, exact test commands (or a reason they were not run), and the documentation and test checklist.
+- Update docs for behavior, configuration, API, or workflow changes. Link the relevant issue when one exists; screenshots are useful only for UI or rendered-documentation changes.
+- Never commit credentials, private endpoints or certificates, local runtime data, or repository-local `build/`, `.cache/`, `coverage/`, or `data/` artifacts. Follow `SECURITY.md` for vulnerability reports.
+
 ## Quality Gates
 
 Testing standards and coverage requirements are defined in `TESTING.md`.
 
+Go tests use the standard `testing` package; both runtime npm packages use Vitest. Test names follow Go's `TestXxx` convention or `*.test.ts`; use `_integration_test.go`, E2E suites, and the configured `TEST_SHAPE` only for the matching test boundary. `task test` enforces minimum coverage of 60% for each unit, integration, and E2E shape and 70% combined.
+
+Development requires Go 1.26.2, Node.js 20 or newer, npm, and Task v3. Docker is required for Docker-backed workflows and Linux native artifact preparation; deterministic deployment checks require Docker Compose v2 and `jq` but not a running daemon.
+
 Primary commands:
 ```bash
+task prepare
 task lint
 task build
 task test
 task test:deploy
+task docs:build
 ```
 
-`Taskfile.yml` is the source of truth for lint scope and options. Use `task lint` rather than reproducing its package list or flags manually.
+`task prepare` installs Buf, Go lint tools, and npm dependencies for both runtime packages. `Taskfile.yml` is the source of truth for lint scope and options; use `task lint` rather than reproducing its package list or flags manually. `task build` builds the platform binary, maintained protobuf packages, and runtime SDK; on Linux it may use Docker to prepare native BoxLite and Microsandbox artifacts.
 
 `task test:deploy` validates the installer state machine, the base/KVM Compose
 topologies, and the installer release-asset boundary. It requires the Docker
@@ -183,4 +209,4 @@ It verifies the full image's Docker path without privilege or KVM. Run
 `task test:runtime-smoke` only on a prepared Linux/KVM host for real BoxLite or
 Microsandbox smoke coverage.
 
-Before final handoff, run `task lint`, `task build`, and `task test` when the change and environment make them applicable. Focused package tests are sufficient during iteration; boundary-crossing changes require the relevant integration or E2E tests described in `TESTING.md`. If a gate cannot be run because of environment, dependency, or scope constraints, report exactly which command was not run and why—do not imply it passed.
+Before final handoff, run `task lint`, `task build`, and `task test` when the change and environment make them applicable, plus `task docs:build` for public documentation or compose-schema changes. Focused package tests are sufficient during iteration; boundary-crossing changes require the relevant integration or E2E tests described in `TESTING.md`. If a gate cannot be run because of environment, dependency, or scope constraints, report exactly which command was not run and why—do not imply it passed.
