@@ -16,8 +16,10 @@ import (
 	"github.com/samber/do/v2"
 
 	"agent-compose/pkg/agentcompose/adapters"
+	"agent-compose/pkg/cleanup"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
+	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
 	"agent-compose/pkg/runs"
@@ -79,6 +81,41 @@ func TestSetupRegistersServiceGraph(t *testing.T) {
 	app.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("proxy route status = %d, want %d", rec.Code, http.StatusBadGateway)
+	}
+}
+
+func TestStartBackgroundConstructsCleanupBeforeLoader(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DATA_ROOT", root)
+	t.Setenv("SANDBOX_ROOT", filepath.Join(root, "sandboxes"))
+	t.Setenv("IMAGE_CACHE_ROOT", filepath.Join(root, "images"))
+	t.Setenv("RUNTIME_DRIVER", driverpkg.RuntimeDriverDocker)
+	t.Setenv("DOCKER_IMAGE", "guest:latest")
+	t.Setenv("LLM_API_ENDPOINT", "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	di := do.New()
+	appconfig.Setup(di)
+	do.ProvideValue(di, ctx)
+	do.ProvideValue(di, slog.Default())
+	RegisterDependencies(di)
+
+	var constructionOrder []string
+	do.Override(di, func(di do.Injector) (*cleanup.Runner, error) {
+		constructionOrder = append(constructionOrder, "cleanup")
+		return NewCleanupRunner(di)
+	})
+	do.Override(di, func(di do.Injector) (*loaders.Controller, error) {
+		constructionOrder = append(constructionOrder, "loader")
+		return NewLoaderController(di)
+	})
+
+	if err := StartBackground(di); err != nil {
+		t.Fatalf("StartBackground returned error: %v", err)
+	}
+	if len(constructionOrder) < 2 || constructionOrder[0] != "cleanup" || constructionOrder[1] != "loader" {
+		t.Fatalf("background construction order = %v, want cleanup before loader", constructionOrder)
 	}
 }
 

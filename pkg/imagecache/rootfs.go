@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
@@ -53,6 +54,9 @@ func (c *Cache) MaterializeRootFS(ctx context.Context, ref string) (Materializat
 		Env:         image.Env,
 	}
 	if ReadyFlagExists(readyFlag) && isUsableRootFS(rootfsPath) {
+		if err := c.touchMetadataImage(&metadata, image); err != nil {
+			return MaterializationResult{}, err
+		}
 		return result, nil
 	}
 	_ = os.Remove(readyFlag)
@@ -81,11 +85,21 @@ func (c *Cache) MaterializeRootFS(ctx context.Context, ref string) (Materializat
 	}
 	if idx := indexOfImage(metadata.Images, image); idx >= 0 {
 		metadata.Images[idx].RootFSCachePath = rootfsPath
+		metadata.Images[idx].LastUsedAt = time.Now().UTC()
 		if err := c.SaveMetadata(metadata); err != nil {
 			return MaterializationResult{}, err
 		}
 	}
 	return result, nil
+}
+
+func (c *Cache) touchMetadataImage(metadata *MetadataFile, image ImageMetadata) error {
+	idx := indexOfImage(metadata.Images, image)
+	if idx < 0 {
+		return nil
+	}
+	metadata.Images[idx].LastUsedAt = time.Now().UTC()
+	return c.SaveMetadata(*metadata)
 }
 
 func extractRootFSFromOCILayout(ctx context.Context, layoutPath, manifestDigest, dstDir string) error {

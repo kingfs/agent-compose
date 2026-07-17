@@ -622,6 +622,16 @@ agent-compose cache rm <cache-id> --force
 
 `CACHE_TTL` 默认 `168h`，设为 `0` 会禁用 expired 判定；TTL 不会触发后台或启动时删除，必须显式执行 `cache prune --expired --force`。`--older-than` 仍是独立过滤条件。`cache prune` 和 `cache rm` 默认 dry-run；`--force` 只授权执行，不能绕过 `active`、`referenced` 或 `unknown` 保护。BoxLite v0.9.7 ABI 不提供安全 image remove/prune，因此 runtime image inventory 只读；Microsandbox 共享 image 使用 SDK inventory/remove API。`sandbox prune` 不删除 cache artifact。
 
+daemon 可以选择启用基于时间的保留清理。`WORKSPACE_CLEANUP_TTL` 只回收符合条件的 stopped sandbox 的 workspace 目录，metadata、logs 和 state 会保留用于审计；workspace 被回收后 sandbox 不能再 resume。`IMAGE_CACHE_CLEANUP_TTL` 清理 `IMAGE_CACHE_ROOT` 自有且未被引用的 OCI 与 materialized 数据，优先使用最后使用时间，没有时回退到拉取时间或文件修改时间。两项默认都是 `0`，即关闭对应 cleaner；`CLEANUP_INTERVAL` 默认 `1h`。自动清理不会处理 workspace source、Docker daemon 镜像、BoxLite home 或 Microsandbox SDK cache，也不实现磁盘空间水位策略。
+
+兼容说明：
+
+- `agent-compose image ls` 已废弃，请使用 `agent-compose images`。
+- `agent-compose image pull <image>` 已废弃，请使用 `agent-compose pull <image>`。
+- `agent-compose image rm <image>` 已废弃，请使用 `agent-compose rmi <image>`。
+- `agent-compose image inspect <image>` 已废弃，请使用 `agent-compose inspect image <image>`。
+- 旧 `image` 命令树仍可用，但会在 stderr 输出 deprecated warning，后续版本会评估删除。
+
 ## `status`：检查 daemon 状态
 
 检查当前选择的 daemon 状态和版本。

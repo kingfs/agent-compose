@@ -9215,6 +9215,106 @@ func TestDaemonAppStartsBackgroundOnce(t *testing.T) {
 	testDaemonAppStartsBackgroundOnce(t)
 }
 
+func TestDaemonAppWaitsForBackgroundShutdown(t *testing.T) {
+	app, cancelApp := newTestDaemonAppWithSocketAndTCP(t, shortUnixSocketPath(t), "127.0.0.1:0", func(do.Injector) error { return nil })
+	defer cancelApp()
+	stopEntered := make(chan struct{})
+	stopRelease := make(chan struct{})
+	app.stopBackground = func(context.Context, do.Injector) error {
+		close(stopEntered)
+		<-stopRelease
+		return nil
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runDone := runDaemonAppAsync(app, runCtx)
+	cancelRun()
+	select {
+	case <-stopEntered:
+	case err := <-runDone:
+		t.Fatalf("Run returned before stopping background managers: %v", err)
+	}
+	select {
+	case err := <-runDone:
+		t.Fatalf("Run returned before background shutdown completed: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(stopRelease)
+	if err := <-runDone; err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+}
+
+func TestDaemonAppGivesBackgroundShutdownAnIndependentDeadline(t *testing.T) {
+	requestEntered := make(chan struct{})
+	requestRelease := make(chan struct{})
+	releaseRequest := sync.OnceFunc(func() { close(requestRelease) })
+	defer releaseRequest()
+	server := &http.Server{Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		close(requestEntered)
+		<-requestRelease
+	})}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() {
+		if err := server.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("close server: %v", err)
+		}
+	}()
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- server.Serve(listener)
+	}()
+
+	requestDone := make(chan error, 1)
+	go func() {
+		response, requestErr := http.Get("http://" + listener.Addr().String())
+		if requestErr == nil {
+			requestErr = response.Body.Close()
+		}
+		requestDone <- requestErr
+	}()
+	select {
+	case <-requestEntered:
+	case <-time.After(time.Second):
+		t.Fatal("request did not enter blocking handler")
+	}
+
+	backgroundContextErr := make(chan error, 1)
+	app := &DaemonApp{
+		shutdownTimeout: 50 * time.Millisecond,
+		stopBackground: func(ctx context.Context, _ do.Injector) error {
+			backgroundContextErr <- ctx.Err()
+			return nil
+		},
+	}
+	servers := &daemonServers{items: []*daemonServer{{
+		name: "test", value: listener.Addr().String(), listener: listener, server: server,
+	}}}
+	shutdownErr := app.shutdown(servers)
+	if shutdownErr == nil {
+		t.Fatal("shutdown returned nil error while an active request exceeded the server deadline")
+	}
+	if err := <-backgroundContextErr; err != nil {
+		t.Fatalf("background shutdown received expired context: %v", err)
+	}
+
+	releaseRequest()
+	select {
+	case requestErr := <-requestDone:
+		if requestErr != nil {
+			t.Errorf("request returned error: %v", requestErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("request did not finish after handler release")
+	}
+	if err := <-serveDone; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		t.Fatalf("Serve returned error: %v", err)
+	}
+}
+
 func testDaemonAppStartsBackgroundOnce(t *testing.T) {
 	t.Helper()
 	starts := 0

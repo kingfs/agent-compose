@@ -51,6 +51,9 @@ func (c *Cache) MaterializeOCILayout(ctx context.Context, ref string) (Materiali
 		Env:         image.Env,
 	}
 	if ReadyFlagExists(readyFlag) && isValidOCILayoutPath(layoutPath) {
+		if err := c.touchMetadataImage(&metadata, image); err != nil {
+			return MaterializationResult{}, err
+		}
 		return result, nil
 	}
 	_ = os.Remove(readyFlag)
@@ -76,6 +79,9 @@ func (c *Cache) MaterializeOCILayout(ctx context.Context, ref string) (Materiali
 	}
 	_ = os.RemoveAll(tmpDir)
 	if err := WriteReadyFlag(readyFlag); err != nil {
+		return MaterializationResult{}, err
+	}
+	if err := c.touchMetadataImage(&metadata, image); err != nil {
 		return MaterializationResult{}, err
 	}
 	return result, nil

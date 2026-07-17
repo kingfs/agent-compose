@@ -87,6 +87,7 @@ type DaemonOptions struct {
 	LoadDotEnv      bool
 	SetRlimit       bool
 	StartBackground func(do.Injector) error
+	StopBackground  func(context.Context, do.Injector) error
 }
 
 type DaemonApp struct {
@@ -95,8 +96,10 @@ type DaemonApp struct {
 	Logger          *slog.Logger
 	Config          *config.Config
 	startBackground func(do.Injector) error
+	stopBackground  func(context.Context, do.Injector) error
 	startOnce       sync.Once
 	startErr        error
+	shutdownTimeout time.Duration
 }
 
 type daemonServer struct {
@@ -181,8 +184,14 @@ func NewDaemonApp(ctx context.Context, opts DaemonOptions) (*DaemonApp, error) {
 	installDaemonMiddleware(app, conf)
 
 	startBackground := opts.StartBackground
+	stopBackground := opts.StopBackground
 	if startBackground == nil {
 		startBackground = agentcomposeapp.StartBackground
+		if stopBackground == nil {
+			stopBackground = agentcomposeapp.StopBackground
+		}
+	} else if stopBackground == nil {
+		stopBackground = func(context.Context, do.Injector) error { return nil }
 	}
 	return &DaemonApp{
 		DI:              di,
@@ -190,6 +199,8 @@ func NewDaemonApp(ctx context.Context, opts DaemonOptions) (*DaemonApp, error) {
 		Logger:          logger,
 		Config:          conf,
 		startBackground: startBackground,
+		stopBackground:  stopBackground,
+		shutdownTimeout: 10 * time.Second,
 	}, nil
 }
 
@@ -206,6 +217,13 @@ func (a *DaemonApp) StartBackground() error {
 	return a.startErr
 }
 
+func (a *DaemonApp) StopBackground(ctx context.Context) error {
+	if a == nil || a.stopBackground == nil {
+		return nil
+	}
+	return a.stopBackground(ctx, a.DI)
+}
+
 func (a *DaemonApp) Run(ctx context.Context) error {
 	servers, err := a.listen()
 	if err != nil {
@@ -213,9 +231,7 @@ func (a *DaemonApp) Run(ctx context.Context) error {
 	}
 
 	if err := a.StartBackground(); err != nil {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if shutdownErr := servers.shutdown(shutdownCtx); shutdownErr != nil {
+		if shutdownErr := a.shutdown(servers); shutdownErr != nil {
 			err = errors.Join(err, shutdownErr)
 		}
 		return err
@@ -226,9 +242,7 @@ func (a *DaemonApp) Run(ctx context.Context) error {
 	case err := <-serverErrCh:
 		if err != nil {
 			a.Logger.Error("agent-compose server failed", "error", err)
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if shutdownErr := servers.shutdown(shutdownCtx); shutdownErr != nil {
+			if shutdownErr := a.shutdown(servers); shutdownErr != nil {
 				err = errors.Join(err, shutdownErr)
 			}
 			return err
@@ -237,13 +251,34 @@ func (a *DaemonApp) Run(ctx context.Context) error {
 		a.Logger.Info("shutdown requested", "error", ctx.Err())
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := servers.shutdown(shutdownCtx); err != nil {
+	if err := a.shutdown(servers); err != nil {
 		a.Logger.Error("failed to shutdown agent-compose server", "error", err)
 		return err
 	}
 	return nil
+}
+
+func (a *DaemonApp) shutdown(servers *daemonServers) error {
+	var joined error
+	serverCtx, cancelServers := context.WithTimeout(context.Background(), a.effectiveShutdownTimeout())
+	if err := servers.shutdown(serverCtx); err != nil {
+		joined = errors.Join(joined, err)
+	}
+	cancelServers()
+
+	backgroundCtx, cancelBackground := context.WithTimeout(context.Background(), a.effectiveShutdownTimeout())
+	if err := a.StopBackground(backgroundCtx); err != nil {
+		joined = errors.Join(joined, fmt.Errorf("stop background managers: %w", err))
+	}
+	cancelBackground()
+	return joined
+}
+
+func (a *DaemonApp) effectiveShutdownTimeout() time.Duration {
+	if a != nil && a.shutdownTimeout > 0 {
+		return a.shutdownTimeout
+	}
+	return 10 * time.Second
 }
 
 func (a *DaemonApp) listen() (*daemonServers, error) {
@@ -5789,20 +5824,28 @@ type composeAgentInspectOutput struct {
 }
 
 type composeSandboxOutput struct {
-	SandboxID      string            `json:"sandbox_id"`
-	SandboxShortID string            `json:"sandbox_short_id,omitempty"`
-	Title          string            `json:"title,omitempty"`
-	Driver         string            `json:"driver,omitempty"`
-	VMStatus       string            `json:"vm_status,omitempty"`
-	WorkspacePath  string            `json:"workspace_path,omitempty"`
-	ProxyPath      string            `json:"proxy_path,omitempty"`
-	GuestImage     string            `json:"guest_image,omitempty"`
-	TriggerSource  string            `json:"trigger_source,omitempty"`
-	CreatedAt      string            `json:"created_at,omitempty"`
-	UpdatedAt      string            `json:"updated_at,omitempty"`
-	CellCount      uint32            `json:"cell_count"`
-	EventCount     uint32            `json:"event_count"`
-	Tags           map[string]string `json:"tags,omitempty"`
+	SandboxID            string                             `json:"sandbox_id"`
+	SandboxShortID       string                             `json:"sandbox_short_id,omitempty"`
+	Title                string                             `json:"title,omitempty"`
+	Driver               string                             `json:"driver,omitempty"`
+	VMStatus             string                             `json:"vm_status,omitempty"`
+	WorkspacePath        string                             `json:"workspace_path,omitempty"`
+	ProxyPath            string                             `json:"proxy_path,omitempty"`
+	GuestImage           string                             `json:"guest_image,omitempty"`
+	TriggerSource        string                             `json:"trigger_source,omitempty"`
+	CreatedAt            string                             `json:"created_at,omitempty"`
+	UpdatedAt            string                             `json:"updated_at,omitempty"`
+	CellCount            uint32                             `json:"cell_count"`
+	EventCount           uint32                             `json:"event_count"`
+	Tags                 map[string]string                  `json:"tags,omitempty"`
+	WorkspaceReclamation *composeWorkspaceReclamationOutput `json:"workspace_reclamation,omitempty"`
+}
+
+type composeWorkspaceReclamationOutput struct {
+	State       string `json:"state"`
+	StartedAt   string `json:"started_at,omitempty"`
+	CompletedAt string `json:"completed_at,omitempty"`
+	LastError   string `json:"last_error,omitempty"`
 }
 
 type composeExecOutput struct {
@@ -7744,7 +7787,7 @@ func composeSandboxOutputFromSummary(summary *agentcomposev2.Sandbox) composeSan
 	if len(tags) == 0 {
 		tags = nil
 	}
-	return composeSandboxOutput{
+	result := composeSandboxOutput{
 		SandboxID:      displayOpaqueID(summary.GetSandboxId()),
 		SandboxShortID: identity.ShortID(summary.GetSandboxId()),
 		Title:          summary.GetTitle(),
@@ -7760,6 +7803,13 @@ func composeSandboxOutputFromSummary(summary *agentcomposev2.Sandbox) composeSan
 		EventCount:     summary.GetEventCount(),
 		Tags:           tags,
 	}
+	if summary.GetWorkspaceReclamationState() != "" {
+		result.WorkspaceReclamation = &composeWorkspaceReclamationOutput{
+			State: summary.GetWorkspaceReclamationState(), StartedAt: formatProtoTimestamp(summary.GetWorkspaceReclamationStartedAt()),
+			CompletedAt: formatProtoTimestamp(summary.GetWorkspaceReclamationCompletedAt()), LastError: summary.GetWorkspaceReclamationLastError(),
+		}
+	}
+	return result
 }
 
 func formatProtoTimestamp(value interface{ AsTime() time.Time }) string {
