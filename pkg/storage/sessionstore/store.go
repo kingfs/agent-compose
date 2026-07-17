@@ -389,6 +389,12 @@ func (s *Store) RemoveSandbox(ctx context.Context, id string) error {
 	}
 	path := s.sandboxDir(id)
 	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, fs.ErrNotExist) && s.recorder != nil {
+			if err := s.recorder.DeleteSandbox(ctx, id); err != nil {
+				return fmt.Errorf("delete sandbox record after directory removal: %w", err)
+			}
+			return nil
+		}
 		return fmt.Errorf("stat sandbox dir %s: %w", id, err)
 	}
 

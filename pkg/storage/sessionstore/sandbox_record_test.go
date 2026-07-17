@@ -3,6 +3,7 @@ package sessionstore
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -81,6 +82,38 @@ func TestCreateSandboxRecordsNewSandbox(t *testing.T) {
 	}
 	if recorder.recorded[created.Summary.ID] != nil || len(recorder.deleted) != 1 || recorder.deleted[0] != created.Summary.ID {
 		t.Fatalf("deleted records = %#v, remaining = %#v", recorder.deleted, recorder.recorded)
+	}
+}
+
+func TestRemoveSandboxRetriesRecordDeletionAfterDirectoryRemoval(t *testing.T) {
+	recorder := &sandboxRecorderStub{recorded: make(map[string]*domain.Sandbox)}
+	store, err := NewWithConfigAndRecorder(sandboxRecordTestConfig(t), recorder)
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	created, err := store.CreateSandbox(context.Background(), "retry record deletion", "", driverpkg.RuntimeDriverBoxlite, "", "", "api", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("create sandbox: %v", err)
+	}
+
+	recorder.err = fmt.Errorf("database unavailable")
+	err = store.RemoveSandbox(context.Background(), created.Summary.ID)
+	if err == nil {
+		t.Fatal("remove sandbox returned nil error when record deletion failed")
+	}
+	if _, statErr := os.Stat(store.SandboxDir(created.Summary.ID)); !os.IsNotExist(statErr) {
+		t.Fatalf("sandbox directory stat error = %v, want not exist", statErr)
+	}
+	if recorder.recorded[created.Summary.ID] == nil {
+		t.Fatal("sandbox record was deleted despite recorder failure")
+	}
+
+	recorder.err = nil
+	if err := store.RemoveSandbox(context.Background(), created.Summary.ID); err != nil {
+		t.Fatalf("retry remove sandbox: %v", err)
+	}
+	if recorder.recorded[created.Summary.ID] != nil {
+		t.Fatal("sandbox record remains after retry")
 	}
 }
 
