@@ -68,6 +68,7 @@ type CacheDependencyLocker interface {
 // SandboxRecorder stores the queryable record for a persisted Sandbox.
 type SandboxRecorder interface {
 	UpsertSandbox(context.Context, *domain.Sandbox) error
+	DeleteSandbox(context.Context, string) error
 }
 
 func NewStore(di do.Injector) (*Store, error) {
@@ -303,7 +304,7 @@ func (s *Store) MigrateSandboxRecords(ctx context.Context) error {
 		}
 		s.hydrateSandboxGuestImage(sandbox)
 		if err := s.recorder.UpsertSandbox(ctx, sandbox); err != nil {
-			return fmt.Errorf("migrate sandbox %s: %w", sandbox.Summary.ID, err)
+			slog.Warn("failed to record sandbox during database migration", "sandbox_id", sandbox.Summary.ID, "error", err)
 		}
 	}
 	return nil
@@ -364,8 +365,10 @@ func (s *Store) ListSandboxes(_ context.Context, options SandboxListOptions) (Sa
 
 func (s *Store) UpdateSandbox(ctx context.Context, session *Sandbox) error {
 	s.hydrateSandboxGuestImage(session)
-	session.Summary.UpdatedAt = time.Now().UTC()
 	unlock := s.lockSandbox(session.Summary.ID)
+	// Assign the version timestamp while holding the filesystem lock so it
+	// reflects the serialization order used to persist metadata.json.
+	session.Summary.UpdatedAt = time.Now().UTC()
 	err := s.saveSandboxPreservingCounts(session)
 	unlock()
 	if err != nil {
@@ -379,7 +382,7 @@ func (s *Store) UpdateSandbox(ctx context.Context, session *Sandbox) error {
 	return nil
 }
 
-func (s *Store) RemoveSandbox(_ context.Context, id string) error {
+func (s *Store) RemoveSandbox(ctx context.Context, id string) error {
 	id = strings.TrimSpace(id)
 	if err := validateSandboxIDForRemove(id); err != nil {
 		return err
@@ -389,16 +392,26 @@ func (s *Store) RemoveSandbox(_ context.Context, id string) error {
 		return fmt.Errorf("stat sandbox dir %s: %w", id, err)
 	}
 
-	unlock := s.lockSandbox(id)
-	defer unlock()
+	if err := func() error {
+		unlock := s.lockSandbox(id)
+		defer unlock()
 
-	if err := driverpkg.CleanupBoxliteVolumeBridgeMounts(path); err != nil {
-		return fmt.Errorf("cleanup session mounts %s: %w", id, err)
-	}
-	if err := os.RemoveAll(path); err != nil {
-		return fmt.Errorf("remove sandbox dir %s: %w", id, err)
+		if err := driverpkg.CleanupBoxliteVolumeBridgeMounts(path); err != nil {
+			return fmt.Errorf("cleanup session mounts %s: %w", id, err)
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return fmt.Errorf("remove sandbox dir %s: %w", id, err)
+		}
+		return nil
+	}(); err != nil {
+		return err
 	}
 	s.sandboxLocks.Delete(sandboxLockKey(id))
+	if s.recorder != nil {
+		if err := s.recorder.DeleteSandbox(ctx, id); err != nil {
+			return fmt.Errorf("delete sandbox record: %w", err)
+		}
+	}
 	return nil
 }
 

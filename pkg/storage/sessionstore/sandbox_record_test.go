@@ -12,18 +12,32 @@ import (
 )
 
 type sandboxRecorderStub struct {
-	recorded map[string]*domain.Sandbox
-	err      error
+	recorded     map[string]*domain.Sandbox
+	deleted      []string
+	err          error
+	upsertErrors map[string]error
 }
 
 func (s *sandboxRecorderStub) UpsertSandbox(_ context.Context, sandbox *domain.Sandbox) error {
 	if s.err != nil {
 		return s.err
 	}
+	if err := s.upsertErrors[sandbox.Summary.ID]; err != nil {
+		return err
+	}
 	copy := *sandbox
 	copy.Summary = sandbox.Summary
 	copy.Summary.Tags = append([]domain.SandboxTag(nil), sandbox.Summary.Tags...)
 	s.recorded[sandbox.Summary.ID] = &copy
+	return nil
+}
+
+func (s *sandboxRecorderStub) DeleteSandbox(_ context.Context, id string) error {
+	if s.err != nil {
+		return s.err
+	}
+	delete(s.recorded, id)
+	s.deleted = append(s.deleted, id)
 	return nil
 }
 
@@ -62,6 +76,12 @@ func TestCreateSandboxRecordsNewSandbox(t *testing.T) {
 	if recorded.Summary.EventCount != 1 {
 		t.Fatalf("recorded event count = %d, want 1", recorded.Summary.EventCount)
 	}
+	if err := store.RemoveSandbox(context.Background(), created.Summary.ID); err != nil {
+		t.Fatalf("remove sandbox: %v", err)
+	}
+	if recorder.recorded[created.Summary.ID] != nil || len(recorder.deleted) != 1 || recorder.deleted[0] != created.Summary.ID {
+		t.Fatalf("deleted records = %#v, remaining = %#v", recorder.deleted, recorder.recorded)
+	}
 }
 
 func TestMigrateSandboxRecordsScansExistingMetadata(t *testing.T) {
@@ -85,6 +105,32 @@ func TestMigrateSandboxRecordsScansExistingMetadata(t *testing.T) {
 	}
 	if recorded.Summary.GuestImage != "existing:latest" {
 		t.Fatalf("migrated image = %q, want existing:latest", recorded.Summary.GuestImage)
+	}
+}
+
+func TestMigrateSandboxRecordsContinuesAfterUpsertFailure(t *testing.T) {
+	config := sandboxRecordTestConfig(t)
+	filesystemStore, err := NewWithConfig(config)
+	if err != nil {
+		t.Fatalf("create filesystem store: %v", err)
+	}
+	first, err := filesystemStore.CreateSandbox(context.Background(), "first", "", driverpkg.RuntimeDriverBoxlite, "", "", "api", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("create first sandbox: %v", err)
+	}
+	second, err := filesystemStore.CreateSandbox(context.Background(), "second", "", driverpkg.RuntimeDriverBoxlite, "", "", "api", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("create second sandbox: %v", err)
+	}
+	recorder := &sandboxRecorderStub{
+		recorded:     make(map[string]*domain.Sandbox),
+		upsertErrors: map[string]error{first.Summary.ID: fmt.Errorf("invalid record")},
+	}
+	if _, err := NewWithConfigAndRecorder(config, recorder); err != nil {
+		t.Fatalf("migration blocked store initialization: %v", err)
+	}
+	if recorder.recorded[second.Summary.ID] == nil {
+		t.Fatalf("second sandbox %q was not migrated after first failure", second.Summary.ID)
 	}
 }
 

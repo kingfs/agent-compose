@@ -130,6 +130,22 @@ type SandboxSummary struct {
 	Tags          []SandboxTag `json:"tags,omitempty"`
 }
 
+// SandboxSummaryListOptions defines the indexed filters supported by the
+// persisted Sandbox summary records.
+type SandboxSummaryListOptions struct {
+	Driver          string
+	VMStatus        string
+	BeforeUpdatedAt time.Time
+	BeforeID        string
+	Limit           int
+}
+
+// SandboxSummaryListResult contains one page of persisted Sandbox summaries.
+type SandboxSummaryListResult struct {
+	Sandboxes []SandboxSummary
+	HasMore   bool
+}
+
 type SandboxListOptions struct {
 	SandboxType        string
 	TriggerSourceQuery string
