@@ -97,7 +97,7 @@ func newOperationCommand(operation core.Operation, options *commandOptions, out,
 
 func executeOperation(ctx context.Context, operation core.Operation, options *commandOptions, out, errOut io.Writer) error {
 	if !options.yes {
-		confirmed, err := confirmOperation(operation, options.Options, errOut)
+		confirmed, err := confirmOperation(operation, options.Options)
 		if err != nil {
 			return err
 		}
@@ -126,21 +126,26 @@ func executeOperation(ctx context.Context, operation core.Operation, options *co
 	return writeResult(out, operation, result, options.Purge)
 }
 
-func confirmOperation(operation core.Operation, options core.Options, output io.Writer) (bool, error) {
+func confirmOperation(operation core.Operation, options core.Options) (bool, error) {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
 		return false, fmt.Errorf("confirmation requires a TTY; rerun with --yes: %w", err)
 	}
+	// A close failure cannot affect a completed terminal interaction.
 	defer func() { _ = tty.Close() }()
-	if _, err := fmt.Fprintf(output, "%s agent-compose in %s", operation, options.InstallDir); err != nil {
+	return confirmOperationOnTTY(operation, options, tty)
+}
+
+func confirmOperationOnTTY(operation core.Operation, options core.Options, tty io.ReadWriter) (bool, error) {
+	if _, err := fmt.Fprintf(tty, "%s agent-compose in %s", operation, options.InstallDir); err != nil {
 		return false, err
 	}
 	if operation == core.OperationUninstall && options.Purge {
-		if _, err := fmt.Fprint(output, " and permanently delete its configuration and data"); err != nil {
+		if _, err := fmt.Fprint(tty, " and permanently delete its configuration and data"); err != nil {
 			return false, err
 		}
 	}
-	if _, err := fmt.Fprint(output, "? [y/N] "); err != nil {
+	if _, err := fmt.Fprint(tty, "? [y/N] "); err != nil {
 		return false, err
 	}
 	answer, err := bufio.NewReader(tty).ReadString('\n')
