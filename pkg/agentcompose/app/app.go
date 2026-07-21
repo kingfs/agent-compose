@@ -284,11 +284,15 @@ func NewCacheController(di do.Injector) (*cache.Controller, error) {
 	}
 	config.ImageCacheRoot = ociCache.Root()
 
+	materializedDependencies := cache.CombinedMaterializedDependencies{
+		ownershipMaterializedDependencies{sandboxRoot: config.SandboxRoot},
+		cache.MicrosandboxRootfsDependencies{Home: config.MicrosandboxHome},
+	}
 	sources := []cache.Source{
 		cache.OCISource{Cache: ociCache},
 		cache.MaterializedSource{
-			Scanner: cache.MaterializedScanner{Cache: ociCache, Dependencies: ownershipMaterializedDependencies{sandboxRoot: config.SandboxRoot}},
-			Remover: cache.MaterializedRemover{Cache: ociCache},
+			Scanner: cache.MaterializedScanner{Cache: ociCache, Dependencies: materializedDependencies},
+			Remover: cache.MaterializedRemover{Cache: ociCache, Dependencies: materializedDependencies},
 		},
 		cache.SkillSource{Root: filepath.Join(config.DataRoot, "skills")},
 	}

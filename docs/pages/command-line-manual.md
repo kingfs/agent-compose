@@ -578,7 +578,7 @@ agent-compose inspect cache <cache-id>
 Cache domains are shown as command-level `--type` values:
 
 - `oci`: physical manifests, blobs, and interrupted entries in the daemon OCI image store.
-- `materialized`: runtime input generated from images, such as BoxLite OCI layout or Microsandbox rootfs.
+- `materialized`: runtime input generated from images, such as a BoxLite OCI layout or an immutable Microsandbox qcow2 base disk.
 - `runtime`: shared runtime-derived images under driver homes.
 - `skill`: content-addressed skill artifacts and interrupted temporary/lock entries.
 
@@ -613,6 +613,10 @@ agent-compose cache rm <cache-id> --force
 ```
 
 `CACHE_TTL` defaults to `168h`; `0` disables expiration classification. TTL never triggers background/startup deletion. Use `cache prune --expired --force` explicitly. `--older-than` remains an independent filter. `cache prune` and `cache rm` default to dry-run; `--force` authorizes execution but never bypasses `active`, `referenced`, or `unknown` protection. BoxLite v0.9.7 runtime image inventory is read-only because its ABI has no safe image remove/prune operation; Microsandbox shared images use the SDK inventory/remove APIs. `sandbox prune` does not delete cache artifacts.
+
+Microsandbox root filesystems use an immutable qcow2 base disk in `DATA_ROOT/image-cache` and a private qcow2 overlay in `MICROSANDBOX_HOME/rootfs-disks` for every sandbox. A base disk is reported as referenced and cannot be removed while any rootfs sidecar points to it. Stop/resume preserves the private overlay; sandbox remove/prune deletes that overlay and its ownership sidecar. Base and overlay paths are recorded from the daemon mount namespace, so backups and migrations must move both trees together without changing their daemon-visible paths. A `DATA_ROOT` is owned by one daemon instance and must not be shared concurrently.
+
+The first release using disk-image rootfs requires a one-time cutover: drain Microsandbox workloads, remove existing Microsandbox runtime sandboxes, and delete only each image cache's legacy `rootfs/` directory and `.rootfs.ready` marker. Do not delete the whole image directory because its BoxLite `oci/` cache and new Microsandbox bases share that directory. Preserve sandbox workspace and agent state under `/data`. The daemon image supplies `qemu-img` and a `mkfs.ext4` implementation with `-d` support; native deployments must install both tools. No reflink-capable filesystem, loop device, or privileged mount is required.
 
 The daemon can optionally run time-based retention cleanup. `WORKSPACE_CLEANUP_TTL` reclaims only the workspace directory of eligible stopped sandboxes, while preserving metadata, logs, and state for audit; a reclaimed sandbox cannot be resumed. `IMAGE_CACHE_CLEANUP_TTL` removes unreferenced OCI and materialized data owned by `IMAGE_CACHE_ROOT`, using last-used time when available and pull time or filesystem modification time as a fallback. Both default to `0`, which disables that cleaner. `CLEANUP_INTERVAL` defaults to `1h`. Automatic cleanup does not touch workspace sources, Docker daemon images, BoxLite home, or Microsandbox SDK caches, and it does not implement a disk-space watermark.
 
