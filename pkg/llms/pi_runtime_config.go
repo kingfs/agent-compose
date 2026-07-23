@@ -38,7 +38,7 @@ func WritePiRuntimeConfig(sandbox *domain.Sandbox, model, baseURL, api string) e
 			"apiKey":  "$AGENT_COMPOSE_SANDBOX_TOKEN",
 			"api":     api,
 			"models": []map[string]any{{
-				"id": model, "name": model, "contextWindow": 128000, "maxTokens": 16384,
+				"id": model, "name": model,
 			}},
 		},
 	}}

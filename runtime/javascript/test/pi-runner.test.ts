@@ -54,8 +54,7 @@ describe("PiRunner", () => {
   });
 
   it("runs Pi deterministically, translates events, and persists its session", async () => {
-    vi.stubEnv("LLM_API_ENDPOINT", "http://runtime.test/openai/v1");
-    vi.stubEnv("LLM_API_PROTOCOL", "responses");
+    vi.stubEnv("PI_CODING_AGENT_DIR", "/managed/pi-agent");
     const { PiRunner } = await import("../src/runners/pi.js");
     await withTempSession(async (root) => {
       const skillDir = path.join(root, "home", ".agents", "skills", "review");
@@ -104,7 +103,7 @@ describe("PiRunner", () => {
       expect(call.options).toMatchObject({ cwd: path.join(root, "workspace") });
       expect(call.options.env).toMatchObject({
         HOME: path.join(root, "home"),
-        PI_CODING_AGENT_DIR: path.join(root, "home", ".pi", "agent"),
+        PI_CODING_AGENT_DIR: "/managed/pi-agent",
         PI_OFFLINE: "1",
         PI_SKIP_VERSION_CHECK: "1",
         PI_TELEMETRY: "0",
@@ -113,24 +112,6 @@ describe("PiRunner", () => {
       await expect(fs.access(systemPath)).rejects.toThrow();
       const stored = JSON.parse(await fs.readFile(path.join(root, "state", "agents", "providers", "pi.json"), "utf8"));
       expect(stored.threadId).toBe("pi-session");
-    });
-  });
-
-  it("materializes the managed model catalog inside the live guest home", async () => {
-    vi.stubEnv("LLM_API_ENDPOINT", "http://runtime.test/openai/v1/");
-    vi.stubEnv("LLM_API_PROTOCOL", "responses");
-    const { PiRunner } = await import("../src/runners/pi.js");
-    await withTempSession(async (root) => {
-      processState.lines = [JSON.stringify({ type: "session", id: "pi-session" })];
-      await new PiRunner({ ...runnerOptions(root, "", "pi"), model: "openai/qwen3.6-27b" }).runPrompt("prompt");
-
-      const catalog = JSON.parse(await fs.readFile(path.join(root, "home", ".pi", "agent", "models.json"), "utf8"));
-      expect(catalog.providers["agent-compose"]).toMatchObject({
-        baseUrl: "http://runtime.test/openai/v1",
-        apiKey: "$AGENT_COMPOSE_SANDBOX_TOKEN",
-        api: "openai-responses",
-        models: [{ id: "qwen3.6-27b", name: "qwen3.6-27b" }],
-      });
     });
   });
 
@@ -166,15 +147,6 @@ describe("PiRunner", () => {
         ...runnerOptions(root, "", "pi"),
         outputSchema: { type: "object" },
       }).runPrompt("prompt")).rejects.toThrow("structured JSON output is not supported");
-      expect(processState.calls).toHaveLength(0);
-    });
-  });
-
-  it("fails before spawning when the managed facade environment is incomplete", async () => {
-    const { PiRunner } = await import("../src/runners/pi.js");
-    await withTempSession(async (root) => {
-      await expect(new PiRunner({ ...runnerOptions(root, "", "pi"), model: "openai/gpt-5" }).runPrompt("prompt"))
-        .rejects.toThrow("Pi facade configuration is incomplete");
       expect(processState.calls).toHaveLength(0);
     });
   });

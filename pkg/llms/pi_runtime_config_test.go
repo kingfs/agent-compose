@@ -55,6 +55,9 @@ func TestWritePiRuntimeConfigIsPrivateAndContainsNoToken(t *testing.T) {
 	if !strings.Contains(string(data), "$AGENT_COMPOSE_SANDBOX_TOKEN") || !strings.Contains(string(data), "openai-responses") {
 		t.Fatalf("models.json = %s", data)
 	}
+	if strings.Contains(string(data), "contextWindow") || strings.Contains(string(data), "maxTokens") || strings.Contains(string(data), "reasoning") {
+		t.Fatalf("models.json hard-codes model capabilities instead of using Pi defaults: %s", data)
+	}
 }
 
 func TestPiFacadeProtocol(t *testing.T) {
